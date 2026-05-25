@@ -254,6 +254,10 @@ button.tdr-subfeed:hover { background: var(--card); color: var(--ink); }
 /* ============================================================
    Edition reading view (Classic masthead)
    ============================================================ */
+/* Sits inside MainLayout's .tdr-main (the scroll/padding region), so it adds
+   no padding of its own — it only carries the dim-while-loading transition. */
+.tdr-edition-body { transition: opacity 0.15s ease; }
+.tdr-edition-body.loading { opacity: 0.45; }
 .tdr-lead { border-bottom: 1px solid var(--rule); padding-bottom: 16px; margin-bottom: 16px; }
 .tdr-lead-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-top: 10px; }
 .tdr-lead h1 {
