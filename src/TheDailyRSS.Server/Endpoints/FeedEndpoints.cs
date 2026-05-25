@@ -7,6 +7,10 @@ using TheDailyRSS.Shared;
 
 namespace TheDailyRSS.Server.Endpoints;
 
+/// <summary>
+/// Subscription management. A "feed" in the API is a user's <see cref="Subscription"/> to a
+/// globally-shared <see cref="FeedSource"/>; articles are stored once on the source.
+/// </summary>
 public static class FeedEndpoints
 {
     public static void MapFeedEndpoints(this IEndpointRouteBuilder app)
@@ -28,78 +32,82 @@ public static class FeedEndpoints
     private static async Task<IResult> List(ClaimsPrincipal principal, AppDbContext db, Guid? categoryId)
     {
         var uid = principal.GetUserId();
-        var query = db.Feeds.Where(f => f.UserId == uid);
-        if (categoryId is { } cid) query = query.Where(f => f.CategoryId == cid);
+        var query = db.Subscriptions.Where(s => s.UserId == uid);
+        if (categoryId is { } cid) query = query.Where(s => s.CategoryId == cid);
 
         var feeds = await query
-            .OrderBy(f => f.SortOrder).ThenBy(f => f.Title)
-            .Select(f => new FeedDto(
-                f.Id, f.CategoryId, f.Title, f.FeedUrl, f.SiteUrl, f.IconText, f.SortOrder,
-                f.Articles.Count(a => !a.IsRead),
-                f.Articles.Count(),
-                f.LastFetchedAt, f.LastFetchError))
+            .OrderBy(s => s.SortOrder).ThenBy(s => s.CustomTitle ?? s.Source!.Title)
+            .Select(s => new FeedDto(
+                s.Id, s.SourceId, s.CategoryId,
+                s.CustomTitle ?? s.Source!.Title, s.Source!.FeedUrl, s.Source.SiteUrl, s.Source.IconText, s.SortOrder,
+                db.Articles.Count(a => a.SourceId == s.SourceId && !a.States.Any(st => st.UserId == uid && st.IsRead)),
+                db.Articles.Count(a => a.SourceId == s.SourceId),
+                s.Source.LastFetchedAt, s.Source.LastFetchError))
             .ToListAsync();
         return Results.Ok(feeds);
     }
 
     private static async Task<IResult> Detect(AddFeedRequest req, FeedDiscoveryService discovery, CancellationToken ct)
     {
-        var result = await discovery.DetectAsync(req.Url, ct);
+        var result = await discovery.DetectAsync(req.Url, ct, discover: !req.Exact);
         return Results.Ok(result);
     }
 
     private static async Task<IResult> Add(
         AddFeedRequest req, ClaimsPrincipal principal, AppDbContext db,
-        FeedDiscoveryService discovery, FeedFetchService fetcher, CancellationToken ct)
+        FeedDiscoveryService discovery, FeedSourceService sources, FeedFetchService fetcher, CancellationToken ct)
     {
         var uid = principal.GetUserId();
-        if (!await db.Categories.AnyAsync(c => c.Id == req.CategoryId && c.UserId == uid, ct))
+        if (!await db.Categories.AnyAsync(c => c.Id == req.CategoryId, ct))
             return Results.BadRequest(new { error = "Unknown category." });
 
-        var (feedUrl, parsed) = await discovery.ResolveAsync(req.Url, ct);
+        var (feedUrl, parsed) = await discovery.ResolveAsync(req.Url, ct, discover: !req.Exact);
         if (parsed is null)
-            return Results.BadRequest(new { error = "Couldn't find an RSS or Atom feed at that address." });
+            return Results.BadRequest(new { error = req.Exact
+                ? "That URL isn't a valid RSS or Atom feed."
+                : "Couldn't find an RSS or Atom feed at that address." });
 
-        if (await db.Feeds.AnyAsync(f => f.UserId == uid && f.FeedUrl == feedUrl, ct))
+        // De-dupe: reuse the shared source if it already exists, else create + fetch it once.
+        var (source, created) = await sources.GetOrCreateAsync(feedUrl, parsed.Title, parsed.SiteUrl, ct);
+
+        if (await db.Subscriptions.AnyAsync(s => s.UserId == uid && s.SourceId == source.Id, ct))
             return Results.Conflict(new { error = "You're already subscribed to that feed." });
 
-        var title = string.IsNullOrWhiteSpace(req.Title) ? parsed.Title : req.Title!.Trim();
-        var nextOrder = await db.Feeds.Where(f => f.UserId == uid && f.CategoryId == req.CategoryId)
-            .MaxAsync(f => (int?)f.SortOrder, ct) ?? -1;
+        var customTitle = string.IsNullOrWhiteSpace(req.Title) ? null : req.Title!.Trim();
+        var nextOrder = await db.Subscriptions.Where(s => s.UserId == uid && s.CategoryId == req.CategoryId)
+            .MaxAsync(s => (int?)s.SortOrder, ct) ?? -1;
 
-        var feed = new Feed
+        var sub = new Subscription
         {
             UserId = uid,
+            SourceId = source.Id,
             CategoryId = req.CategoryId,
-            Title = title,
-            FeedUrl = feedUrl,
-            SiteUrl = parsed.SiteUrl,
-            IconText = IconText.From(title),
+            CustomTitle = customTitle,
             SortOrder = nextOrder + 1,
         };
-        db.Feeds.Add(feed);
+        db.Subscriptions.Add(sub);
         await db.SaveChangesAsync(ct);
 
-        // Pull the first batch immediately so the edition isn't empty.
-        await fetcher.RefreshAsync(feed, ct);
+        // Only fetch when the source is brand new; an existing source already has articles.
+        if (created) await fetcher.RefreshAsync(source, ct);
 
         return Results.Ok(new FeedDto(
-            feed.Id, feed.CategoryId, feed.Title, feed.FeedUrl, feed.SiteUrl, feed.IconText, feed.SortOrder,
-            await db.Articles.CountAsync(a => a.FeedId == feed.Id && !a.IsRead, ct),
-            await db.Articles.CountAsync(a => a.FeedId == feed.Id, ct),
-            feed.LastFetchedAt, feed.LastFetchError));
+            sub.Id, source.Id, sub.CategoryId, customTitle ?? source.Title,
+            source.FeedUrl, source.SiteUrl, source.IconText, sub.SortOrder,
+            await db.Articles.CountAsync(a => a.SourceId == source.Id && !a.States.Any(st => st.UserId == uid && st.IsRead), ct),
+            await db.Articles.CountAsync(a => a.SourceId == source.Id, ct),
+            source.LastFetchedAt, source.LastFetchError));
     }
 
     private static async Task<IResult> Update(Guid id, UpdateFeedRequest req, ClaimsPrincipal principal, AppDbContext db)
     {
         var uid = principal.GetUserId();
-        var feed = await db.Feeds.FirstOrDefaultAsync(f => f.Id == id && f.UserId == uid);
-        if (feed is null) return Results.NotFound();
-        if (!await db.Categories.AnyAsync(c => c.Id == req.CategoryId && c.UserId == uid))
+        var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == id && s.UserId == uid);
+        if (sub is null) return Results.NotFound();
+        if (!await db.Categories.AnyAsync(c => c.Id == req.CategoryId))
             return Results.BadRequest(new { error = "Unknown category." });
-        feed.Title = req.Title.Trim();
-        feed.IconText = IconText.From(feed.Title);
-        feed.CategoryId = req.CategoryId;
+        sub.CustomTitle = req.Title.Trim();
+        sub.CategoryId = req.CategoryId;
         await db.SaveChangesAsync();
         return Results.NoContent();
     }
@@ -107,18 +115,19 @@ public static class FeedEndpoints
     private static async Task<IResult> Delete(Guid id, ClaimsPrincipal principal, AppDbContext db)
     {
         var uid = principal.GetUserId();
-        var deleted = await db.Feeds.Where(f => f.Id == id && f.UserId == uid).ExecuteDeleteAsync();
+        // Delete only the subscription; the shared source/articles stay for other subscribers.
+        var deleted = await db.Subscriptions.Where(s => s.Id == id && s.UserId == uid).ExecuteDeleteAsync();
         return deleted > 0 ? Results.NoContent() : Results.NotFound();
     }
 
     private static async Task<IResult> Move(Guid id, MoveFeedRequest req, ClaimsPrincipal principal, AppDbContext db)
     {
         var uid = principal.GetUserId();
-        var feed = await db.Feeds.FirstOrDefaultAsync(f => f.Id == id && f.UserId == uid);
-        if (feed is null) return Results.NotFound();
-        if (!await db.Categories.AnyAsync(c => c.Id == req.CategoryId && c.UserId == uid))
+        var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == id && s.UserId == uid);
+        if (sub is null) return Results.NotFound();
+        if (!await db.Categories.AnyAsync(c => c.Id == req.CategoryId))
             return Results.BadRequest(new { error = "Unknown category." });
-        feed.CategoryId = req.CategoryId;
+        sub.CategoryId = req.CategoryId;
         await db.SaveChangesAsync();
         return Results.NoContent();
     }
@@ -127,9 +136,10 @@ public static class FeedEndpoints
         Guid id, ClaimsPrincipal principal, AppDbContext db, FeedFetchService fetcher, CancellationToken ct)
     {
         var uid = principal.GetUserId();
-        var feed = await db.Feeds.FirstOrDefaultAsync(f => f.Id == id && f.UserId == uid, ct);
-        if (feed is null) return Results.NotFound();
-        var added = await fetcher.RefreshAsync(feed, ct);
+        var sub = await db.Subscriptions.Include(s => s.Source)
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == uid, ct);
+        if (sub?.Source is null) return Results.NotFound();
+        var added = await fetcher.RefreshAsync(sub.Source, ct);
         return Results.Ok(new { added });
     }
 

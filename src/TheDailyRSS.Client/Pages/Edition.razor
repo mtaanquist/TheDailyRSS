@@ -1,5 +1,6 @@
 @page "/"
-@page "/edition/{Date}"
+@page "/{Slug}"
+@page "/{Slug}/{Date}"
 @attribute [Authorize]
 @inject ApiClient Api
 @inject AppState State
@@ -97,14 +98,37 @@ else
                 </article>
             }
 
-            <div class="tdr-grid">
-                @foreach (var a in ed.Articles)
+            @if (IsFrontPage && ed.Sections.Count > 0)
+            {
+                @foreach (var sec in ed.Sections)
                 {
-                    <div class="tdr-grid-item">
-                        <ArticleCard Article="a" OnSaveToggled="OnSave" />
-                    </div>
+                    <section class="tdr-section">
+                        <div class="tdr-section-head">
+                            <span class="tdr-chip" style="background:@sec.Color;color:#fff">@sec.Name</span>
+                            <a class="tdr-link" href="@SectionUrl(sec.CategoryId)">more in @sec.Name →</a>
+                        </div>
+                        <div class="tdr-grid">
+                            @foreach (var a in sec.Articles)
+                            {
+                                <div class="tdr-grid-item">
+                                    <ArticleCard Article="a" OnSaveToggled="OnSave" />
+                                </div>
+                            }
+                        </div>
+                    </section>
                 }
-            </div>
+            }
+            else
+            {
+                <div class="tdr-grid">
+                    @foreach (var a in ed.Articles)
+                    {
+                        <div class="tdr-grid-item">
+                            <ArticleCard Article="a" OnSaveToggled="OnSave" />
+                        </div>
+                    }
+                </div>
+            }
         }
     </div>
 
@@ -112,9 +136,9 @@ else
 }
 
 @code {
+    [Parameter] public string? Slug { get; set; }
     [Parameter] public string? Date { get; set; }
-    [SupplyParameterFromQuery(Name = "cat")] public Guid? Cat { get; set; }
-    [SupplyParameterFromQuery(Name = "saved")] public bool Saved { get; set; }
+    [SupplyParameterFromQuery(Name = "src")] public Guid? Src { get; set; }
     [SupplyParameterFromQuery(Name = "unread")] public bool Unread { get; set; }
 
     private EditionDto? _edition;
@@ -122,10 +146,19 @@ else
     private bool _showAdd;
     private bool _loading;
     private string _loadedKey = "";
+    private Guid? _categoryId;
+
+    /// <summary>"saved" is a reserved slug for the cross-date saved view.</summary>
+    private bool Saved => string.Equals(Slug, "saved", StringComparison.OrdinalIgnoreCase);
+    /// <summary>The unfiltered front page renders a curated bit of every category.</summary>
+    private bool IsFrontPage => _categoryId is null && Src is null && !Saved;
+    private DateOnly? CurrentDate => DateOnly.TryParse(Date, out var d) ? d : null;
+    /// <summary>The section slug for the page we're on ("today", "saved", or a category slug).</summary>
+    private string CurrentSlug => Saved ? "saved" : string.IsNullOrEmpty(Slug) ? "today" : Slug!;
 
     protected override async Task OnParametersSetAsync()
     {
-        var key = $"{Date}|{Cat}|{Saved}|{Unread}";
+        var key = $"{Slug}|{Date}|{Src}|{Unread}";
         if (key == _loadedKey && _edition is not null) return;
         _loadedKey = key;
         await Load();
@@ -138,38 +171,58 @@ else
         try
         {
             await State.EnsureLoadedAsync();
+            _categoryId = ResolveCategoryId();
             // Fetch into a local and only swap in on success, so the current edition
             // stays on screen during navigation (no collapse / scroll jump).
-            EditionDto? result = null;
+            EditionDto? result;
             if (Saved)
-                result = await Api.GetEditionAsync(DateOnly.FromDateTime(DateTime.Today), Cat, saved: true, Unread);
-            else if (string.IsNullOrEmpty(Date))
-                result = await Api.GetLatestEditionAsync(Cat, Unread);
-            else if (DateOnly.TryParse(Date, out var d))
-                result = await Api.GetEditionAsync(d, Cat, saved: false, Unread);
+                result = await Api.GetEditionAsync(DateOnly.FromDateTime(DateTime.Today), null, Src, saved: true, Unread);
+            else if (CurrentDate is { } d)
+                result = await Api.GetEditionAsync(d, _categoryId, Src, saved: false, Unread);
             else
-                _error = "That edition date isn't valid.";
+                result = await Api.GetLatestEditionAsync(_categoryId, Src, Unread);
 
-            if (result is not null) _edition = result;
+            _edition = result;
         }
         catch (ApiException ex) { _error = ex.Message; }
         finally { _loading = false; }
     }
+
+    /// <summary>Maps the URL slug to a category id; null for the front page / saved / unknown.</summary>
+    private Guid? ResolveCategoryId() =>
+        string.IsNullOrEmpty(Slug) || Slug is "today" or "saved"
+            ? null
+            : State.Categories.FirstOrDefault(c => string.Equals(c.Slug, Slug, StringComparison.OrdinalIgnoreCase))?.Id;
 
     private void Open(Guid id) => Nav.NavigateTo($"/article/{id}");
 
     private void Navigate(DateOnly? date)
     {
         if (date is null) return;
-        Nav.NavigateTo(BuildUrl($"/edition/{date:yyyy-MM-dd}"));
+        Nav.NavigateTo(WithQuery(PathFor(CurrentSlug, date)));
     }
 
-    private void GoLatest() => Nav.NavigateTo(BuildUrl("/"));
+    private void GoLatest() => Nav.NavigateTo(WithQuery(PathFor(CurrentSlug, null)));
 
-    private string BuildUrl(string path)
+    private string SectionUrl(Guid catId)
+    {
+        var slug = State.Categories.FirstOrDefault(c => c.Id == catId)?.Slug ?? "today";
+        return WithQuery(PathFor(slug, CurrentDate));
+    }
+
+    /// <summary>Builds a reader URL: "/" or "/today/{date}" for the front page,
+    /// "/saved" for saved, "/{slug}" or "/{slug}/{date}" for a section.</summary>
+    private static string PathFor(string slug, DateOnly? date) => slug switch
+    {
+        "saved" => "/saved",
+        "today" => date is null ? "/" : $"/today/{date:yyyy-MM-dd}",
+        _ => date is null ? $"/{slug}" : $"/{slug}/{date:yyyy-MM-dd}",
+    };
+
+    private string WithQuery(string path)
     {
         var q = new List<string>();
-        if (Cat is { } c) q.Add($"cat={c}");
+        if (Src is { } s) q.Add($"src={s}");
         if (Unread) q.Add("unread=true");
         return path + (q.Count > 0 ? "?" + string.Join("&", q) : "");
     }
@@ -177,12 +230,7 @@ else
     private void ToggleUnread()
     {
         Unread = !Unread;
-        var path = string.IsNullOrEmpty(Date) ? "/" : $"/edition/{Date}";
-        var q = new List<string>();
-        if (Cat is { } c) q.Add($"cat={c}");
-        if (Saved) q.Add("saved=true");
-        if (Unread) q.Add("unread=true");
-        Nav.NavigateTo(path + (q.Count > 0 ? "?" + string.Join("&", q) : ""));
+        Nav.NavigateTo(WithQuery(PathFor(CurrentSlug, CurrentDate)));
     }
 
     private async Task OnSave((Guid Id, bool Saved) e)
@@ -192,13 +240,19 @@ else
         if (_edition is null) return;
         ArticleSummaryDto? lead = _edition.Lead is { } l && l.Id == e.Id ? l with { IsSaved = e.Saved } : _edition.Lead;
         var articles = _edition.Articles.Select(a => a.Id == e.Id ? a with { IsSaved = e.Saved } : a).ToList();
-        _edition = _edition with { Lead = lead, Articles = articles };
+        var sections = _edition.Sections
+            .Select(sec => sec with
+            {
+                Articles = sec.Articles.Select(a => a.Id == e.Id ? a with { IsSaved = e.Saved } : a).ToList(),
+            })
+            .ToList();
+        _edition = _edition with { Lead = lead, Articles = articles, Sections = sections };
     }
 
     private async Task MarkAllRead()
     {
         if (_edition is null || Saved) return;
-        await Api.MarkEditionReadAsync(_edition.Date, Cat);
+        await Api.MarkEditionReadAsync(_edition.Date, _categoryId);
         await State.RefreshAsync();
         await Load();
     }

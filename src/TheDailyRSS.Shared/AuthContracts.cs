@@ -41,6 +41,7 @@ public sealed record UserDto(
     string DisplayName,
     string Initials,
     DateTimeOffset CreatedAt,
+    bool IsAdmin,
     PreferencesDto Preferences);
 
 public sealed class PreferencesDto

@@ -82,7 +82,8 @@ builder.Services
             },
         };
     });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(o =>
+    o.AddPolicy(Roles.Admin, p => p.RequireRole(Roles.Admin)));
 
 // ── App services ────────────────────────────────────────────────────
 builder.Services.AddHttpClient("feeds", c =>
@@ -99,6 +100,7 @@ builder.Services.AddDataProtection()
 builder.Services.AddSingleton<FeedReader>();
 builder.Services.AddScoped<FeedDiscoveryService>();
 builder.Services.AddScoped<FeedFetchService>();
+builder.Services.AddScoped<FeedSourceService>();
 builder.Services.AddScoped<OpmlService>();
 builder.Services.AddHostedService<FeedRefreshBackgroundService>();
 
@@ -109,6 +111,11 @@ await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
+
+    // Ensure the Admin role exists so the first registrant can be promoted into it.
+    var roles = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+    if (!await roles.RoleExistsAsync(Roles.Admin))
+        await roles.CreateAsync(new IdentityRole<Guid>(Roles.Admin));
 }
 
 if (app.Environment.IsDevelopment())
@@ -124,7 +131,12 @@ app.MapAuthEndpoints();
 app.MapCategoryEndpoints();
 app.MapFeedEndpoints();
 app.MapEditionEndpoints();
+app.MapKeywordEndpoints();
+app.MapAdminEndpoints();
 
 app.MapFallbackToFile("index.html");
 
 app.Run();
+
+/// <summary>Exposed so integration tests can host the app via WebApplicationFactory.</summary>
+public partial class Program;

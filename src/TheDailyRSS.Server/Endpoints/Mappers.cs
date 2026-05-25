@@ -16,26 +16,15 @@ public static class Mappers
         };
     }
 
-    public static UserDto ToDto(this AppUser u) => new(
+    public static UserDto ToDto(this AppUser u, IEnumerable<string>? roles = null) => new(
         u.Id,
         u.Email ?? "",
         u.DisplayName,
         Initials(u.DisplayName),
         u.CreatedAt,
+        roles?.Contains(Auth.Roles.Admin) ?? false,
         new PreferencesDto { Theme = u.Theme, HeadlineFont = u.HeadlineFont, Density = u.Density });
 
     public static SessionDto ToDto(this UserSession s, Guid currentSessionId) => new(
         s.Id, s.DeviceLabel, s.UserAgent, s.IpAddress, s.CreatedAt, s.LastSeenAt, s.Id == currentSessionId);
-
-    public static ArticleSummaryDto ToSummary(this Article a) => new(
-        a.Id, a.Title, a.Summary,
-        a.Feed!.Title, a.Feed.IconText,
-        a.Feed.CategoryId, a.Feed.Category!.Name, a.Feed.Category.Color,
-        a.ImageUrl, a.PublishedAt, a.IsRead, a.IsSaved, a.Url);
-
-    public static ArticleDto ToDto(this Article a) => new(
-        a.Id, a.Title, a.Summary, a.ContentHtml, a.Author,
-        a.Feed!.Title, a.Feed.IconText,
-        a.Feed.CategoryId, a.Feed.Category!.Name, a.Feed.Category.Color,
-        a.ImageUrl, a.PublishedAt, a.IsRead, a.IsSaved, a.ReadingPositionPercent, a.Url);
 }

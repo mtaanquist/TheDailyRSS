@@ -10,6 +10,9 @@ namespace TheDailyRSS.Server.Endpoints;
 
 public static class EditionEndpoints
 {
+    /// <summary>How many articles each category contributes to the curated front page.</summary>
+    private const int FrontPageSectionSize = 5;
+
     public static void MapEditionEndpoints(this IEndpointRouteBuilder app)
     {
         var editions = app.MapGroup("/api/editions").RequireAuthorization();
@@ -25,85 +28,158 @@ public static class EditionEndpoints
         articles.MapPost("/{id:guid}/position", SetPosition);
     }
 
-    private static async Task<IResult> ListDates(ClaimsPrincipal principal, AppDbContext db)
+    // ── Visibility & keyword helpers ────────────────────────────────────
+
+    /// <summary>Articles the user can see: those belonging to a source they subscribe to.</summary>
+    private static IQueryable<Article> Subscribed(AppDbContext db, Guid uid) =>
+        db.Articles.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid));
+
+    /// <summary>Drops articles matching any of the user's mute terms (case-insensitive).</summary>
+    private static IQueryable<Article> ApplyKeywords(IQueryable<Article> q, List<KeywordFilter> filters)
+    {
+        foreach (var f in filters)
+        {
+            var like = $"%{f.Term}%";
+            if (f.Scope == KeywordScope.TitleOnly)
+                q = q.Where(a => !EF.Functions.ILike(a.Title, like));
+            else
+                q = q.Where(a => !EF.Functions.ILike(a.Title, like)
+                    && !(a.Summary != null && EF.Functions.ILike(a.Summary, like)));
+        }
+        return q;
+    }
+
+    private static async Task<List<KeywordFilter>> LoadFiltersAsync(AppDbContext db, Guid uid, CancellationToken ct) =>
+        await db.KeywordFilters.Where(k => k.UserId == uid).ToListAsync(ct);
+
+    /// <summary>Projects subscribed articles to summaries, resolving the per-user category + state.</summary>
+    private static IQueryable<ArticleSummaryDto> ToSummaries(IQueryable<Article> articles, AppDbContext db, Guid uid) =>
+        from a in articles
+        from sub in db.Subscriptions.Where(s => s.UserId == uid && s.SourceId == a.SourceId)
+        from st in db.UserArticleStates.Where(s => s.UserId == uid && s.ArticleId == a.Id).DefaultIfEmpty()
+        select new ArticleSummaryDto(
+            a.Id, a.Title, a.Summary,
+            sub.CustomTitle ?? a.Source!.Title, a.Source!.IconText,
+            sub.CategoryId, sub.Category!.Name, sub.Category.Color,
+            a.ImageUrl, a.PublishedAt,
+            st != null && st.IsRead, st != null && st.IsSaved, a.Url);
+
+    // ── Reads ───────────────────────────────────────────────────────────
+
+    private static async Task<IResult> ListDates(ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
     {
         var uid = principal.GetUserId();
-        var grouped = await db.Articles
-            .Where(a => a.Feed!.UserId == uid)
-            .GroupBy(a => a.EditionDate)
-            .Select(g => new { Date = g.Key, Count = g.Count(), Unread = g.Sum(a => a.IsRead ? 0 : 1) })
+        var filters = await LoadFiltersAsync(db, uid, ct);
+        var visible = ApplyKeywords(Subscribed(db, uid), filters);
+
+        var grouped = await (
+            from a in visible
+            from st in db.UserArticleStates.Where(s => s.UserId == uid && s.ArticleId == a.Id).DefaultIfEmpty()
+            group new { st } by a.EditionDate into g
+            select new
+            {
+                Date = g.Key,
+                Count = g.Count(),
+                Unread = g.Count(x => x.st == null || !x.st.IsRead),
+            })
             .OrderByDescending(x => x.Date)
-            .ToListAsync();
+            .ToListAsync(ct);
+
         return Results.Ok(grouped.Select(x => new EditionDateDto(x.Date, x.Count, x.Unread)));
     }
 
     private static async Task<IResult> Latest(
         ClaimsPrincipal principal, AppDbContext db, IOptions<FeedOptions> opts,
-        Guid? categoryId, bool? unreadOnly)
+        Guid? categoryId, Guid? sourceId, bool? unreadOnly, CancellationToken ct)
     {
         var uid = principal.GetUserId();
-        var latest = await db.Articles
-            .Where(a => a.Feed!.UserId == uid)
-            .MaxAsync(a => (DateOnly?)a.EditionDate);
+        var latestQuery = Subscribed(db, uid);
+        if (sourceId is { } sid) latestQuery = latestQuery.Where(a => a.SourceId == sid);
+        var latest = await latestQuery.MaxAsync(a => (DateOnly?)a.EditionDate, ct);
         var date = latest ?? Today(opts.Value);
-        return await BuildEdition(uid, date, categoryId, saved: false, unreadOnly ?? false, db, opts.Value);
+        return await BuildEdition(uid, date, categoryId, sourceId, saved: false, unreadOnly ?? false, db, opts.Value, ct);
     }
 
     private static async Task<IResult> GetEdition(
         string date, ClaimsPrincipal principal, AppDbContext db, IOptions<FeedOptions> opts,
-        Guid? categoryId, bool? saved, bool? unreadOnly)
+        Guid? categoryId, Guid? sourceId, bool? saved, bool? unreadOnly, CancellationToken ct)
     {
         if (!DateOnly.TryParse(date, out var d))
             return Results.BadRequest(new { error = "Invalid date." });
-        return await BuildEdition(principal.GetUserId(), d, categoryId, saved ?? false, unreadOnly ?? false, db, opts.Value);
+        return await BuildEdition(principal.GetUserId(), d, categoryId, sourceId, saved ?? false, unreadOnly ?? false, db, opts.Value, ct);
     }
 
     private static async Task<IResult> BuildEdition(
-        Guid uid, DateOnly date, Guid? categoryId, bool saved, bool unreadOnly,
-        AppDbContext db, FeedOptions opts)
+        Guid uid, DateOnly date, Guid? categoryId, Guid? sourceId, bool saved, bool unreadOnly,
+        AppDbContext db, FeedOptions opts, CancellationToken ct)
     {
-        var query = db.Articles.Where(a => a.Feed!.UserId == uid);
+        var filters = await LoadFiltersAsync(db, uid, ct);
+        var query = ApplyKeywords(Subscribed(db, uid), filters);
 
         // "Saved" is a cross-date pseudo-section; everything else is bound to the day.
-        if (saved) query = query.Where(a => a.IsSaved);
+        if (saved) query = query.Where(a => a.States.Any(s => s.UserId == uid && s.IsSaved));
         else query = query.Where(a => a.EditionDate == date);
 
-        if (categoryId is { } cid) query = query.Where(a => a.Feed!.CategoryId == cid);
-        if (unreadOnly) query = query.Where(a => !a.IsRead);
+        if (categoryId is { } cid)
+            query = query.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid && s.CategoryId == cid));
+        if (sourceId is { } src)
+            query = query.Where(a => a.SourceId == src);
+        if (unreadOnly)
+            query = query.Where(a => !a.States.Any(s => s.UserId == uid && s.IsRead));
 
-        var rows = await query
-            .Include(a => a.Feed!).ThenInclude(f => f.Category!)
-            .OrderByDescending(a => a.PublishedAt)
-            .Take(300)
-            .ToListAsync();
-
-        var summaries = rows.Select(r => r.ToSummary()).ToList();
+        var top = query.OrderByDescending(a => a.PublishedAt).Take(300);
+        var summaries = (await ToSummaries(top, db, uid).ToListAsync(ct))
+            .OrderByDescending(s => s.PublishedAt)
+            .ToList();
 
         // Lead: newest article that has an image, otherwise just the newest.
         var lead = summaries.FirstOrDefault(s => s.ImageUrl is not null) ?? summaries.FirstOrDefault();
         var rest = summaries.Where(s => lead is null || s.Id != lead.Id).ToList();
 
-        var sections = summaries
-            .GroupBy(s => (s.CategoryId, s.CategoryName, s.CategoryColor))
-            .Select(g => new EditionSectionDto(
-                g.Key.CategoryId, g.Key.CategoryName, g.Key.CategoryColor, g.Count(), g.ToList()))
-            .OrderByDescending(s => s.Count)
-            .ToList();
+        // Front page (no drill-down): a curated slice of every category, in taxonomy order.
+        // A single-category view keeps the full flat list.
+        List<EditionSectionDto> sections;
+        if (categoryId is null && sourceId is null && !saved)
+        {
+            var order = await db.Categories.ToDictionaryAsync(c => c.Id, c => c.SortOrder, ct);
+            sections = rest
+                .GroupBy(s => (s.CategoryId, s.CategoryName, s.CategoryColor))
+                .Select(g => new EditionSectionDto(
+                    g.Key.CategoryId, g.Key.CategoryName, g.Key.CategoryColor,
+                    g.Count(), g.Take(FrontPageSectionSize).ToList()))
+                .OrderBy(s => order.TryGetValue(s.CategoryId, out var o) ? o : int.MaxValue)
+                .ToList();
+        }
+        else
+        {
+            sections = summaries
+                .GroupBy(s => (s.CategoryId, s.CategoryName, s.CategoryColor))
+                .Select(g => new EditionSectionDto(
+                    g.Key.CategoryId, g.Key.CategoryName, g.Key.CategoryColor, g.Count(), g.ToList()))
+                .ToList();
+        }
 
-        var unreadTotal = await db.Articles.CountAsync(a => a.Feed!.UserId == uid && !a.IsRead);
+        var unreadTotal = await ApplyKeywords(Subscribed(db, uid), filters)
+            .CountAsync(a => !a.States.Any(s => s.UserId == uid && s.IsRead), ct);
 
         DateOnly? prev = null, next = null;
         if (!saved)
         {
-            var dateQuery = db.Articles.Where(a => a.Feed!.UserId == uid);
-            if (categoryId is { } c2) dateQuery = dateQuery.Where(a => a.Feed!.CategoryId == c2);
-            prev = await dateQuery.Where(a => a.EditionDate < date).MaxAsync(a => (DateOnly?)a.EditionDate);
-            next = await dateQuery.Where(a => a.EditionDate > date).MinAsync(a => (DateOnly?)a.EditionDate);
+            var dateQuery = ApplyKeywords(Subscribed(db, uid), filters);
+            if (categoryId is { } c2)
+                dateQuery = dateQuery.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid && s.CategoryId == c2));
+            if (sourceId is { } src2)
+                dateQuery = dateQuery.Where(a => a.SourceId == src2);
+            prev = await dateQuery.Where(a => a.EditionDate < date).MaxAsync(a => (DateOnly?)a.EditionDate, ct);
+            next = await dateQuery.Where(a => a.EditionDate > date).MinAsync(a => (DateOnly?)a.EditionDate, ct);
         }
 
-        var categoryName = categoryId is null ? null
-            : rows.FirstOrDefault()?.Feed!.Category!.Name
-              ?? (await db.Categories.Where(c => c.Id == categoryId).Select(c => c.Name).FirstOrDefaultAsync());
+        // The heading is the source's name when reading one source, else the category name.
+        var heading = sourceId is { } src3
+            ? await db.Subscriptions.Where(s => s.UserId == uid && s.SourceId == src3)
+                .Select(s => s.CustomTitle ?? s.Source!.Title).FirstOrDefaultAsync(ct)
+            : categoryId is null ? null
+                : await db.Categories.Where(c => c.Id == categoryId).Select(c => c.Name).FirstOrDefaultAsync(ct);
 
         var dto = new EditionDto(
             Date: date,
@@ -115,7 +191,7 @@ public static class EditionEndpoints
             NextDate: next,
             UnreadTotal: unreadTotal,
             CategoryId: categoryId,
-            CategoryName: saved ? "Saved" : categoryName,
+            CategoryName: saved ? "Saved" : heading,
             Lead: lead,
             Articles: rest,
             Sections: sections);
@@ -123,53 +199,106 @@ public static class EditionEndpoints
         return Results.Ok(dto);
     }
 
-    private static async Task<IResult> GetArticle(Guid id, ClaimsPrincipal principal, AppDbContext db)
+    private static async Task<IResult> GetArticle(Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
     {
         var uid = principal.GetUserId();
-        var article = await db.Articles
-            .Include(a => a.Feed!).ThenInclude(f => f.Category!)
-            .FirstOrDefaultAsync(a => a.Id == id && a.Feed!.UserId == uid);
-        return article is null ? Results.NotFound() : Results.Ok(article.ToDto());
+        // Direct open by id deliberately ignores keyword filters (a held link still works).
+        var dto = await (
+            from a in db.Articles.Where(a => a.Id == id && a.Source!.Subscriptions.Any(s => s.UserId == uid))
+            from sub in db.Subscriptions.Where(s => s.UserId == uid && s.SourceId == a.SourceId)
+            from st in db.UserArticleStates.Where(s => s.UserId == uid && s.ArticleId == a.Id).DefaultIfEmpty()
+            select new ArticleDto(
+                a.Id, a.Title, a.Summary, a.ContentHtml, a.Author,
+                sub.CustomTitle ?? a.Source!.Title, a.Source!.IconText,
+                sub.CategoryId, sub.Category!.Name, sub.Category.Color,
+                a.ImageUrl, a.PublishedAt,
+                st != null && st.IsRead, st != null && st.IsSaved, st != null ? st.ReadingPositionPercent : 0,
+                a.Url))
+            .FirstOrDefaultAsync(ct);
+        return dto is null ? Results.NotFound() : Results.Ok(dto);
     }
 
-    private static async Task<IResult> SetRead(Guid id, SetBoolRequest req, ClaimsPrincipal principal, AppDbContext db)
+    // ── Per-user state (lazy upsert) ────────────────────────────────────
+
+    /// <summary>Finds the user's state row for an article, creating it if the article is visible.
+    /// Returns null when the article isn't visible to the user.</summary>
+    private static async Task<UserArticleState?> GetOrCreateStateAsync(
+        AppDbContext db, Guid uid, Guid articleId, CancellationToken ct)
     {
-        var uid = principal.GetUserId();
-        var n = await db.Articles.Where(a => a.Id == id && a.Feed!.UserId == uid)
-            .ExecuteUpdateAsync(s => s.SetProperty(a => a.IsRead, req.Value));
-        return n > 0 ? Results.NoContent() : Results.NotFound();
+        var state = await db.UserArticleStates.FirstOrDefaultAsync(
+            s => s.UserId == uid && s.ArticleId == articleId, ct);
+        if (state is not null) return state;
+
+        var visible = await db.Articles.AnyAsync(
+            a => a.Id == articleId && a.Source!.Subscriptions.Any(s => s.UserId == uid), ct);
+        if (!visible) return null;
+
+        state = new UserArticleState { UserId = uid, ArticleId = articleId };
+        db.UserArticleStates.Add(state);
+        return state;
     }
 
-    private static async Task<IResult> SetSaved(Guid id, SetBoolRequest req, ClaimsPrincipal principal, AppDbContext db)
+    private static async Task<IResult> SetRead(Guid id, SetBoolRequest req, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
     {
-        var uid = principal.GetUserId();
-        var n = await db.Articles.Where(a => a.Id == id && a.Feed!.UserId == uid)
-            .ExecuteUpdateAsync(s => s.SetProperty(a => a.IsSaved, req.Value));
-        return n > 0 ? Results.NoContent() : Results.NotFound();
+        var state = await GetOrCreateStateAsync(db, principal.GetUserId(), id, ct);
+        if (state is null) return Results.NotFound();
+        state.IsRead = req.Value;
+        state.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
     }
 
-    private static async Task<IResult> SetPosition(Guid id, SetPositionRequest req, ClaimsPrincipal principal, AppDbContext db)
+    private static async Task<IResult> SetSaved(Guid id, SetBoolRequest req, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
     {
-        var uid = principal.GetUserId();
+        var state = await GetOrCreateStateAsync(db, principal.GetUserId(), id, ct);
+        if (state is null) return Results.NotFound();
+        state.IsSaved = req.Value;
+        state.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> SetPosition(Guid id, SetPositionRequest req, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
+    {
+        var state = await GetOrCreateStateAsync(db, principal.GetUserId(), id, ct);
+        if (state is null) return Results.NotFound();
         var pct = Math.Clamp(req.Percent, 0, 100);
-        var n = await db.Articles.Where(a => a.Id == id && a.Feed!.UserId == uid)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(a => a.ReadingPositionPercent, pct)
-                .SetProperty(a => a.IsRead, a => a.IsRead || pct >= 90));
-        return n > 0 ? Results.NoContent() : Results.NotFound();
+        state.ReadingPositionPercent = pct;
+        if (pct >= 90) state.IsRead = true;
+        state.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> MarkEditionRead(
-        string date, ClaimsPrincipal principal, AppDbContext db, Guid? categoryId)
+        string date, ClaimsPrincipal principal, AppDbContext db, Guid? categoryId, CancellationToken ct)
     {
         if (!DateOnly.TryParse(date, out var d))
             return Results.BadRequest(new { error = "Invalid date." });
 
         var uid = principal.GetUserId();
-        var query = db.Articles.Where(a => a.Feed!.UserId == uid && a.EditionDate == d && !a.IsRead);
-        if (categoryId is { } cid) query = query.Where(a => a.Feed!.CategoryId == cid);
-        var n = await query.ExecuteUpdateAsync(s => s.SetProperty(a => a.IsRead, true));
-        return Results.Ok(new { marked = n });
+        var filters = await LoadFiltersAsync(db, uid, ct);
+
+        var query = ApplyKeywords(Subscribed(db, uid), filters)
+            .Where(a => a.EditionDate == d && !a.States.Any(s => s.UserId == uid && s.IsRead));
+        if (categoryId is { } cid)
+            query = query.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid && s.CategoryId == cid));
+
+        var articleIds = await query.Select(a => a.Id).ToListAsync(ct);
+        if (articleIds.Count == 0) return Results.Ok(new { marked = 0 });
+
+        // Bulk upsert: flip existing state rows, create rows for never-touched articles.
+        var existing = await db.UserArticleStates
+            .Where(s => s.UserId == uid && articleIds.Contains(s.ArticleId))
+            .ToListAsync(ct);
+        var existingIds = existing.Select(s => s.ArticleId).ToHashSet();
+        var now = DateTimeOffset.UtcNow;
+        foreach (var s in existing) { s.IsRead = true; s.UpdatedAt = now; }
+        foreach (var aid in articleIds.Where(i => !existingIds.Contains(i)))
+            db.UserArticleStates.Add(new UserArticleState { UserId = uid, ArticleId = aid, IsRead = true, UpdatedAt = now });
+
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new { marked = articleIds.Count });
     }
 
     private static DateOnly Today(FeedOptions opts)

@@ -2,10 +2,10 @@
 @attribute [Authorize]
 @inject ApiClient Api
 
-<PageTitle>Sync &amp; devices · The Daily RSS</PageTitle>
+<PageTitle>Sync · The Daily RSS</PageTitle>
 
 <div class="tdr-breadcrumb" style="padding:12px 24px; border-bottom:1px solid var(--rule); margin:0">
-    <a href="/">Home</a> › Settings › <b>Sync &amp; devices</b>
+    <a href="/">Home</a> › Settings › <b>Sync</b>
 </div>
 
 <div class="tdr-settings">
@@ -13,7 +13,7 @@
 
     <div class="tdr-settings-main">
         <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap">
-            <h1 style="font-weight:900; font-size:26px">Sync &amp; devices</h1>
+            <h1 style="font-weight:900; font-size:26px">Sync</h1>
             <span style="font-style:italic; font-size:13px; color:var(--ink-2)">
                 @_sessions.Count active · @LastSync
             </span>
@@ -26,7 +26,7 @@
         @if (_status is { } s)
         {
             <div class="tdr-stat-grid">
-                <Stat Label="Feeds" Value="@s.FeedCount.ToString()" Sub="@($"across {s.CategoryCount} folders")" />
+                <Stat Label="Feeds" Value="@s.FeedCount.ToString()" Sub="@($"across {s.CategoryCount} sections")" />
                 <Stat Label="Articles" Value="@s.ArticlesTracked.ToString("N0")" Sub="tracked" />
                 <Stat Label="Saved" Value="@s.SavedCount.ToString()" Sub="stars synced" />
                 <Stat Label="Reading positions" Value="@s.ReadingPositions.ToString()" Sub="in progress" />
@@ -65,7 +65,7 @@
             }
         </div>
 
-        <h2 style="font-weight:800; font-size:14px; margin:22px 0 8px">What syncs</h2>
+        <h2 style="font-weight:800; font-size:14px; margin:22px 0 8px">Kept in sync everywhere</h2>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; max-width:520px">
             @foreach (var item in SyncItems)
             {
@@ -74,9 +74,6 @@
                     <span>@item</span>
                 </div>
             }
-        </div>
-        <div class="tdr-hint" style="font-style:italic; color:var(--ink-2)">
-            Everything syncs through your self-hosted server — there's nothing to turn off.
         </div>
 
         @if (_sessions.Any(x => !x.IsCurrent))
@@ -93,7 +90,7 @@
     private SyncStatusDto? _status;
 
     private static readonly string[] SyncItems =
-        ["Feeds & categories", "Read / unread state", "Saved articles", "Reading positions", "Reading preferences", "Edition archive"];
+        ["Feeds", "Read / unread", "Saved articles", "Reading position", "Preferences", "Past editions"];
 
     private string LastSync => _status?.LastSyncAt is { } t ? $"last refresh {Relative(t)}" : "no refresh yet";
 

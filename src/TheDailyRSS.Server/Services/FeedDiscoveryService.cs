@@ -11,13 +11,13 @@ public sealed partial class FeedDiscoveryService(IHttpClientFactory httpFactory,
 {
     private HttpClient Http => httpFactory.CreateClient("feeds");
 
-    public async Task<FeedDetectResult> DetectAsync(string url, CancellationToken ct)
+    public async Task<FeedDetectResult> DetectAsync(string url, CancellationToken ct, bool discover = true)
     {
         url = Normalize(url);
         try
         {
             // Try the URL as a feed first.
-            var (feedUrl, parsed) = await ResolveAsync(url, ct);
+            var (feedUrl, parsed) = await ResolveAsync(url, ct, discover);
             if (parsed is null)
                 return new FeedDetectResult(false, null, null, null, null, []);
 
@@ -36,14 +36,19 @@ public sealed partial class FeedDiscoveryService(IHttpClientFactory httpFactory,
         }
     }
 
-    /// <summary>Returns the resolved feed URL and its parsed contents, or (url, null) if none.</summary>
-    public async Task<(string FeedUrl, ParsedFeed? Feed)> ResolveAsync(string url, CancellationToken ct)
+    /// <summary>Returns the resolved feed URL and its parsed contents, or (url, null) if none.
+    /// When <paramref name="discover"/> is false, the URL is used exactly: if it isn't a feed
+    /// itself we don't fall back to scraping the page for an advertised (often site-wide) feed.</summary>
+    public async Task<(string FeedUrl, ParsedFeed? Feed)> ResolveAsync(string url, CancellationToken ct, bool discover = true)
     {
         url = Normalize(url);
         var (body, contentType) = await GetAsync(url, ct);
 
         if (LooksLikeFeed(body, contentType))
             return (url, ParseSafe(body, url));
+
+        if (!discover)
+            return (url, null);
 
         // Treat as HTML: find an alternate feed link.
         foreach (var href in FindFeedLinks(body))

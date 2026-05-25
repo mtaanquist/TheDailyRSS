@@ -1,0 +1,134 @@
+@page "/settings/categories"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject AppState State
+@inject IJSRuntime JS
+
+<PageTitle>Categories · The Daily RSS</PageTitle>
+
+<div class="tdr-breadcrumb" style="padding:12px 24px; border-bottom:1px solid var(--rule); margin:0">
+    <a href="/">Home</a> › Settings › <b>Categories (admin)</b>
+</div>
+
+<div class="tdr-settings">
+    <SettingsNav Current="categories" />
+
+    <div class="tdr-settings-main">
+        <h1 style="font-weight:900; font-size:26px">Category taxonomy</h1>
+        <div style="font-style:italic; font-size:13px; color:var(--ink-2); margin-bottom:18px">
+            The newspaper sections everyone files their feeds into. Changes affect all readers.
+        </div>
+
+        @if (_error is not null)
+        {
+            <div class="tdr-error">@_error</div>
+        }
+
+        <div class="tdr-folder" style="padding:14px; max-width:560px">
+            <div class="tdr-field">
+                <label>New section</label>
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+                    <input class="tdr-input" style="max-width:180px" placeholder="Name" @bind="_name" @bind:event="oninput" />
+                    <input class="tdr-input" style="max-width:140px" placeholder="slug" @bind="_slug" @bind:event="oninput" />
+                    <input class="tdr-input" type="color" style="max-width:54px; padding:2px" @bind="_color" />
+                    <button class="tdr-btn" @onclick="Create"
+                            disabled="@(_busy || string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_slug))">add</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="tdr-folder" style="margin-top:16px; max-width:560px">
+            @foreach (var c in _categories)
+            {
+                <div class="tdr-feedrow">
+                    <span class="tdr-feed-dot" style="background:@c.Color"></span>
+                    @if (_editingId == c.Id)
+                    {
+                        <input class="tdr-input" style="max-width:180px" @bind="_editName" />
+                        <input class="tdr-input" type="color" style="max-width:54px; padding:2px" @bind="_editColor" />
+                        <button class="tdr-link" @onclick="() => Save(c)">save</button>
+                        <button class="tdr-link muted" @onclick="() => _editingId = null">cancel</button>
+                    }
+                    else
+                    {
+                        <div class="ttl">
+                            <div>@c.Name</div>
+                            <div class="err" style="color:var(--ink-3); font-style:italic">@c.Slug · @c.FeedCount subscriptions</div>
+                        </div>
+                        <span class="spacer"></span>
+                        <button class="tdr-link muted" @onclick="() => StartEdit(c)">edit</button>
+                        <span>·</span>
+                        <button class="tdr-link" @onclick="() => Delete(c)">delete</button>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<CategoryDto> _categories = [];
+    private string _name = "";
+    private string _slug = "";
+    private string _color = "#a83020";
+    private Guid? _editingId;
+    private string _editName = "";
+    private string _editColor = "#a83020";
+    private bool _busy;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => Load();
+
+    private async Task Load()
+    {
+        try { _categories = await Api.GetAdminCategoriesAsync(); }
+        catch (ApiException ex) { _error = ex.Message; }
+    }
+
+    private async Task Create()
+    {
+        if (string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_slug)) return;
+        _error = null;
+        _busy = true;
+        try
+        {
+            await Api.CreateCategoryAsync(new CreateCategoryRequest { Name = _name.Trim(), Slug = _slug.Trim(), Color = _color });
+            _name = ""; _slug = ""; _color = "#a83020";
+            await Reload();
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private void StartEdit(CategoryDto c) { _editingId = c.Id; _editName = c.Name; _editColor = c.Color; }
+
+    private async Task Save(CategoryDto c)
+    {
+        try
+        {
+            await Api.UpdateCategoryAsync(c.Id, new UpdateCategoryRequest { Name = _editName.Trim(), Color = _editColor });
+            _editingId = null;
+            await Reload();
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+    }
+
+    private async Task Delete(CategoryDto c)
+    {
+        if (!await Confirm($"Delete the “{c.Name}” section?")) return;
+        try
+        {
+            await Api.DeleteCategoryAsync(c.Id);
+            await Reload();
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+    }
+
+    private async Task Reload()
+    {
+        await Load();
+        await State.RefreshAsync();
+    }
+
+    private async Task<bool> Confirm(string message) => await JS.InvokeAsync<bool>("confirm", message);
+}

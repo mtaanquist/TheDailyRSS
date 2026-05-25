@@ -1,0 +1,110 @@
+@page "/settings/keywords"
+@attribute [Authorize]
+@inject ApiClient Api
+
+<PageTitle>Muted words · The Daily RSS</PageTitle>
+
+<div class="tdr-breadcrumb" style="padding:12px 24px; border-bottom:1px solid var(--rule); margin:0">
+    <a href="/">Home</a> › Settings › <b>Muted words</b>
+</div>
+
+<div class="tdr-settings">
+    <SettingsNav Current="keywords" />
+
+    <div class="tdr-settings-main">
+        <h1 style="font-weight:900; font-size:26px">Muted words</h1>
+        <div style="font-style:italic; font-size:13px; color:var(--ink-2); margin-bottom:18px">
+            Articles whose headline (or summary) contains one of these terms are kept out of your editions —
+            handy for things like “giveaway”.
+        </div>
+
+        @if (_error is not null)
+        {
+            <div class="tdr-error">@_error</div>
+        }
+
+        <div class="tdr-folder" style="padding:14px; max-width:520px">
+            <div class="tdr-field">
+                <label>Mute a term</label>
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+                    <input class="tdr-input" style="max-width:240px" placeholder="e.g. giveaway"
+                           @bind="_term" @bind:event="oninput" @onkeydown="OnKey" />
+                    <select class="tdr-select" style="width:auto" @bind="_scope">
+                        <option value="@KeywordScope.TitleAndSummary">Title + summary</option>
+                        <option value="@KeywordScope.TitleOnly">Title only</option>
+                    </select>
+                    <button class="tdr-btn" @onclick="Add" disabled="@(_busy || string.IsNullOrWhiteSpace(_term))">mute</button>
+                </div>
+            </div>
+        </div>
+
+        @if (_items.Count == 0)
+        {
+            <div class="tdr-note" style="margin-top:16px">Nothing muted yet.</div>
+        }
+        else
+        {
+            <div class="tdr-folder" style="margin-top:16px; max-width:520px">
+                @foreach (var k in _items)
+                {
+                    <div class="tdr-feedrow">
+                        <div class="ttl">
+                            <div>@k.Term</div>
+                            <div class="err" style="color:var(--ink-3); font-style:italic">
+                                @(k.Scope == KeywordScope.TitleOnly ? "title only" : "title + summary")
+                            </div>
+                        </div>
+                        <span class="spacer"></span>
+                        <button class="tdr-link" @onclick="() => Remove(k)">✕</button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private List<KeywordFilterDto> _items = [];
+    private string _term = "";
+    private KeywordScope _scope = KeywordScope.TitleAndSummary;
+    private bool _busy;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => Load();
+
+    private async Task Load()
+    {
+        try { _items = await Api.GetKeywordsAsync(); }
+        catch (ApiException ex) { _error = ex.Message; }
+    }
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Add();
+    }
+
+    private async Task Add()
+    {
+        if (string.IsNullOrWhiteSpace(_term)) return;
+        _error = null;
+        _busy = true;
+        try
+        {
+            await Api.AddKeywordAsync(new CreateKeywordRequest { Term = _term.Trim(), Scope = _scope });
+            _term = "";
+            await Load();
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task Remove(KeywordFilterDto k)
+    {
+        try
+        {
+            await Api.DeleteKeywordAsync(k.Id);
+            await Load();
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+    }
+}

@@ -5,6 +5,7 @@ namespace TheDailyRSS.Shared;
 public sealed record CategoryDto(
     Guid Id,
     string Name,
+    string Slug,
     string Color,
     int SortOrder,
     int FeedCount,
@@ -14,6 +15,9 @@ public sealed class CreateCategoryRequest
 {
     [Required, MinLength(1), MaxLength(60)]
     public string Name { get; set; } = "";
+
+    [Required, MinLength(1), MaxLength(60)]
+    public string Slug { get; set; } = "";
 
     /// <summary>Hex colour used for the dot/marker in management views.</summary>
     public string Color { get; set; } = "#a83020";
@@ -26,8 +30,13 @@ public sealed class UpdateCategoryRequest
     public string Color { get; set; } = "#a83020";
 }
 
+/// <summary>
+/// A user's subscription to a shared feed source. <see cref="Id"/> is the subscription id;
+/// <see cref="Title"/> is the per-user override or the source's own title.
+/// </summary>
 public sealed record FeedDto(
     Guid Id,
+    Guid SourceId,
     Guid CategoryId,
     string Title,
     string FeedUrl,
@@ -38,6 +47,16 @@ public sealed record FeedDto(
     int TotalCount,
     DateTimeOffset? LastFetchedAt,
     string? LastFetchError);
+
+public sealed record KeywordFilterDto(Guid Id, string Term, KeywordScope Scope);
+
+public sealed class CreateKeywordRequest
+{
+    [Required, MinLength(1), MaxLength(120)]
+    public string Term { get; set; } = "";
+
+    public KeywordScope Scope { get; set; } = KeywordScope.TitleAndSummary;
+}
 
 public sealed class AddFeedRequest
 {
@@ -50,6 +69,10 @@ public sealed class AddFeedRequest
 
     /// <summary>Optional override; otherwise the feed's own title is used.</summary>
     public string? Title { get; set; }
+
+    /// <summary>When true, use <see cref="Url"/> exactly as the feed and skip HTML auto-discovery
+    /// (so a specific section feed isn't replaced by the site-wide one the page advertises).</summary>
+    public bool Exact { get; set; }
 }
 
 public sealed class UpdateFeedRequest

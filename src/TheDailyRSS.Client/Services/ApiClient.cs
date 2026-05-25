@@ -29,12 +29,20 @@ public sealed class ApiClient(HttpClient http)
     public Task RevokeOtherSessionsAsync() => SendAsync(HttpMethod.Post, "api/auth/sessions/revoke-others");
     public Task<SyncStatusDto> GetSyncStatusAsync() => GetAsync<SyncStatusDto>("api/auth/sync-status");
 
-    // ── Categories ────────────────────────────────────────────────
+    // ── Categories (read) ─────────────────────────────────────────
     public Task<List<CategoryDto>> GetCategoriesAsync() => GetAsync<List<CategoryDto>>("api/categories");
-    public Task<CategoryDto> CreateCategoryAsync(CreateCategoryRequest req) => PostAsync<CategoryDto>("api/categories", req);
-    public Task UpdateCategoryAsync(Guid id, UpdateCategoryRequest req) => SendAsync(HttpMethod.Put, $"api/categories/{id}", req);
-    public Task DeleteCategoryAsync(Guid id) => SendAsync(HttpMethod.Delete, $"api/categories/{id}");
-    public Task ReorderCategoriesAsync(ReorderRequest req) => SendAsync(HttpMethod.Put, "api/categories/reorder", req);
+
+    // ── Admin: category taxonomy ──────────────────────────────────
+    public Task<List<CategoryDto>> GetAdminCategoriesAsync() => GetAsync<List<CategoryDto>>("api/admin/categories");
+    public Task<CategoryDto> CreateCategoryAsync(CreateCategoryRequest req) => PostAsync<CategoryDto>("api/admin/categories", req);
+    public Task UpdateCategoryAsync(Guid id, UpdateCategoryRequest req) => SendAsync(HttpMethod.Put, $"api/admin/categories/{id}", req);
+    public Task DeleteCategoryAsync(Guid id) => SendAsync(HttpMethod.Delete, $"api/admin/categories/{id}");
+    public Task ReorderCategoriesAsync(ReorderRequest req) => SendAsync(HttpMethod.Put, "api/admin/categories/reorder", req);
+
+    // ── Keyword filters (mute words) ──────────────────────────────
+    public Task<List<KeywordFilterDto>> GetKeywordsAsync() => GetAsync<List<KeywordFilterDto>>("api/keywords");
+    public Task<KeywordFilterDto> AddKeywordAsync(CreateKeywordRequest req) => PostAsync<KeywordFilterDto>("api/keywords", req);
+    public Task DeleteKeywordAsync(Guid id) => SendAsync(HttpMethod.Delete, $"api/keywords/{id}");
 
     // ── Feeds ─────────────────────────────────────────────────────
     public Task<List<FeedDto>> GetFeedsAsync(Guid? categoryId = null) =>
@@ -62,11 +70,11 @@ public sealed class ApiClient(HttpClient http)
     // ── Editions / articles ───────────────────────────────────────
     public Task<List<EditionDateDto>> GetEditionDatesAsync() => GetAsync<List<EditionDateDto>>("api/editions/dates");
 
-    public Task<EditionDto> GetLatestEditionAsync(Guid? categoryId, bool unreadOnly) =>
-        GetAsync<EditionDto>($"api/editions/latest?{Query(categoryId, null, unreadOnly)}");
+    public Task<EditionDto> GetLatestEditionAsync(Guid? categoryId, Guid? sourceId, bool unreadOnly) =>
+        GetAsync<EditionDto>($"api/editions/latest?{Query(categoryId, sourceId, null, unreadOnly)}");
 
-    public Task<EditionDto> GetEditionAsync(DateOnly date, Guid? categoryId, bool saved, bool unreadOnly) =>
-        GetAsync<EditionDto>($"api/editions/{D(date)}?{Query(categoryId, saved, unreadOnly)}");
+    public Task<EditionDto> GetEditionAsync(DateOnly date, Guid? categoryId, Guid? sourceId, bool saved, bool unreadOnly) =>
+        GetAsync<EditionDto>($"api/editions/{D(date)}?{Query(categoryId, sourceId, saved, unreadOnly)}");
 
     public Task<ArticleDto> GetArticleAsync(Guid id) => GetAsync<ArticleDto>($"api/articles/{id}");
     public Task SetReadAsync(Guid id, bool value) => SendAsync(HttpMethod.Post, $"api/articles/{id}/read", new SetBool(value));
@@ -75,10 +83,11 @@ public sealed class ApiClient(HttpClient http)
     public Task MarkEditionReadAsync(DateOnly date, Guid? categoryId) =>
         SendAsync(HttpMethod.Post, $"api/editions/{D(date)}/mark-read" + (categoryId is { } c ? $"?categoryId={c}" : ""));
 
-    private static string Query(Guid? categoryId, bool? saved, bool unreadOnly)
+    private static string Query(Guid? categoryId, Guid? sourceId, bool? saved, bool unreadOnly)
     {
         var parts = new List<string>();
         if (categoryId is { } c) parts.Add($"categoryId={c}");
+        if (sourceId is { } s) parts.Add($"sourceId={s}");
         if (saved is true) parts.Add("saved=true");
         if (unreadOnly) parts.Add("unreadOnly=true");
         return string.Join("&", parts);

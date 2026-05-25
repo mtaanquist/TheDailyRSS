@@ -12,7 +12,7 @@ using TheDailyRSS.Server.Data;
 namespace TheDailyRSS.Server.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260525053714_InitialCreate")]
+    [Migration("20260525070502_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -257,9 +257,6 @@ namespace TheDailyRSS.Server.Data.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
-                    b.Property<Guid>("FeedId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTimeOffset>("FetchedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -267,17 +264,11 @@ namespace TheDailyRSS.Server.Data.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
-                    b.Property<bool>("IsRead")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsSaved")
-                        .HasColumnType("boolean");
-
                     b.Property<DateTimeOffset>("PublishedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("ReadingPositionPercent")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Summary")
                         .HasColumnType("text");
@@ -294,11 +285,11 @@ namespace TheDailyRSS.Server.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("IsSaved");
+                    b.HasIndex("EditionDate", "PublishedAt");
 
-                    b.HasIndex("FeedId", "EditionDate");
+                    b.HasIndex("SourceId", "EditionDate");
 
-                    b.HasIndex("FeedId", "ExternalId")
+                    b.HasIndex("SourceId", "ExternalId")
                         .IsUnique();
 
                     b.ToTable("Articles");
@@ -320,26 +311,118 @@ namespace TheDailyRSS.Server.Data.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
 
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId", "SortOrder");
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.HasIndex("SortOrder");
 
                     b.ToTable("Categories");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("11111111-1111-1111-1111-000000000000"),
+                            Color = "#a83020",
+                            Name = "News",
+                            Slug = "news",
+                            SortOrder = 0
+                        },
+                        new
+                        {
+                            Id = new Guid("11111111-1111-1111-1111-000000000001"),
+                            Color = "#1f5673",
+                            Name = "World",
+                            Slug = "world",
+                            SortOrder = 1
+                        },
+                        new
+                        {
+                            Id = new Guid("11111111-1111-1111-1111-000000000002"),
+                            Color = "#6a4c93",
+                            Name = "Politics",
+                            Slug = "politics",
+                            SortOrder = 2
+                        },
+                        new
+                        {
+                            Id = new Guid("11111111-1111-1111-1111-000000000003"),
+                            Color = "#2e6f40",
+                            Name = "Business",
+                            Slug = "business",
+                            SortOrder = 3
+                        },
+                        new
+                        {
+                            Id = new Guid("11111111-1111-1111-1111-000000000004"),
+                            Color = "#3a6ea5",
+                            Name = "Technology",
+                            Slug = "technology",
+                            SortOrder = 4
+                        },
+                        new
+                        {
+                            Id = new Guid("11111111-1111-1111-1111-000000000005"),
+                            Color = "#0b7a75",
+                            Name = "Science",
+                            Slug = "science",
+                            SortOrder = 5
+                        },
+                        new
+                        {
+                            Id = new Guid("11111111-1111-1111-1111-000000000006"),
+                            Color = "#4f772d",
+                            Name = "Environment",
+                            Slug = "environment",
+                            SortOrder = 6
+                        },
+                        new
+                        {
+                            Id = new Guid("11111111-1111-1111-1111-000000000007"),
+                            Color = "#c1502e",
+                            Name = "Sport",
+                            Slug = "sport",
+                            SortOrder = 7
+                        },
+                        new
+                        {
+                            Id = new Guid("11111111-1111-1111-1111-000000000008"),
+                            Color = "#9b2226",
+                            Name = "Culture",
+                            Slug = "culture",
+                            SortOrder = 8
+                        },
+                        new
+                        {
+                            Id = new Guid("11111111-1111-1111-1111-000000000009"),
+                            Color = "#b5838d",
+                            Name = "Lifestyle",
+                            Slug = "lifestyle",
+                            SortOrder = 9
+                        },
+                        new
+                        {
+                            Id = new Guid("11111111-1111-1111-1111-00000000000a"),
+                            Color = "#7d4f50",
+                            Name = "Opinion",
+                            Slug = "opinion",
+                            SortOrder = 10
+                        });
                 });
 
-            modelBuilder.Entity("TheDailyRSS.Server.Data.Feed", b =>
+            modelBuilder.Entity("TheDailyRSS.Server.Data.FeedSource", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CategoryId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("ETag")
@@ -368,13 +451,62 @@ namespace TheDailyRSS.Server.Data.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FeedUrl")
+                        .IsUnique();
+
+                    b.ToTable("FeedSources");
+                });
+
+            modelBuilder.Entity("TheDailyRSS.Server.Data.KeywordFilter", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Term")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Term")
+                        .IsUnique();
+
+                    b.ToTable("KeywordFilters");
+                });
+
+            modelBuilder.Entity("TheDailyRSS.Server.Data.Subscription", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CustomTitle")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
@@ -383,9 +515,45 @@ namespace TheDailyRSS.Server.Data.Migrations
 
                     b.HasIndex("CategoryId");
 
+                    b.HasIndex("SourceId");
+
+                    b.HasIndex("UserId", "SourceId")
+                        .IsUnique();
+
                     b.HasIndex("UserId", "CategoryId", "SortOrder");
 
-                    b.ToTable("Feeds");
+                    b.ToTable("Subscriptions");
+                });
+
+            modelBuilder.Entity("TheDailyRSS.Server.Data.UserArticleState", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ArticleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSaved")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("ReadingPositionPercent")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId", "ArticleId");
+
+                    b.HasIndex("ArticleId");
+
+                    b.HasIndex("UserId", "IsRead");
+
+                    b.HasIndex("UserId", "IsSaved");
+
+                    b.ToTable("UserArticleStates");
                 });
 
             modelBuilder.Entity("TheDailyRSS.Server.Data.UserSession", b =>
@@ -480,19 +648,19 @@ namespace TheDailyRSS.Server.Data.Migrations
 
             modelBuilder.Entity("TheDailyRSS.Server.Data.Article", b =>
                 {
-                    b.HasOne("TheDailyRSS.Server.Data.Feed", "Feed")
+                    b.HasOne("TheDailyRSS.Server.Data.FeedSource", "Source")
                         .WithMany("Articles")
-                        .HasForeignKey("FeedId")
+                        .HasForeignKey("SourceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Feed");
+                    b.Navigation("Source");
                 });
 
-            modelBuilder.Entity("TheDailyRSS.Server.Data.Category", b =>
+            modelBuilder.Entity("TheDailyRSS.Server.Data.KeywordFilter", b =>
                 {
                     b.HasOne("TheDailyRSS.Server.Data.AppUser", "User")
-                        .WithMany("Categories")
+                        .WithMany("KeywordFilters")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -500,21 +668,48 @@ namespace TheDailyRSS.Server.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("TheDailyRSS.Server.Data.Feed", b =>
+            modelBuilder.Entity("TheDailyRSS.Server.Data.Subscription", b =>
                 {
                     b.HasOne("TheDailyRSS.Server.Data.Category", "Category")
-                        .WithMany("Feeds")
+                        .WithMany("Subscriptions")
                         .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TheDailyRSS.Server.Data.FeedSource", "Source")
+                        .WithMany("Subscriptions")
+                        .HasForeignKey("SourceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("TheDailyRSS.Server.Data.AppUser", "User")
-                        .WithMany("Feeds")
+                        .WithMany("Subscriptions")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Category");
+
+                    b.Navigation("Source");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("TheDailyRSS.Server.Data.UserArticleState", b =>
+                {
+                    b.HasOne("TheDailyRSS.Server.Data.Article", "Article")
+                        .WithMany("States")
+                        .HasForeignKey("ArticleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TheDailyRSS.Server.Data.AppUser", "User")
+                        .WithMany("ArticleStates")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Article");
 
                     b.Navigation("User");
                 });
@@ -532,21 +727,30 @@ namespace TheDailyRSS.Server.Data.Migrations
 
             modelBuilder.Entity("TheDailyRSS.Server.Data.AppUser", b =>
                 {
-                    b.Navigation("Categories");
+                    b.Navigation("ArticleStates");
 
-                    b.Navigation("Feeds");
+                    b.Navigation("KeywordFilters");
 
                     b.Navigation("Sessions");
+
+                    b.Navigation("Subscriptions");
+                });
+
+            modelBuilder.Entity("TheDailyRSS.Server.Data.Article", b =>
+                {
+                    b.Navigation("States");
                 });
 
             modelBuilder.Entity("TheDailyRSS.Server.Data.Category", b =>
                 {
-                    b.Navigation("Feeds");
+                    b.Navigation("Subscriptions");
                 });
 
-            modelBuilder.Entity("TheDailyRSS.Server.Data.Feed", b =>
+            modelBuilder.Entity("TheDailyRSS.Server.Data.FeedSource", b =>
                 {
                     b.Navigation("Articles");
+
+                    b.Navigation("Subscriptions");
                 });
 #pragma warning restore 612, 618
         }

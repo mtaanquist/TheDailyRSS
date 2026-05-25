@@ -14,7 +14,11 @@
                 <label>URL or site</label>
                 <input class="tdr-input" placeholder="https://www.theverge.com" @bind="_url" @bind:event="oninput"
                        @onkeydown="OnKey" />
-                <div class="tdr-hint">↳ we'll find the RSS feed automatically</div>
+                <div class="tdr-hint">↳ @(_exact ? "we'll use this URL exactly as the feed" : "we'll find the RSS feed automatically")</div>
+                <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:var(--ink-2); margin-top:6px; cursor:pointer">
+                    <input type="checkbox" checked="@_exact" @onchange="OnExactChanged" />
+                    this is already a feed URL — use it exactly
+                </label>
             </div>
 
             <button class="tdr-btn ghost" @onclick="Detect" disabled="@(_busy || string.IsNullOrWhiteSpace(_url))">
@@ -83,6 +87,7 @@
     private string? _error;
     private bool _detecting;
     private bool _subscribing;
+    private bool _exact;
     private bool _busy => _detecting || _subscribing;
 
     protected override void OnParametersSet()
@@ -95,6 +100,13 @@
         if (e.Key == "Enter") await Detect();
     }
 
+    private void OnExactChanged(ChangeEventArgs e)
+    {
+        _exact = e.Value is true;
+        _result = null; // mode changed — previous detection no longer applies
+        _error = null;
+    }
+
     private async Task Detect()
     {
         if (string.IsNullOrWhiteSpace(_url)) return;
@@ -103,9 +115,11 @@
         _detecting = true;
         try
         {
-            _result = await Api.DetectFeedAsync(new AddFeedRequest { Url = _url, CategoryId = _categoryId ?? Guid.Empty });
+            _result = await Api.DetectFeedAsync(new AddFeedRequest { Url = _url, CategoryId = _categoryId ?? Guid.Empty, Exact = _exact });
             if (_result is { Found: false })
-                _error = "Couldn't find an RSS or Atom feed at that address.";
+                _error = _exact
+                    ? "That URL isn't a valid RSS or Atom feed."
+                    : "Couldn't find an RSS or Atom feed at that address.";
         }
         catch (ApiException ex) { _error = ex.Message; }
         finally { _detecting = false; }
@@ -118,7 +132,7 @@
         _subscribing = true;
         try
         {
-            await Api.AddFeedAsync(new AddFeedRequest { Url = _result.FeedUrl ?? _url, CategoryId = _categoryId.Value });
+            await Api.AddFeedAsync(new AddFeedRequest { Url = _result.FeedUrl ?? _url, CategoryId = _categoryId.Value, Exact = _exact });
             await OnAdded.InvokeAsync();
             Reset();
             await VisibleChanged.InvokeAsync(false);
@@ -140,5 +154,6 @@
         _error = null;
         _detecting = false;
         _subscribing = false;
+        _exact = false;
     }
 }

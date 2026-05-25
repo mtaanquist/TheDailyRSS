@@ -89,13 +89,28 @@ dotnet ef migrations add <Name> -p src/TheDailyRSS.Server -s src/TheDailyRSS.Ser
 
 ## Notes & trade-offs
 
+- **Multi-user & shared storage.** Feeds are stored once as a global `FeedSource`
+  (deduplicated by URL) that owns the article rows; many users can subscribe without
+  re-downloading or re-storing the same articles. Each user gets a `Subscription`
+  (which files the source into a category) and per-user read/saved/position state in
+  `UserArticleState`, created lazily on first interaction. Registration is open and the
+  **first account to register becomes the admin**.
+- **Fixed categories.** Sections are a seeded, Guardian-style taxonomy (News, World,
+  Politics, Business, Technology, Science, Environment, Sport, Culture, Lifestyle,
+  Opinion). Users file each subscription into one of them but can't create their own;
+  admins manage the taxonomy under *Settings → Categories*. The same shared source can be
+  filed under different categories by different users.
+- **Front page** shows a curated slice of every category the reader has feeds in (top few
+  per section, in taxonomy order); drilling into a section shows it in full.
+- **Muted words.** Per-user keyword filters (*Settings → Muted words*) hide matching
+  articles from editions (case-insensitive, title or title+summary). A muted article is
+  still reachable by direct link.
 - **Feed HTML** is rendered in the reading view with `<script>/<style>/<iframe>` stripped.
   For a personal, self-hosted reader this is a reasonable trade-off; if you expose the
   instance widely, consider a fuller HTML sanitizer.
-- Read/saved state lives on each user's own article rows (feeds are per-user), so two
-  users subscribing to the same URL keep independent state.
-- Drag-to-reorder from the wireframes is implemented as a folder dropdown on each feed
-  (move between folders); the reorder API exists for a future drag UI.
+- **Schema reset.** The multi-user/shared-storage rework replaced the original schema
+  with a fresh `InitialCreate` baseline. If you ran an earlier build, reset the dev
+  database first: `docker compose down -v`.
 - WASM asset fingerprinting is disabled (`WasmFingerprintAssets=false`) so the hosted
   server serves a stable `blazor.webassembly.js`. After upgrading the app, do a hard
   refresh (Ctrl/Cmd+Shift+R) to pick up new client assets.

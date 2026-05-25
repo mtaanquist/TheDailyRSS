@@ -103,7 +103,11 @@ html[data-density="airy"] { --story-gap: 26px; }
    App shell
    ============================================================ */
 .tdr-app {
-    min-height: 100vh;
+    /* Pin the shell to the viewport so the sidebar + footer stay put and only the
+       newspaper area scrolls. 100dvh keeps it correct under mobile browser chrome. */
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
     display: flex; flex-direction: column;
     background: var(--paper);
     max-width: var(--maxw);
@@ -112,9 +116,19 @@ html[data-density="airy"] { --story-gap: 26px; }
     border-right: 1px solid var(--rule);
 }
 .tdr-body { display: flex; flex: 1; min-height: 0; }
-.tdr-main { flex: 1; min-width: 0; padding: 16px 24px 40px; transition: opacity 0.15s ease; }
+/* The newspaper area is the only scroll region. */
+.tdr-main { flex: 1; min-width: 0; overflow-y: auto; padding: 16px 24px 40px; transition: opacity 0.15s ease; }
 /* While the next edition loads, keep the current one visible but gently dimmed. */
 .tdr-main.loading { opacity: 0.45; }
+.tdr-footer {
+    flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap; padding: 10px 24px;
+    border-top: 1px solid var(--rule); background: var(--paper);
+    font-family: var(--typer); font-size: 10px; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--ink-3);
+}
+.tdr-footer a { color: var(--ink-2); text-decoration: none; }
+.tdr-footer a:hover { color: var(--red); }
 
 /* ---------- masthead ---------- */
 .tdr-masthead {
@@ -159,6 +173,8 @@ html[data-density="airy"] { --story-gap: 26px; }
     width: var(--sidebar-w); flex-shrink: 0; padding: 14px 12px;
     border-right: 1px solid var(--rule); background: var(--paper);
     display: flex; flex-direction: column; gap: 4px;
+    /* Keep the menu within the viewport; long feed lists scroll inside the sidebar. */
+    min-height: 0; overflow-y: auto;
 }
 .tdr-sidebar-label {
     font-family: var(--typer); font-size: 10px; color: var(--ink-3);
@@ -175,10 +191,27 @@ html[data-density="airy"] { --story-gap: 26px; }
 .tdr-feed-item.special { font-weight: 700; }
 .tdr-feed-item .name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tdr-feed-item .count { font-family: var(--typer); font-size: 10px; opacity: 0.7; }
+/* folder rows: a caret toggle + a clickable name button, no nested <button> in <button> */
+.tdr-folder-toggle {
+    background: none; border: none; cursor: pointer; color: var(--ink-3);
+    font-size: 9px; width: 14px; padding: 0; flex-shrink: 0; line-height: 1;
+}
+.tdr-folder-toggle:hover { color: var(--ink); }
+.tdr-folder-name {
+    flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0;
+    background: none; border: none; cursor: pointer; color: inherit;
+    font: inherit; padding: 0; text-align: left;
+}
 .tdr-feed-dot { width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--ink); flex-shrink: 0; }
 .tdr-sidebar-divider { height: 1px; background: var(--rule); opacity: 0.4; margin: 8px 4px; }
 .tdr-subfeeds { padding-left: 24px; display: flex; flex-direction: column; gap: 2px; margin: 2px 0 6px; }
-.tdr-subfeed { display: flex; font-size: 12px; color: var(--ink-2); padding: 2px 0; }
+.tdr-subfeed {
+    display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2);
+    padding: 3px 6px; border: none; background: transparent; width: 100%; text-align: left;
+    font-family: var(--serif); cursor: pointer; border-radius: 2px;
+}
+button.tdr-subfeed:hover { background: var(--card); color: var(--ink); }
+.tdr-subfeed.active { background: var(--accent); color: var(--accent-fg); }
 .tdr-subfeed .name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tdr-subfeed .count { font-family: var(--typer); font-size: 9px; color: var(--ink-3); }
 .tdr-addfeed {
@@ -200,6 +233,13 @@ html[data-density="airy"] { --story-gap: 26px; }
 
 /* ---------- account chip at top of sidebar ---------- */
 .tdr-acct { display: flex; align-items: center; gap: 8px; padding: 4px 4px 10px; border-bottom: 1px dashed var(--rule); margin-bottom: 6px; }
+.tdr-acct-link { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; text-decoration: none; color: inherit; }
+.tdr-acct-signout {
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; padding: 0; cursor: pointer;
+    background: none; border: 1px solid var(--rule); border-radius: 2px; color: var(--ink-2);
+}
+.tdr-acct-signout:hover { color: var(--red); border-color: var(--red); }
 .tdr-avatar {
     width: 34px; height: 34px; border: 1.5px solid var(--ink); background: var(--card);
     display: flex; align-items: center; justify-content: center;
@@ -235,6 +275,9 @@ html[data-density="airy"] { --story-gap: 26px; }
 }
 .tdr-story h2 { font-family: var(--headline); font-weight: 700; font-size: 18px; line-height: 1.15; color: var(--ink); }
 .tdr-story:hover h2 { color: var(--red); }
+/* Hovering the star isn't "open the article" — don't tease the headline highlight. */
+.tdr-story:has(.tdr-star:hover) h2 { color: var(--ink); }
+.tdr-story.read:has(.tdr-star:hover) h2 { color: var(--ink-3); }
 .tdr-story .teaser {
     font-size: 13.5px; color: var(--ink-2); margin-top: 6px; line-height: 1.5;
     display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;

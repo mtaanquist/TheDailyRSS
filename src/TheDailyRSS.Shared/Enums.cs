@@ -23,3 +23,12 @@ public enum ReadingDensity
     Balanced = 1,
     Airy = 2,
 }
+
+/// <summary>Which article fields a keyword filter matches against.</summary>
+public enum KeywordScope
+{
+    /// <summary>Match the headline and summary text.</summary>
+    TitleAndSummary = 0,
+    /// <summary>Match the headline only.</summary>
+    TitleOnly = 1,
+}

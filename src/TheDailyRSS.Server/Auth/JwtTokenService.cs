@@ -12,7 +12,8 @@ public sealed class JwtTokenService(IOptions<JwtOptions> options)
 {
     private readonly JwtOptions _options = options.Value;
 
-    public (string Token, DateTimeOffset ExpiresAt) CreateToken(AppUser user, Guid sessionId)
+    public (string Token, DateTimeOffset ExpiresAt) CreateToken(
+        AppUser user, Guid sessionId, IEnumerable<string>? roles = null)
     {
         var expires = DateTimeOffset.UtcNow.AddDays(_options.ExpiryDays);
 
@@ -25,6 +26,8 @@ public sealed class JwtTokenService(IOptions<JwtOptions> options)
             new(JwtRegisteredClaimNames.Jti, sessionId.ToString()),
             new(AppClaims.SessionId, sessionId.ToString()),
         };
+        if (roles is not null)
+            claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.Key));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

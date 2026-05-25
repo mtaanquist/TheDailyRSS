@@ -4,7 +4,7 @@ using TheDailyRSS.Server.Data;
 
 namespace TheDailyRSS.Server.Services;
 
-/// <summary>Periodically refreshes every subscribed feed across all users.</summary>
+/// <summary>Periodically refreshes every shared feed source (once each, regardless of subscribers).</summary>
 public sealed class FeedRefreshBackgroundService(
     IServiceScopeFactory scopeFactory,
     IOptions<FeedOptions> options,
@@ -41,14 +41,14 @@ public sealed class FeedRefreshBackgroundService(
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var fetcher = scope.ServiceProvider.GetRequiredService<FeedFetchService>();
 
-        var feeds = await db.Feeds.AsTracking().ToListAsync(ct);
-        log.LogInformation("Refreshing {Count} feeds", feeds.Count);
+        var sources = await db.FeedSources.AsTracking().ToListAsync(ct);
+        log.LogInformation("Refreshing {Count} sources", sources.Count);
 
         var total = 0;
-        foreach (var feed in feeds)
+        foreach (var source in sources)
         {
             ct.ThrowIfCancellationRequested();
-            total += await fetcher.RefreshAsync(feed, ct);
+            total += await fetcher.RefreshAsync(source, ct);
         }
 
         if (total > 0)

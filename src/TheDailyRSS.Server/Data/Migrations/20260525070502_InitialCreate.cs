@@ -4,6 +4,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
+#pragma warning disable CA1814 // Prefer jagged arrays over multidimensional
+
 namespace TheDailyRSS.Server.Data.Migrations
 {
     /// <inheritdoc />
@@ -54,6 +56,40 @@ namespace TheDailyRSS.Server.Data.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_AspNetUsers", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Categories",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
+                    Slug = table.Column<string>(type: "character varying(60)", maxLength: 60, nullable: false),
+                    Color = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
+                    SortOrder = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Categories", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "FeedSources",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    FeedUrl = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
+                    SiteUrl = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
+                    Title = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: false),
+                    IconText = table.Column<string>(type: "character varying(4)", maxLength: 4, nullable: false),
+                    LastFetchedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    LastFetchError = table.Column<string>(type: "text", nullable: true),
+                    ETag = table.Column<string>(type: "text", nullable: true),
+                    LastModified = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_FeedSources", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -163,20 +199,19 @@ namespace TheDailyRSS.Server.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Categories",
+                name: "KeywordFilters",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     UserId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Name = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
-                    Color = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
-                    SortOrder = table.Column<int>(type: "integer", nullable: false)
+                    Term = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
+                    Scope = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Categories", x => x.Id);
+                    table.PrimaryKey("PK_KeywordFilters", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Categories_AspNetUsers_UserId",
+                        name: "FK_KeywordFilters_AspNetUsers_UserId",
                         column: x => x.UserId,
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
@@ -208,45 +243,11 @@ namespace TheDailyRSS.Server.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Feeds",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
-                    CategoryId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Title = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: false),
-                    FeedUrl = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
-                    SiteUrl = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
-                    IconText = table.Column<string>(type: "character varying(4)", maxLength: 4, nullable: false),
-                    SortOrder = table.Column<int>(type: "integer", nullable: false),
-                    LastFetchedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    LastFetchError = table.Column<string>(type: "text", nullable: true),
-                    ETag = table.Column<string>(type: "text", nullable: true),
-                    LastModified = table.Column<string>(type: "text", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Feeds", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Feeds_AspNetUsers_UserId",
-                        column: x => x.UserId,
-                        principalTable: "AspNetUsers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_Feeds_Categories_CategoryId",
-                        column: x => x.CategoryId,
-                        principalTable: "Categories",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "Articles",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    FeedId = table.Column<Guid>(type: "uuid", nullable: false),
+                    SourceId = table.Column<Guid>(type: "uuid", nullable: false),
                     ExternalId = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: false),
                     Title = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: false),
                     Author = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: true),
@@ -256,37 +257,114 @@ namespace TheDailyRSS.Server.Data.Migrations
                     ImageUrl = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
                     PublishedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     FetchedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    EditionDate = table.Column<DateOnly>(type: "date", nullable: false),
-                    IsRead = table.Column<bool>(type: "boolean", nullable: false),
-                    IsSaved = table.Column<bool>(type: "boolean", nullable: false),
-                    ReadingPositionPercent = table.Column<int>(type: "integer", nullable: false)
+                    EditionDate = table.Column<DateOnly>(type: "date", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Articles", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Articles_Feeds_FeedId",
-                        column: x => x.FeedId,
-                        principalTable: "Feeds",
+                        name: "FK_Articles_FeedSources_SourceId",
+                        column: x => x.SourceId,
+                        principalTable: "FeedSources",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Articles_FeedId_EditionDate",
-                table: "Articles",
-                columns: new[] { "FeedId", "EditionDate" });
+            migrationBuilder.CreateTable(
+                name: "Subscriptions",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    SourceId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CategoryId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CustomTitle = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: true),
+                    SortOrder = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Subscriptions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Subscriptions_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Subscriptions_Categories_CategoryId",
+                        column: x => x.CategoryId,
+                        principalTable: "Categories",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Subscriptions_FeedSources_SourceId",
+                        column: x => x.SourceId,
+                        principalTable: "FeedSources",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "UserArticleStates",
+                columns: table => new
+                {
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ArticleId = table.Column<Guid>(type: "uuid", nullable: false),
+                    IsRead = table.Column<bool>(type: "boolean", nullable: false),
+                    IsSaved = table.Column<bool>(type: "boolean", nullable: false),
+                    ReadingPositionPercent = table.Column<int>(type: "integer", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserArticleStates", x => new { x.UserId, x.ArticleId });
+                    table.ForeignKey(
+                        name: "FK_UserArticleStates_Articles_ArticleId",
+                        column: x => x.ArticleId,
+                        principalTable: "Articles",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_UserArticleStates_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.InsertData(
+                table: "Categories",
+                columns: new[] { "Id", "Color", "Name", "Slug", "SortOrder" },
+                values: new object[,]
+                {
+                    { new Guid("11111111-1111-1111-1111-000000000000"), "#a83020", "News", "news", 0 },
+                    { new Guid("11111111-1111-1111-1111-000000000001"), "#1f5673", "World", "world", 1 },
+                    { new Guid("11111111-1111-1111-1111-000000000002"), "#6a4c93", "Politics", "politics", 2 },
+                    { new Guid("11111111-1111-1111-1111-000000000003"), "#2e6f40", "Business", "business", 3 },
+                    { new Guid("11111111-1111-1111-1111-000000000004"), "#3a6ea5", "Technology", "technology", 4 },
+                    { new Guid("11111111-1111-1111-1111-000000000005"), "#0b7a75", "Science", "science", 5 },
+                    { new Guid("11111111-1111-1111-1111-000000000006"), "#4f772d", "Environment", "environment", 6 },
+                    { new Guid("11111111-1111-1111-1111-000000000007"), "#c1502e", "Sport", "sport", 7 },
+                    { new Guid("11111111-1111-1111-1111-000000000008"), "#9b2226", "Culture", "culture", 8 },
+                    { new Guid("11111111-1111-1111-1111-000000000009"), "#b5838d", "Lifestyle", "lifestyle", 9 },
+                    { new Guid("11111111-1111-1111-1111-00000000000a"), "#7d4f50", "Opinion", "opinion", 10 }
+                });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Articles_FeedId_ExternalId",
+                name: "IX_Articles_EditionDate_PublishedAt",
                 table: "Articles",
-                columns: new[] { "FeedId", "ExternalId" },
+                columns: new[] { "EditionDate", "PublishedAt" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Articles_SourceId_EditionDate",
+                table: "Articles",
+                columns: new[] { "SourceId", "EditionDate" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Articles_SourceId_ExternalId",
+                table: "Articles",
+                columns: new[] { "SourceId", "ExternalId" },
                 unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Articles_IsSaved",
-                table: "Articles",
-                column: "IsSaved");
 
             migrationBuilder.CreateIndex(
                 name: "IX_AspNetRoleClaims_RoleId",
@@ -326,32 +404,73 @@ namespace TheDailyRSS.Server.Data.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_Categories_UserId_SortOrder",
+                name: "IX_Categories_Slug",
                 table: "Categories",
-                columns: new[] { "UserId", "SortOrder" });
+                column: "Slug",
+                unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_Feeds_CategoryId",
-                table: "Feeds",
-                column: "CategoryId");
+                name: "IX_Categories_SortOrder",
+                table: "Categories",
+                column: "SortOrder");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Feeds_UserId_CategoryId_SortOrder",
-                table: "Feeds",
-                columns: new[] { "UserId", "CategoryId", "SortOrder" });
+                name: "IX_FeedSources_FeedUrl",
+                table: "FeedSources",
+                column: "FeedUrl",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_KeywordFilters_UserId_Term",
+                table: "KeywordFilters",
+                columns: new[] { "UserId", "Term" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Sessions_UserId",
                 table: "Sessions",
                 column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Subscriptions_CategoryId",
+                table: "Subscriptions",
+                column: "CategoryId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Subscriptions_SourceId",
+                table: "Subscriptions",
+                column: "SourceId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Subscriptions_UserId_CategoryId_SortOrder",
+                table: "Subscriptions",
+                columns: new[] { "UserId", "CategoryId", "SortOrder" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Subscriptions_UserId_SourceId",
+                table: "Subscriptions",
+                columns: new[] { "UserId", "SourceId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserArticleStates_ArticleId",
+                table: "UserArticleStates",
+                column: "ArticleId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserArticleStates_UserId_IsRead",
+                table: "UserArticleStates",
+                columns: new[] { "UserId", "IsRead" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserArticleStates_UserId_IsSaved",
+                table: "UserArticleStates",
+                columns: new[] { "UserId", "IsSaved" });
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "Articles");
-
             migrationBuilder.DropTable(
                 name: "AspNetRoleClaims");
 
@@ -368,10 +487,16 @@ namespace TheDailyRSS.Server.Data.Migrations
                 name: "AspNetUserTokens");
 
             migrationBuilder.DropTable(
+                name: "KeywordFilters");
+
+            migrationBuilder.DropTable(
                 name: "Sessions");
 
             migrationBuilder.DropTable(
-                name: "Feeds");
+                name: "Subscriptions");
+
+            migrationBuilder.DropTable(
+                name: "UserArticleStates");
 
             migrationBuilder.DropTable(
                 name: "AspNetRoles");
@@ -380,7 +505,13 @@ namespace TheDailyRSS.Server.Data.Migrations
                 name: "Categories");
 
             migrationBuilder.DropTable(
+                name: "Articles");
+
+            migrationBuilder.DropTable(
                 name: "AspNetUsers");
+
+            migrationBuilder.DropTable(
+                name: "FeedSources");
         }
     }
 }

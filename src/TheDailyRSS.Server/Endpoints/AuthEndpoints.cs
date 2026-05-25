@@ -45,7 +45,11 @@ public static class AuthEndpoints
         if (!result.Succeeded)
             return Results.BadRequest(new { error = string.Join(" ", result.Errors.Select(e => e.Description)) });
 
-        return await IssueAsync(user, db, tokens, http);
+        // The very first account to register becomes the instance admin.
+        if (await db.Users.CountAsync() == 1)
+            await users.AddToRoleAsync(user, Roles.Admin);
+
+        return await IssueAsync(user, users, db, tokens, http);
     }
 
     private static async Task<IResult> Login(
@@ -56,11 +60,11 @@ public static class AuthEndpoints
         if (user is null || !await users.CheckPasswordAsync(user, req.Password))
             return Results.Unauthorized();
 
-        return await IssueAsync(user, db, tokens, http);
+        return await IssueAsync(user, users, db, tokens, http);
     }
 
     private static async Task<IResult> IssueAsync(
-        AppUser user, AppDbContext db, JwtTokenService tokens, HttpContext http)
+        AppUser user, UserManager<AppUser> users, AppDbContext db, JwtTokenService tokens, HttpContext http)
     {
         var ua = http.Request.Headers.UserAgent.ToString();
         var session = new UserSession
@@ -73,8 +77,9 @@ public static class AuthEndpoints
         db.Sessions.Add(session);
         await db.SaveChangesAsync();
 
-        var (token, expiresAt) = tokens.CreateToken(user, session.Id);
-        return Results.Ok(new AuthResponse(token, expiresAt, user.ToDto()));
+        var roles = await users.GetRolesAsync(user);
+        var (token, expiresAt) = tokens.CreateToken(user, session.Id, roles);
+        return Results.Ok(new AuthResponse(token, expiresAt, user.ToDto(roles)));
     }
 
     private static async Task<IResult> Logout(System.Security.Claims.ClaimsPrincipal principal, AppDbContext db)
@@ -89,7 +94,7 @@ public static class AuthEndpoints
         System.Security.Claims.ClaimsPrincipal principal, UserManager<AppUser> users)
     {
         var user = await users.FindByIdAsync(principal.GetUserId().ToString());
-        return user is null ? Results.Unauthorized() : Results.Ok(user.ToDto());
+        return user is null ? Results.Unauthorized() : Results.Ok(user.ToDto(await users.GetRolesAsync(user)));
     }
 
     private static async Task<IResult> UpdateProfile(
@@ -99,7 +104,7 @@ public static class AuthEndpoints
         if (user is null) return Results.Unauthorized();
         user.DisplayName = req.DisplayName.Trim();
         await users.UpdateAsync(user);
-        return Results.Ok(user.ToDto());
+        return Results.Ok(user.ToDto(await users.GetRolesAsync(user)));
     }
 
     private static async Task<IResult> UpdatePreferences(
@@ -111,7 +116,7 @@ public static class AuthEndpoints
         user.HeadlineFont = req.HeadlineFont;
         user.Density = req.Density;
         await users.UpdateAsync(user);
-        return Results.Ok(user.ToDto());
+        return Results.Ok(user.ToDto(await users.GetRolesAsync(user)));
     }
 
     private static async Task<IResult> ChangePassword(
@@ -160,12 +165,12 @@ public static class AuthEndpoints
         System.Security.Claims.ClaimsPrincipal principal, AppDbContext db)
     {
         var uid = principal.GetUserId();
-        var feedCount = await db.Feeds.CountAsync(f => f.UserId == uid);
-        var catCount = await db.Categories.CountAsync(c => c.UserId == uid);
-        var articles = await db.Articles.CountAsync(a => a.Feed!.UserId == uid);
-        var saved = await db.Articles.CountAsync(a => a.Feed!.UserId == uid && a.IsSaved);
-        var positions = await db.Articles.CountAsync(a => a.Feed!.UserId == uid && a.ReadingPositionPercent > 0 && a.ReadingPositionPercent < 100);
-        var lastSync = await db.Feeds.Where(f => f.UserId == uid).MaxAsync(f => (DateTimeOffset?)f.LastFetchedAt);
+        var feedCount = await db.Subscriptions.CountAsync(s => s.UserId == uid);
+        var catCount = await db.Subscriptions.Where(s => s.UserId == uid).Select(s => s.CategoryId).Distinct().CountAsync();
+        var articles = await db.Articles.CountAsync(a => a.Source!.Subscriptions.Any(s => s.UserId == uid));
+        var saved = await db.UserArticleStates.CountAsync(s => s.UserId == uid && s.IsSaved);
+        var positions = await db.UserArticleStates.CountAsync(s => s.UserId == uid && s.ReadingPositionPercent > 0 && s.ReadingPositionPercent < 100);
+        var lastSync = await db.Subscriptions.Where(s => s.UserId == uid).MaxAsync(s => (DateTimeOffset?)s.Source!.LastFetchedAt);
         return Results.Ok(new SyncStatusDto(feedCount, catCount, articles, saved, positions, lastSync));
     }
 }

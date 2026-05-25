@@ -6,13 +6,19 @@
 
 <PageTitle>Manage feeds · The Daily RSS</PageTitle>
 
-<div class="tdr-main">
+<div class="tdr-breadcrumb" style="padding:12px 24px; border-bottom:1px solid var(--rule); margin:0">
+    <a href="/">Home</a> › Settings › <b>Feeds</b>
+</div>
+
+<div class="tdr-settings">
+    <SettingsNav Current="feeds" />
+
+    <div class="tdr-settings-main">
     <div class="tdr-page-head">
         <h1>Manage feeds</h1>
-        <span class="sub">@_categories.Count categories · @TotalFeeds feeds</span>
+        <span class="sub">@SectionsInUse sections · @TotalFeeds feeds</span>
         <span class="spacer"></span>
         <div class="actions">
-            <button class="tdr-btn ghost" @onclick="() => _creatingFolder = true">+ new folder</button>
             <button class="tdr-btn" @onclick="() => _showAdd = true">+ add feed</button>
         </div>
     </div>
@@ -22,56 +28,28 @@
         <div class="tdr-error">@_error</div>
     }
 
-    @if (_creatingFolder)
-    {
-        <div class="tdr-folder" style="padding:12px">
-            <div style="display:flex; gap:8px; align-items:center">
-                <input class="tdr-input" style="max-width:280px" placeholder="Folder name (e.g. World)"
-                       @bind="_newFolderName" @onkeydown="NewFolderKey" />
-                <button class="tdr-btn" @onclick="CreateFolder" disabled="@string.IsNullOrWhiteSpace(_newFolderName)">create</button>
-                <button class="tdr-link muted" @onclick="@(() => { _creatingFolder = false; _newFolderName = ""; })">cancel</button>
-            </div>
-        </div>
-    }
-
-    @if (_categories.Count == 0 && !_creatingFolder)
+    @if (TotalFeeds == 0)
     {
         <div class="tdr-empty">
             <div class="tdr-empty-mark">⋮⋮</div>
-            <h1 class="tdr-empty-title">No folders yet</h1>
-            <p class="tdr-empty-sub">Create a folder, then add feeds to it — or import an OPML file below.</p>
-            <button class="tdr-btn" @onclick="() => _creatingFolder = true">+ new folder</button>
+            <h1 class="tdr-empty-title">No feeds yet</h1>
+            <p class="tdr-empty-sub">Add a feed and file it into one of the sections — or import an OPML file below.</p>
+            <button class="tdr-btn" @onclick="() => _showAdd = true">+ add feed</button>
         </div>
     }
 
-    @foreach (var cat in _categories)
+    @foreach (var cat in _categories.Where(c => FeedsIn(c.Id).Count > 0))
     {
         <div class="tdr-folder">
             <div class="tdr-folder-head">
-                <span class="tdr-grip">⋮⋮</span>
                 <span class="tdr-feed-dot" style="background:@cat.Color"></span>
-                @if (_renamingId == cat.Id)
-                {
-                    <input class="tdr-input" style="max-width:220px" @bind="_renameValue" />
-                    <button class="tdr-link" @onclick="() => SaveRename(cat)">save</button>
-                    <button class="tdr-link muted" @onclick="() => _renamingId = null">cancel</button>
-                }
-                else
-                {
-                    <span class="nm">@cat.Name</span>
-                    <span class="n">@FeedsIn(cat.Id).Count feeds</span>
-                    <div class="actions">
-                        <button class="tdr-link muted" @onclick="() => StartRename(cat)">rename</button>
-                        <span>·</span>
-                        <button class="tdr-link" @onclick="() => DeleteCategory(cat)">delete</button>
-                    </div>
-                }
+                <span class="nm">@cat.Name</span>
+                <span class="n">@FeedsIn(cat.Id).Count feeds</span>
             </div>
 
             @foreach (var f in FeedsIn(cat.Id))
             {
                 <div class="tdr-feedrow">
-                    <span class="tdr-grip">⋮⋮</span>
                     <div class="tdr-avatar" style="width:22px; height:22px; font-size:11px">@f.IconText</div>
                     <div class="ttl">
                         <div>@f.Title</div>
@@ -92,16 +70,12 @@
                     <button class="tdr-link" @onclick="() => DeleteFeed(f)">✕</button>
                 </div>
             }
-            @if (FeedsIn(cat.Id).Count == 0)
-            {
-                <div class="tdr-feedrow" style="font-style:italic; color:var(--ink-3)">No feeds here yet.</div>
-            }
         </div>
     }
 
     <div class="tdr-folder" style="padding:14px; background:transparent; border-style:dashed">
         <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap">
-            <strong style="font-family:var(--headline)">OPML</strong>
+            <strong style="font-family:var(--headline)">Import / export</strong>
             <label class="tdr-btn ghost" style="cursor:pointer; margin:0">
                 import…
                 <InputFile OnChange="ImportOpml" accept=".opml,.xml" style="display:none" />
@@ -109,12 +83,15 @@
             <button class="tdr-btn ghost" @onclick="ExportOpml">export</button>
             @if (_importResult is { } r)
             {
-                <span class="tdr-hint">↳ imported @r.FeedsAdded feeds in @r.CategoriesCreated new folders (@r.Skipped skipped)</span>
+                <span class="tdr-hint">↳ imported @r.FeedsAdded feeds (@r.Skipped skipped)</span>
             }
         </div>
+        <div class="tdr-hint" style="margin-top:8px">
+            Moving from another reader? Bring your subscriptions over with an OPML file
+            (most readers can export one), or download yours to take them elsewhere.
+        </div>
     </div>
-
-    <div class="tdr-note" style="margin-top:18px">use the dropdown to move a feed between folders</div>
+    </div>
 </div>
 
 <AddFeedDialog @bind-Visible="_showAdd" Categories="_categories" OnAdded="ReloadAll" />
@@ -122,15 +99,12 @@
 @code {
     private List<CategoryDto> _categories = [];
     private List<FeedDto> _feeds = [];
-    private bool _creatingFolder;
-    private string _newFolderName = "";
     private bool _showAdd;
-    private Guid? _renamingId;
-    private string _renameValue = "";
     private string? _error;
     private OpmlImportResult? _importResult;
 
     private int TotalFeeds => _feeds.Count;
+    private int SectionsInUse => _feeds.Select(f => f.CategoryId).Distinct().Count();
     private List<FeedDto> FeedsIn(Guid catId) => _feeds.Where(f => f.CategoryId == catId).ToList();
 
     protected override Task OnInitializedAsync() => Load();
@@ -149,44 +123,6 @@
     {
         await Load();
         await State.RefreshAsync();
-    }
-
-    private async Task NewFolderKey(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter") await CreateFolder();
-    }
-
-    private async Task CreateFolder()
-    {
-        if (string.IsNullOrWhiteSpace(_newFolderName)) return;
-        try
-        {
-            await Api.CreateCategoryAsync(new CreateCategoryRequest { Name = _newFolderName.Trim(), Color = NextColor() });
-            _newFolderName = "";
-            _creatingFolder = false;
-            await ReloadAll();
-        }
-        catch (ApiException ex) { _error = ex.Message; }
-    }
-
-    private void StartRename(CategoryDto cat) { _renamingId = cat.Id; _renameValue = cat.Name; }
-
-    private async Task SaveRename(CategoryDto cat)
-    {
-        try
-        {
-            await Api.UpdateCategoryAsync(cat.Id, new UpdateCategoryRequest { Name = _renameValue.Trim(), Color = cat.Color });
-            _renamingId = null;
-            await ReloadAll();
-        }
-        catch (ApiException ex) { _error = ex.Message; }
-    }
-
-    private async Task DeleteCategory(CategoryDto cat)
-    {
-        if (!await Confirm($"Delete “{cat.Name}” and all its feeds?")) return;
-        await Api.DeleteCategoryAsync(cat.Id);
-        await ReloadAll();
     }
 
     private async Task DeleteFeed(FeedDto feed)
@@ -229,10 +165,4 @@
     }
 
     private async Task<bool> Confirm(string message) => await JS.InvokeAsync<bool>("confirm", message);
-
-    private string NextColor()
-    {
-        string[] palette = ["#a83020", "#37a", "#7a4", "#a73", "#74a", "#2a7a2a"];
-        return palette[_categories.Count % palette.Length];
-    }
 }

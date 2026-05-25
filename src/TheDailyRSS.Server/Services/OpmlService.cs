@@ -5,27 +5,33 @@ using TheDailyRSS.Shared;
 
 namespace TheDailyRSS.Server.Services;
 
-/// <summary>Imports and exports OPML subscription lists.</summary>
-public sealed class OpmlService(AppDbContext db)
+/// <summary>Imports and exports OPML subscription lists against the shared-source model.</summary>
+public sealed class OpmlService(AppDbContext db, FeedSourceService sources)
 {
     public async Task<string> ExportAsync(Guid userId, CancellationToken ct)
     {
-        var categories = await db.Categories
-            .Where(c => c.UserId == userId)
-            .OrderBy(c => c.SortOrder)
-            .Include(c => c.Feeds.OrderBy(f => f.SortOrder))
+        var subs = await db.Subscriptions
+            .Where(s => s.UserId == userId)
+            .Include(s => s.Source)
+            .Include(s => s.Category)
             .ToListAsync(ct);
 
         var body = new XElement("body",
-            categories.Select(c => new XElement("outline",
-                new XAttribute("text", c.Name),
-                new XAttribute("title", c.Name),
-                c.Feeds.Select(f => new XElement("outline",
-                    new XAttribute("type", "rss"),
-                    new XAttribute("text", f.Title),
-                    new XAttribute("title", f.Title),
-                    new XAttribute("xmlUrl", f.FeedUrl),
-                    new XAttribute("htmlUrl", f.SiteUrl ?? f.FeedUrl))))));
+            subs.GroupBy(s => s.Category!)
+                .OrderBy(g => g.Key.SortOrder)
+                .Select(g => new XElement("outline",
+                    new XAttribute("text", g.Key.Name),
+                    new XAttribute("title", g.Key.Name),
+                    g.OrderBy(s => s.SortOrder).Select(s =>
+                    {
+                        var title = s.CustomTitle ?? s.Source!.Title;
+                        return new XElement("outline",
+                            new XAttribute("type", "rss"),
+                            new XAttribute("text", title),
+                            new XAttribute("title", title),
+                            new XAttribute("xmlUrl", s.Source!.FeedUrl),
+                            new XAttribute("htmlUrl", s.Source.SiteUrl ?? s.Source.FeedUrl));
+                    }))));
 
         var doc = new XDocument(
             new XDeclaration("1.0", "utf-8", null),
@@ -45,62 +51,63 @@ public sealed class OpmlService(AppDbContext db)
         var body = doc.Root?.Element("body");
         if (body is null) return new OpmlImportResult(0, 0, 0);
 
-        var existingCats = await db.Categories
-            .Where(c => c.UserId == userId)
-            .ToDictionaryAsync(c => c.Name.ToLowerInvariant(), c => c, ct);
-        var existingFeedUrls = await db.Feeds
-            .Where(f => f.UserId == userId)
-            .Select(f => f.FeedUrl)
+        var cats = await db.Categories.ToListAsync(ct);
+        var fallback = cats.First(c => c.Id == CategorySeed.DefaultCategoryId);
+        var existingSourceIds = await db.Subscriptions
+            .Where(s => s.UserId == userId)
+            .Select(s => s.SourceId)
             .ToHashSetAsync(ct);
 
-        var nextCatOrder = existingCats.Count == 0 ? 0 : existingCats.Values.Max(c => c.SortOrder) + 1;
-        int catsCreated = 0, feedsAdded = 0, skipped = 0;
+        int feedsAdded = 0, skipped = 0;
 
-        // Top-level outlines with children are categories; bare feed outlines go to "Imported".
+        // Top-level feed outlines go to the default category; folders map to a fixed category by name/slug.
         foreach (var outline in body.Elements("outline"))
         {
-            var childFeeds = outline.Elements("outline").Where(IsFeed).ToList();
             if (IsFeed(outline))
             {
-                if (AddFeed(userId, GetOrCreateCategory("Imported"), outline)) feedsAdded++; else skipped++;
+                if (await AddFeed(fallback, outline)) feedsAdded++; else skipped++;
                 continue;
             }
 
-            var name = (outline.Attribute("text") ?? outline.Attribute("title"))?.Value ?? "Imported";
-            var category = GetOrCreateCategory(name);
-            foreach (var feed in childFeeds)
+            var name = (outline.Attribute("text") ?? outline.Attribute("title"))?.Value;
+            var category = MapCategory(name);
+            foreach (var feed in outline.Elements("outline").Where(IsFeed))
             {
-                if (AddFeed(userId, category, feed)) feedsAdded++; else skipped++;
+                if (await AddFeed(category, feed)) feedsAdded++; else skipped++;
             }
         }
 
         await db.SaveChangesAsync(ct);
-        return new OpmlImportResult(catsCreated, feedsAdded, skipped);
+        // Categories are fixed/seeded, so none are ever created by import.
+        return new OpmlImportResult(0, feedsAdded, skipped);
 
-        Category GetOrCreateCategory(string name)
+        Category MapCategory(string? name)
         {
-            var key = name.ToLowerInvariant();
-            if (existingCats.TryGetValue(key, out var existing)) return existing;
-            var created = new Category { UserId = userId, Name = name, SortOrder = nextCatOrder++ };
-            db.Categories.Add(created);
-            existingCats[key] = created;
-            catsCreated++;
-            return created;
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                var key = name.Trim().ToLowerInvariant();
+                var match = cats.FirstOrDefault(c => c.Name.ToLowerInvariant() == key || c.Slug == key);
+                if (match is not null) return match;
+            }
+            return fallback;
         }
 
-        bool AddFeed(Guid uid, Category category, XElement el)
+        async Task<bool> AddFeed(Category category, XElement el)
         {
             var xmlUrl = el.Attribute("xmlUrl")?.Value;
-            if (string.IsNullOrWhiteSpace(xmlUrl) || !existingFeedUrls.Add(xmlUrl)) return false;
+            if (string.IsNullOrWhiteSpace(xmlUrl)) return false;
             var title = (el.Attribute("text") ?? el.Attribute("title"))?.Value ?? xmlUrl;
-            db.Feeds.Add(new Feed
+            var siteUrl = el.Attribute("htmlUrl")?.Value;
+
+            var (source, _) = await sources.GetOrCreateAsync(xmlUrl, title, siteUrl, ct);
+            if (!existingSourceIds.Add(source.Id)) return false; // already subscribed / duplicate in file
+
+            db.Subscriptions.Add(new Subscription
             {
-                UserId = uid,
-                Category = category,
-                Title = title,
-                FeedUrl = xmlUrl,
-                SiteUrl = el.Attribute("htmlUrl")?.Value,
-                IconText = IconText.From(title),
+                UserId = userId,
+                SourceId = source.Id,
+                CategoryId = category.Id,
+                CustomTitle = source.Title == title ? null : title,
             });
             return true;
         }
