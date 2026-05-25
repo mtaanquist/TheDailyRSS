@@ -62,10 +62,20 @@ public sealed partial class FeedReader
             Title: string.IsNullOrWhiteSpace(item.Title?.Text) ? "(untitled)" : item.Title!.Text.Trim(),
             Url: url,
             Author: author,
-            Summary: ToPlainText(summaryHtml),
+            Summary: BestSummary(summaryHtml, contentHtml),
             ContentHtml: contentHtml,
-            ImageUrl: ExtractImage(item, contentHtml ?? summaryHtml),
+            ImageUrl: ExtractImage(item, contentHtml, summaryHtml),
             PublishedAt: published);
+    }
+
+    /// <summary>The teaser text. Prefers the description, but some feeds stuff a bare image URL
+    /// (or nothing) in there — fall back to the article body so the blurb isn't just a link.</summary>
+    private static string? BestSummary(string? summaryHtml, string? contentHtml)
+    {
+        var text = ToPlainText(summaryHtml);
+        if (string.IsNullOrWhiteSpace(text) || IsBareUrl(text))
+            text = ToPlainText(contentHtml);
+        return text;
     }
 
     private static string? ReadExtension(SyndicationItem item, XName name)
@@ -79,7 +89,7 @@ public sealed partial class FeedReader
         return null;
     }
 
-    private static string? ExtractImage(SyndicationItem item, string? html)
+    private static string? ExtractImage(SyndicationItem item, string? contentHtml, string? summaryHtml)
     {
         // 1) media:content / media:thumbnail
         foreach (var ext in item.ElementExtensions)
@@ -97,13 +107,39 @@ public sealed partial class FeedReader
             l.RelationshipType == "enclosure" && (l.MediaType?.StartsWith("image") ?? false));
         if (enclosure?.Uri is not null) return enclosure.Uri.ToString();
 
-        // 3) first <img> in the content
-        if (!string.IsNullOrEmpty(html))
+        // 3) first <img> in the content, then the description
+        foreach (var html in new[] { contentHtml, summaryHtml })
         {
+            if (string.IsNullOrEmpty(html)) continue;
             var m = ImgSrcRegex().Match(html);
             if (m.Success) return m.Groups[1].Value;
         }
+
+        // 4) a description that is itself just an image URL (e.g. SønderborgNYT)
+        var bare = ToPlainText(summaryHtml);
+        if (IsImageUrl(bare)) return bare!.Trim();
+
         return null;
+    }
+
+    private static readonly string[] ImageExtensions =
+        [".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".bmp"];
+
+    /// <summary>True when the text is a single absolute http(s) URL and nothing else.</summary>
+    private static bool IsBareUrl(string? text) =>
+        !string.IsNullOrWhiteSpace(text)
+        && !text.Trim().Contains(' ')
+        && Uri.TryCreate(text.Trim(), UriKind.Absolute, out var u)
+        && (u.Scheme == Uri.UriSchemeHttp || u.Scheme == Uri.UriSchemeHttps);
+
+    /// <summary>True when the text is a bare URL whose path ends in a known image extension.</summary>
+    private static bool IsImageUrl(string? text)
+    {
+        if (!IsBareUrl(text)) return false;
+        var path = text!.Trim();
+        var q = path.IndexOf('?');
+        if (q >= 0) path = path[..q];
+        return ImageExtensions.Any(e => path.EndsWith(e, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Strips tags &amp; collapses whitespace for the preview teaser.</summary>
