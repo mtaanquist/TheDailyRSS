@@ -123,6 +123,8 @@ html[data-density="airy"] { --story-gap: 26px; }
 .tdr-footer {
     flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
     gap: 12px; flex-wrap: wrap; padding: 10px 24px;
+    /* Keep the footer clear of the iPhone home indicator. */
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--rule); background: var(--paper);
     font-family: var(--typer); font-size: 10px; letter-spacing: 1px;
     text-transform: uppercase; color: var(--ink-3);
@@ -548,6 +550,9 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
         box-shadow: 4px 0 16px var(--shadow); width: auto;
     }
     .tdr-main { padding: 10px 14px 60px; }
+    /* The edition nav buttons are wide; let them wrap instead of being clipped
+       by the shell's overflow:hidden on narrow phones. */
+    .tdr-editionbar { flex-wrap: wrap; gap: 8px 10px; padding: 8px 14px; }
     .tdr-lead-grid { grid-template-columns: 1fr; }
     .tdr-grid { grid-template-columns: 1fr; }
     .tdr-grid-item { border-left: none; padding-left: 0; border-top: 1px dotted var(--rule); padding-top: 12px; }
@@ -563,6 +568,8 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
     .tdr-auth-card { width: 100%; }
     .tdr-mobile-top {
         display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+        /* Clear the Dynamic Island / notch on notched iPhones. */
+        padding-top: calc(10px + env(safe-area-inset-top));
         border-bottom: 2px solid var(--ink); background: var(--paper); position: sticky; top: 0; z-index: 50;
     }
     .tdr-mobile-top .burger { font-size: 20px; background: none; border: none; cursor: pointer; color: var(--ink); }
