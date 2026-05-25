@@ -16,6 +16,10 @@ public sealed class ApiTests(AppFixture fx)
 
     private static string U() => $"u{Guid.NewGuid():N}@example.com";
 
+    private static List<string> Titles(EditionDto ed) =>
+        ed.Sections.SelectMany(s => s.Articles).Select(a => a.Title)
+            .Concat(ed.Lead is null ? [] : new[] { ed.Lead.Title }).ToList();
+
     [Fact]
     public async Task Only_the_first_registrant_is_admin()
     {
@@ -79,7 +83,7 @@ public sealed class ApiTests(AppFixture fx)
         var date = new DateOnly(2026, 5, 18);
         var (_, ids) = await fx.SeedSourceAsync(u.Id, News, url, date, "Win a free giveaway today", "Normal headline", "Another story");
 
-        await client.PostAsJsonAsync("/api/keywords", new CreateKeywordRequest { Term = "giveaway", Scope = KeywordScope.TitleAndSummary });
+        await client.PostAsJsonAsync("/api/keywords", new CreateKeywordRequest { Term = "giveaway", Scope = KeywordScope.Everywhere });
 
         var ed = await client.GetFromJsonAsync<EditionDto>($"/api/editions/{date:yyyy-MM-dd}");
         var titles = ed!.Sections.SelectMany(s => s.Articles).Select(a => a.Title)
@@ -89,6 +93,52 @@ public sealed class ApiTests(AppFixture fx)
         // The muted article is still reachable by its id (a held link keeps working).
         var direct = await client.GetAsync($"/api/articles/{ids[0]}");
         Assert.Equal(HttpStatusCode.OK, direct.StatusCode);
+    }
+
+    [Fact]
+    public async Task Keyword_filter_matches_body_text_not_just_title()
+    {
+        var (client, u) = await fx.RegisterAsync(U());
+        var url = "https://feed.test/" + Guid.NewGuid().ToString("N");
+        var date = new DateOnly(2026, 5, 19);
+        var (_, ids) = await fx.SeedSourceAsync(u.Id, News, url, date, "MacBook Air deal", "Unrelated story");
+
+        // The mute term lives only in the article body (a "Where to Buy" deals block), like The Verge.
+        using (var scope = fx.NewScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var a = await db.Articles.FirstAsync(x => x.Id == ids[0]);
+            a.ContentHtml = "<p>Lovely laptop.</p><h3>Where to Buy:</h3><a href=\"https://www.amazon.com/dp/x\">Amazon</a>";
+            await db.SaveChangesAsync();
+        }
+
+        await client.PostAsJsonAsync("/api/keywords", new CreateKeywordRequest { Term = "where to buy", Scope = KeywordScope.Everywhere });
+
+        var ed = await client.GetFromJsonAsync<EditionDto>($"/api/editions/{date:yyyy-MM-dd}");
+        var titles = Titles(ed!);
+        Assert.DoesNotContain("MacBook Air deal", titles);
+        Assert.Contains("Unrelated story", titles);
+    }
+
+    [Fact]
+    public async Task Keyword_matching_respects_word_boundaries_and_wildcards()
+    {
+        var (client, u) = await fx.RegisterAsync(U());
+        var url = "https://feed.test/" + Guid.NewGuid().ToString("N");
+        var date = new DateOnly(2026, 5, 20);
+        await fx.SeedSourceAsync(u.Id, News, url, date, "Buyer's guide", "Keep me");
+
+        // A bare term matches whole words, so "buy" must not catch "Buyer".
+        await client.PostAsJsonAsync("/api/keywords", new CreateKeywordRequest { Term = "buy", Scope = KeywordScope.TitleOnly });
+        var ed = await client.GetFromJsonAsync<EditionDto>($"/api/editions/{date:yyyy-MM-dd}");
+        Assert.Contains("Buyer's guide", Titles(ed!));
+
+        // A wildcard term does: "*buy*" catches "Buyer".
+        await client.PostAsJsonAsync("/api/keywords", new CreateKeywordRequest { Term = "*buy*", Scope = KeywordScope.TitleOnly });
+        ed = await client.GetFromJsonAsync<EditionDto>($"/api/editions/{date:yyyy-MM-dd}");
+        var titles = Titles(ed!);
+        Assert.DoesNotContain("Buyer's guide", titles);
+        Assert.Contains("Keep me", titles);
     }
 
     [Fact]

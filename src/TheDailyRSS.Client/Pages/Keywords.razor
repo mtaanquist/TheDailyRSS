@@ -14,8 +14,11 @@
     <div class="tdr-settings-main">
         <h1 style="font-weight:900; font-size:26px">Muted words</h1>
         <div style="font-style:italic; font-size:13px; color:var(--ink-2); margin-bottom:18px">
-            Articles whose headline (or summary) contains one of these terms are kept out of your editions —
-            handy for things like “giveaway”.
+            Articles matching one of these terms are kept out of your editions — handy for things like
+            “giveaway” or “where to buy”. A plain term matches whole words (so <code>buy</code> won't catch
+            “buyer”); add <code>*</code> as a wildcard for partial matches (<code>*buy*</code> catches
+            “buyer”, <code>deal*</code> catches “deals”). By default a term is checked anywhere in the
+            article, including link addresses — so muting <code>amazon.com</code> hides most deals posts.
         </div>
 
         @if (_error is not null)
@@ -30,7 +33,7 @@
                     <input class="tdr-input" style="max-width:240px" placeholder="e.g. giveaway"
                            @bind="_term" @bind:event="oninput" @onkeydown="OnKey" />
                     <select class="tdr-select" style="width:auto" @bind="_scope">
-                        <option value="@KeywordScope.TitleAndSummary">Title + summary</option>
+                        <option value="@KeywordScope.Everywhere">Anywhere in article</option>
                         <option value="@KeywordScope.TitleOnly">Title only</option>
                     </select>
                     <button class="tdr-btn" @onclick="Add" disabled="@(_busy || string.IsNullOrWhiteSpace(_term))">mute</button>
@@ -51,7 +54,7 @@
                         <div class="ttl">
                             <div>@k.Term</div>
                             <div class="err" style="color:var(--ink-3); font-style:italic">
-                                @(k.Scope == KeywordScope.TitleOnly ? "title only" : "title + summary")
+                                @(k.Scope == KeywordScope.TitleOnly ? "title only" : "anywhere in article")
                             </div>
                         </div>
                         <span class="spacer"></span>
@@ -66,7 +69,7 @@
 @code {
     private List<KeywordFilterDto> _items = [];
     private string _term = "";
-    private KeywordScope _scope = KeywordScope.TitleAndSummary;
+    private KeywordScope _scope = KeywordScope.Everywhere;
     private bool _busy;
     private string? _error;
 

@@ -55,7 +55,7 @@ public sealed class CreateKeywordRequest
     [Required, MinLength(1), MaxLength(120)]
     public string Term { get; set; } = "";
 
-    public KeywordScope Scope { get; set; } = KeywordScope.TitleAndSummary;
+    public KeywordScope Scope { get; set; } = KeywordScope.Everywhere;
 }
 
 public sealed class AddFeedRequest

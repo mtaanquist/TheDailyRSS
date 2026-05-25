@@ -137,7 +137,7 @@ public sealed class KeywordFilter
 
     /// <summary>Stored lower-cased for case-insensitive matching.</summary>
     public string Term { get; set; } = "";
-    public KeywordScope Scope { get; set; } = KeywordScope.TitleAndSummary;
+    public KeywordScope Scope { get; set; } = KeywordScope.Everywhere;
 }
 
 /// <summary>A signed-in device/session. Powers the Sync &amp; devices screen + remote sign-out.</summary>

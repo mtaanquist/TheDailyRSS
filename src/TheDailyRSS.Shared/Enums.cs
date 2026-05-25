@@ -27,8 +27,8 @@ public enum ReadingDensity
 /// <summary>Which article fields a keyword filter matches against.</summary>
 public enum KeywordScope
 {
-    /// <summary>Match the headline and summary text.</summary>
-    TitleAndSummary = 0,
+    /// <summary>Match the headline, summary, and full article text (including link URLs).</summary>
+    Everywhere = 0,
     /// <summary>Match the headline only.</summary>
     TitleOnly = 1,
 }
