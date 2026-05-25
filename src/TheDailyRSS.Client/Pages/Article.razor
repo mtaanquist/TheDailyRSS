@@ -7,80 +7,78 @@
 
 <PageTitle>@(_article?.Title ?? "Article") · The Daily RSS</PageTitle>
 
-<div class="tdr-main">
-    @if (_article is null)
-    {
-        <p style="font-style:italic; color:var(--ink-3)">@(_error ?? "Fetching the story…")</p>
-    }
-    else
-    {
-        var a = _article;
-        <article class="tdr-article">
-            <button class="tdr-link muted" @onclick="GoBack">← back to the edition</button>
+@if (_article is null)
+{
+    <p style="font-style:italic; color:var(--ink-3)">@(_error ?? "Fetching the story…")</p>
+}
+else
+{
+    var a = _article;
+    <article class="tdr-article">
+        <button class="tdr-link muted" @onclick="GoBack">← back to the edition</button>
 
-            <div class="kicker" style="margin-top:14px">@a.CategoryName · @a.FeedTitle</div>
-            <h1>@a.Title</h1>
-            <div class="byline">
-                @if (!string.IsNullOrWhiteSpace(a.Author))
-                {
-                    <span>By @a.Author</span><span>·</span>
-                }
-                <span style="font-style:italic">@a.PublishedAt.ToLocalTime().ToString("dddd, MMMM d · HH:mm")</span>
-                <span class="spacer"></span>
-                <StarButton Saved="a.IsSaved" SavedChanged="ToggleSave" />
-            </div>
-
-            @if (!string.IsNullOrEmpty(a.ImageUrl))
+        <div class="kicker" style="margin-top:14px">@a.CategoryName · @a.FeedTitle</div>
+        <h1>@a.Title</h1>
+        <div class="byline">
+            @if (!string.IsNullOrWhiteSpace(a.Author))
             {
-                <div class="hero"><img src="@a.ImageUrl" alt="" referrerpolicy="no-referrer" /></div>
+                <span>By @a.Author</span><span>·</span>
             }
+            <span style="font-style:italic">@a.PublishedAt.ToLocalTime().ToString("dddd, MMMM d · HH:mm")</span>
+            <span class="spacer"></span>
+            <StarButton Saved="a.IsSaved" SavedChanged="ToggleSave" />
+        </div>
 
-            <div class="content">
-                @if (!string.IsNullOrWhiteSpace(a.ContentHtml))
+        @if (!string.IsNullOrEmpty(a.ImageUrl))
+        {
+            <div class="hero"><img src="@a.ImageUrl" alt="" referrerpolicy="no-referrer" /></div>
+        }
+
+        <div class="content">
+            @if (!string.IsNullOrWhiteSpace(a.ContentHtml))
+            {
+                @((MarkupString)Sanitize(a.ContentHtml, a.ImageUrl))
+            }
+            else if (!string.IsNullOrWhiteSpace(a.Summary))
+            {
+                <p>@a.Summary</p>
+            }
+            else
+            {
+                <p style="font-style:italic; color:var(--ink-2)">No preview text — read it at the source.</p>
+            }
+        </div>
+
+        <div class="actions">
+            <a class="tdr-btn" href="@a.Url" target="_blank" rel="noopener noreferrer">read at source ↗</a>
+            <button class="tdr-link muted" @onclick="ToggleRead">@(a.IsRead ? "mark unread" : "mark read")</button>
+        </div>
+
+        @if (_neighbors is { } nb && (nb.Prev is not null || nb.Next is not null))
+        {
+            <nav class="tdr-article-nav">
+                @if (nb.Prev is { } prev)
                 {
-                    @((MarkupString)Sanitize(a.ContentHtml, a.ImageUrl))
-                }
-                else if (!string.IsNullOrWhiteSpace(a.Summary))
-                {
-                    <p>@a.Summary</p>
+                    <a class="prev" href="/article/@prev.Id">
+                        <span class="dir"><Icon Name="arrow-left" Size="13" /> Previous</span>
+                        <span class="hd">@prev.Title</span>
+                    </a>
                 }
                 else
                 {
-                    <p style="font-style:italic; color:var(--ink-2)">No preview text — read it at the source.</p>
+                    <span></span>
                 }
-            </div>
-
-            <div class="actions">
-                <a class="tdr-btn" href="@a.Url" target="_blank" rel="noopener noreferrer">read at source ↗</a>
-                <button class="tdr-link muted" @onclick="ToggleRead">@(a.IsRead ? "mark unread" : "mark read")</button>
-            </div>
-
-            @if (_neighbors is { } nb && (nb.Prev is not null || nb.Next is not null))
-            {
-                <nav class="tdr-article-nav">
-                    @if (nb.Prev is { } prev)
-                    {
-                        <a class="prev" href="/article/@prev.Id">
-                            <span class="dir"><Icon Name="arrow-left" Size="13" /> Previous</span>
-                            <span class="hd">@prev.Title</span>
-                        </a>
-                    }
-                    else
-                    {
-                        <span></span>
-                    }
-                    @if (nb.Next is { } next)
-                    {
-                        <a class="next" href="/article/@next.Id">
-                            <span class="dir">Next <Icon Name="arrow-right" Size="13" /></span>
-                            <span class="hd">@next.Title</span>
-                        </a>
-                    }
-                </nav>
-            }
-        </article>
-    }
-</div>
+                @if (nb.Next is { } next)
+                {
+                    <a class="next" href="/article/@next.Id">
+                        <span class="dir">Next <Icon Name="arrow-right" Size="13" /></span>
+                        <span class="hd">@next.Title</span>
+                    </a>
+                }
+            </nav>
+        }
+    </article>
+}
 
 @code {
     [Parameter] public Guid Id { get; set; }

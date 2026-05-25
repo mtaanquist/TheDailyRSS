@@ -14,7 +14,7 @@
     <div class="tdr-masthead">
         <div class="tdr-masthead-title">The Daily RSS</div>
     </div>
-    <div class="tdr-main"><p style="font-style:italic; color:var(--ink-3)">@(_error ?? "Going to press…")</p></div>
+    <div class="tdr-edition-body"><p style="font-style:italic; color:var(--ink-3)">@(_error ?? "Going to press…")</p></div>
 }
 else
 {
@@ -49,7 +49,7 @@ else
         </div>
     }
 
-    <div class="tdr-main @(_loading ? "loading" : "")">
+    <div class="tdr-edition-body @(_loading ? "loading" : "")">
         <div class="tdr-toolbar">
             <span class="title">@(Saved ? "Read later" : ed.CategoryName ?? (ed.IsToday ? "Today's stories" : "All stories"))</span>
             <span class="spacer"></span>
