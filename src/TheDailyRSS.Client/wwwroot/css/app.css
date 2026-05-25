@@ -550,10 +550,16 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
     .tdr-app { border: none; }
     .tdr-sidebar { display: none; }
     .tdr-sidebar.open {
-        display: flex; position: fixed; inset: 0 30% 0 0; z-index: 90;
+        /* Open below the header so the burger (in the header, kept on top) stays
+           tappable and toggles the drawer closed instead of being covered by it. */
+        display: flex; position: fixed; top: 0; right: 30%; bottom: 0; left: 0; z-index: 90;
+        padding-top: calc(48px + env(safe-area-inset-top));
         box-shadow: 4px 0 16px var(--shadow); width: auto;
     }
-    .tdr-main { padding: 10px 14px 60px; }
+    /* Reclaim the footer's vertical space for reading on phones; its links live
+       in the sidebar drawer. Pad the scroll area's bottom for the home indicator. */
+    .tdr-footer { display: none; }
+    .tdr-main { padding: 10px 14px calc(40px + env(safe-area-inset-bottom)); }
     /* The three meta items don't fit one line on a phone; without wrapping they
        force the page wider than the viewport and the shell's overflow:hidden
        clips everything on the right. Center and wrap them instead. */
@@ -565,11 +571,10 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
     .tdr-editionbar { flex-wrap: wrap; gap: 8px 10px; padding: 10px 14px; }
     .tdr-editionbar .tdr-edition-date { flex-basis: 100%; order: -1; text-align: center; }
     .tdr-editionbar .tdr-navbtn { padding: 7px 14px; }
-    /* Without :hover on touch, the bare text links read as static labels.
-       Give the toolbar actions a border so they're clearly tappable controls. */
+    /* Keep the title + "unread only" toggle on one line (toggle pinned right via
+       the flex spacer); "mark all read" wraps below as a bordered button — on
+       touch there's no :hover, so the border is what signals it's tappable. */
     .tdr-toolbar { gap: 10px 12px; align-items: center; }
-    .tdr-toolbar .title { flex-basis: 100%; }
-    .tdr-toolbar .spacer { display: none; }
     .tdr-toolbar button.tdr-link {
         border: 1px solid var(--ink-2); color: var(--ink); padding: 6px 12px;
     }
@@ -590,9 +595,10 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
         display: flex; align-items: center; gap: 12px; padding: 10px 14px;
         /* Clear the Dynamic Island / notch on notched iPhones. */
         padding-top: calc(10px + env(safe-area-inset-top));
-        border-bottom: 2px solid var(--ink); background: var(--paper); position: sticky; top: 0; z-index: 50;
+        border-bottom: 2px solid var(--ink); background: var(--paper); position: sticky; top: 0; z-index: 95;
     }
-    .tdr-mobile-top .burger { font-size: 20px; background: none; border: none; cursor: pointer; color: var(--ink); }
+    .tdr-mobile-top .burger { font-size: 20px; background: none; border: none; cursor: pointer; color: var(--ink); text-decoration: none; }
+    .tdr-mobile-top a.burger:hover, .tdr-mobile-top a.burger:active { color: var(--red); }
     .tdr-mobile-top .mt-title { font-family: var(--headline); font-weight: 900; font-size: 20px; flex: 1; text-align: center; letter-spacing: -0.5px; }
     .tdr-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 89; }
 }
