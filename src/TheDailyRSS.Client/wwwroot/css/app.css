@@ -560,19 +560,20 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
        in the sidebar drawer. Pad the scroll area's bottom for the home indicator. */
     .tdr-footer { display: none; }
     .tdr-main { padding: 10px 14px calc(40px + env(safe-area-inset-bottom)); }
-    /* The date now lives in the sticky header, so drop the Vol/No. + unread meta
-       row and the duplicate big nameplate to keep the mobile masthead compact —
-       it's left showing just the category line ("— Local —"). */
-    .tdr-masthead { padding: 8px 14px; }
-    .tdr-masthead-meta { display: none; }
-    /* Slim, inline edition nav sitting either side of the date label; the buttons
-       wrap only as a fallback. Word labels collapse to bare arrows below 400px. */
-    .tdr-editionbar { flex-wrap: wrap; gap: 6px 8px; padding: 8px 14px; }
-    .tdr-editionbar .tdr-navbtn { padding: 4px 10px; }
+    /* Brand + date now live in the sticky header, so drop the whole scrolling
+       masthead (Vol/No. + unread row, duplicate nameplate, category line) and let
+       the edition nav sit just below the top bar. */
+    .tdr-masthead { display: none; }
+    /* Pin earlier to the left and later to the right by letting the date label
+       between them grow; labels collapse to bare arrows below 400px. */
+    .tdr-editionbar { flex-wrap: nowrap; gap: 6px 8px; padding: 12px 14px; }
+    .tdr-editionbar .tdr-edition-date { flex: 1; text-align: center; }
+    .tdr-editionbar .tdr-navbtn { padding: 4px 10px; flex-shrink: 0; }
     /* Keep the title + "unread only" toggle on one line (toggle pinned right via
        the flex spacer); "mark all read" wraps below as a bordered button — on
-       touch there's no :hover, so the border is what signals it's tappable. */
-    .tdr-toolbar { gap: 10px 12px; align-items: center; }
+       touch there's no :hover, so the border is what signals it's tappable. The
+       top margin keeps it off the edition bar's rule above. */
+    .tdr-toolbar { gap: 10px 12px; align-items: center; margin-top: 14px; }
     .tdr-toolbar button.tdr-link {
         border: 1px solid var(--ink-2); color: var(--ink); padding: 6px 12px;
     }
@@ -580,7 +581,6 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
     .tdr-grid { grid-template-columns: 1fr; }
     .tdr-grid-item { border-left: none; padding-left: 0; border-top: 1px dotted var(--rule); padding-top: 12px; }
     .tdr-grid-item:nth-child(3n+1) { border-top: 1px dotted var(--rule); padding-top: 12px; }
-    .tdr-masthead-title { display: none; } /* duplicate of the sticky-bar brand */
     .tdr-settings { flex-direction: column; }
     .tdr-settings-nav { width: auto; border-right: none; border-bottom: 1px solid var(--rule); display: flex; flex-wrap: wrap; gap: 4px; }
     .tdr-settings-nav a { margin: 0; }

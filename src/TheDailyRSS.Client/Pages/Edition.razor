@@ -197,7 +197,7 @@ else
 
             _edition = result;
             // Surface the date in the sticky mobile header (compact, e.g. "Mon · May 25").
-            State.SetHeaderDate(!Saved && result is { } e ? e.Date.ToString("ddd · MMM d") : null);
+            State.SetHeaderDate(!Saved && result is { } e ? e.Date.ToString("ddd · MMM d, yyyy") : null);
         }
         catch (ApiException ex) { _error = ex.Message; }
         finally { _loading = false; }
