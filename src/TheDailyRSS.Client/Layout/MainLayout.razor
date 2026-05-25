@@ -1,9 +1,17 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+@inject AppState State
 
 <div class="tdr-app">
     <div class="tdr-mobile-top">
         <button class="burger" @onclick="() => _navOpen = !_navOpen" aria-label="Menu">☰</button>
-        <div class="mt-title">The Daily RSS</div>
+        <div class="mt-title">
+            <span class="mt-brand">The Daily RSS</span>
+            @if (!string.IsNullOrEmpty(State.HeaderDate))
+            {
+                <span class="mt-date">@State.HeaderDate</span>
+            }
+        </div>
         <a class="burger" href="/saved" aria-label="Read later"><Icon Name="bookmark" Size="20" /></a>
     </div>
 
@@ -26,4 +34,8 @@
 
 @code {
     private bool _navOpen;
+
+    protected override void OnInitialized() => State.Changed += OnStateChanged;
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+    public void Dispose() => State.Changed -= OnStateChanged;
 }

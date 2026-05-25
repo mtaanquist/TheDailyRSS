@@ -14,6 +14,17 @@ public sealed class AppState(ApiClient api)
     public int UnreadTotal => Categories.Sum(c => c.UnreadCount);
     public int SavedCount { get; private set; }
 
+    /// <summary>Compact date label shown in the mobile sticky header; set by the
+    /// edition view and cleared when it's disposed. Null on non-edition pages.</summary>
+    public string? HeaderDate { get; private set; }
+
+    public void SetHeaderDate(string? label)
+    {
+        if (HeaderDate == label) return;
+        HeaderDate = label;
+        Changed?.Invoke();
+    }
+
     public async Task EnsureLoadedAsync()
     {
         if (Loaded) return;
