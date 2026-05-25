@@ -1,0 +1,22 @@
+@if (!string.IsNullOrEmpty(Src))
+{
+    <div class="tdr-img has-photo" style="height:@(Height)px">
+        <img src="@Src" alt="" loading="lazy" referrerpolicy="no-referrer"
+             onerror="this.parentElement.classList.remove('has-photo'); this.remove();" />
+    </div>
+}
+else
+{
+    <div class="tdr-img" style="height:@(Height)px">
+        @if (!string.IsNullOrEmpty(Label))
+        {
+            <div class="ph"><span style="background:var(--paper); padding:2px 6px">@Label</span></div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string? Src { get; set; }
+    [Parameter] public int Height { get; set; } = 100;
+    [Parameter] public string? Label { get; set; } = "photo";
+}

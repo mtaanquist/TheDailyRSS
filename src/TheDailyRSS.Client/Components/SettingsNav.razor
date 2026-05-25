@@ -1,0 +1,20 @@
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<nav class="tdr-settings-nav">
+    <div class="tdr-sidebar-label">Settings</div>
+    <a class="@(Current == "profile" ? "active" : "")" href="/settings/profile">Profile</a>
+    <a class="@(Current == "feeds" ? "active" : "")" href="/feeds">Feeds &amp; categories</a>
+    <a class="@(Current == "devices" ? "active" : "")" href="/settings/devices">Sync &amp; devices</a>
+    <a class="danger" @onclick="SignOut" @onclick:preventDefault="true" href="#">Sign out</a>
+</nav>
+
+@code {
+    [Parameter] public string Current { get; set; } = "";
+
+    private async Task SignOut()
+    {
+        await Auth.LogoutAsync();
+        Nav.NavigateTo("/login", replace: true);
+    }
+}

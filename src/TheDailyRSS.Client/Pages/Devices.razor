@@ -1,0 +1,124 @@
+@page "/settings/devices"
+@attribute [Authorize]
+@inject ApiClient Api
+
+<PageTitle>Sync &amp; devices · The Daily RSS</PageTitle>
+
+<div class="tdr-breadcrumb" style="padding:12px 24px; border-bottom:1px solid var(--rule); margin:0">
+    <a href="/">Home</a> › Settings › <b>Sync &amp; devices</b>
+</div>
+
+<div class="tdr-settings">
+    <SettingsNav Current="devices" />
+
+    <div class="tdr-settings-main">
+        <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap">
+            <h1 style="font-weight:900; font-size:26px">Sync &amp; devices</h1>
+            <span style="font-style:italic; font-size:13px; color:var(--ink-2)">
+                @_sessions.Count active · @LastSync
+            </span>
+            <span style="margin-left:auto; display:flex; align-items:center; gap:6px">
+                <span style="width:8px; height:8px; border-radius:50%; background:var(--green)"></span>
+                <span class="tdr-chip green">ALL SYNCED</span>
+            </span>
+        </div>
+
+        @if (_status is { } s)
+        {
+            <div class="tdr-stat-grid">
+                <Stat Label="Feeds" Value="@s.FeedCount.ToString()" Sub="@($"across {s.CategoryCount} folders")" />
+                <Stat Label="Articles" Value="@s.ArticlesTracked.ToString("N0")" Sub="tracked" />
+                <Stat Label="Saved" Value="@s.SavedCount.ToString()" Sub="stars synced" />
+                <Stat Label="Reading positions" Value="@s.ReadingPositions.ToString()" Sub="in progress" />
+            </div>
+        }
+
+        <h2 style="font-weight:800; font-size:14px; margin:22px 0 8px">Signed-in devices</h2>
+        <div style="border:1px solid var(--rule)">
+            @foreach (var d in _sessions)
+            {
+                <div class="tdr-device @(d.IsCurrent ? "current" : "")">
+                    <div class="ico">@Glyph(d.DeviceLabel)</div>
+                    <div class="info">
+                        <div class="nm">
+                            @d.DeviceLabel
+                            @if (d.IsCurrent)
+                            {
+                                <span class="tdr-chip green" style="margin-left:6px">THIS DEVICE</span>
+                            }
+                        </div>
+                        <div class="loc">@(d.IpAddress ?? "unknown location")</div>
+                    </div>
+                    <div class="seen">
+                        <div>LAST SEEN</div>
+                        <div style="font-size:12px; color:var(--ink-2)">@Relative(d.LastSeenAt)</div>
+                    </div>
+                    @if (!d.IsCurrent)
+                    {
+                        <button class="tdr-link" @onclick="() => Revoke(d.Id)">sign out</button>
+                    }
+                </div>
+            }
+            @if (_sessions.Count == 0)
+            {
+                <div class="tdr-device">No other sessions.</div>
+            }
+        </div>
+
+        <h2 style="font-weight:800; font-size:14px; margin:22px 0 8px">What syncs</h2>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; max-width:520px">
+            @foreach (var item in SyncItems)
+            {
+                <div style="display:flex; align-items:center; gap:8px; padding:4px 0; font-size:13px">
+                    <span class="tdr-toggle on"><span class="knob"></span></span>
+                    <span>@item</span>
+                </div>
+            }
+        </div>
+        <div class="tdr-hint" style="font-style:italic; color:var(--ink-2)">
+            Everything syncs through your self-hosted server — there's nothing to turn off.
+        </div>
+
+        @if (_sessions.Any(x => !x.IsCurrent))
+        {
+            <button class="tdr-link" style="margin-top:24px; display:block" @onclick="RevokeOthers">
+                ↳ sign out of all other devices
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    private List<SessionDto> _sessions = [];
+    private SyncStatusDto? _status;
+
+    private static readonly string[] SyncItems =
+        ["Feeds & categories", "Read / unread state", "Saved articles", "Reading positions", "Reading preferences", "Edition archive"];
+
+    private string LastSync => _status?.LastSyncAt is { } t ? $"last refresh {Relative(t)}" : "no refresh yet";
+
+    protected override Task OnInitializedAsync() => Load();
+
+    private async Task Load()
+    {
+        _sessions = await Api.GetSessionsAsync();
+        _status = await Api.GetSyncStatusAsync();
+    }
+
+    private async Task Revoke(Guid id) { await Api.RevokeSessionAsync(id); await Load(); }
+    private async Task RevokeOthers() { await Api.RevokeOtherSessionsAsync(); await Load(); }
+
+    private static string Glyph(string label) =>
+        label.Contains("iPhone") ? "📱" : label.Contains("iPad") ? "▭" :
+        label.Contains("Mac") ? "💻" : label.Contains("Windows") ? "🖥" :
+        label.Contains("Android") ? "📱" : "🖥";
+
+    private static string Relative(DateTimeOffset when)
+    {
+        var d = DateTimeOffset.Now - when;
+        if (d.TotalMinutes < 1) return "now";
+        if (d.TotalMinutes < 60) return $"{(int)d.TotalMinutes} min ago";
+        if (d.TotalHours < 24) return $"{(int)d.TotalHours}h ago";
+        return $"{(int)d.TotalDays}d ago";
+    }
+}

@@ -1,0 +1,15 @@
+<button class="tdr-star @(Saved ? "saved" : "")" title="@(Saved ? "Saved" : "Save for later")"
+        @onclick:stopPropagation="true" @onclick="Toggle">
+    <svg width="@Size" height="@Size" viewBox="0 0 24 24"
+         fill="@(Saved ? "currentColor" : "none")" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+        <path d="M12 3l2.7 6 6.3.6-4.8 4.4 1.4 6.4L12 17.3 6.4 20.4l1.4-6.4L3 9.6 9.3 9z" />
+    </svg>
+</button>
+
+@code {
+    [Parameter] public bool Saved { get; set; }
+    [Parameter] public int Size { get; set; } = 16;
+    [Parameter] public EventCallback<bool> SavedChanged { get; set; }
+
+    private async Task Toggle() => await SavedChanged.InvokeAsync(!Saved);
+}

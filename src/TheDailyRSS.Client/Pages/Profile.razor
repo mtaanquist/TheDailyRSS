@@ -1,0 +1,177 @@
+@page "/settings/profile"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject AuthService Auth
+
+<PageTitle>Account &amp; preferences · The Daily RSS</PageTitle>
+
+<div class="tdr-breadcrumb" style="padding:12px 24px; border-bottom:1px solid var(--rule); margin:0">
+    <a href="/">Home</a> › Settings › <b>Account &amp; preferences</b>
+</div>
+
+<div class="tdr-settings">
+    <SettingsNav Current="profile" />
+
+    <div class="tdr-settings-main">
+        @if (_user is { } user)
+        {
+            <h1 style="font-weight:900; font-size:26px">Your account</h1>
+            <div style="font-style:italic; font-size:13px; color:var(--ink-2); margin-bottom:18px">
+                since @user.CreatedAt.ToString("MMMM yyyy") · self-hosted edition
+            </div>
+
+            <div style="display:flex; gap:16px; align-items:flex-start; padding-bottom:16px; border-bottom:1px solid var(--rule)">
+                <div class="tdr-avatar" style="width:64px; height:64px; font-size:26px">@user.Initials</div>
+                <div style="flex:1; display:grid; grid-template-columns:90px 1fr; gap:8px 12px; align-items:center; font-size:13px">
+                    <div class="tdr-sidebar-label" style="margin:0">Name</div>
+                    <div style="display:flex; gap:8px; align-items:center">
+                        <input class="tdr-input" style="max-width:280px" @bind="_name" />
+                        <button class="tdr-link" @onclick="SaveName" disabled="@(_name.Trim() == user.DisplayName || _busy)">save</button>
+                    </div>
+                    <div class="tdr-sidebar-label" style="margin:0">Email</div>
+                    <div>@user.Email</div>
+                    <div class="tdr-sidebar-label" style="margin:0">Password</div>
+                    <div>
+                        ••••••••••
+                        <button class="tdr-link" style="margin-left:8px" @onclick="() => _changingPw = !_changingPw">change</button>
+                    </div>
+                </div>
+            </div>
+
+            @if (_changingPw)
+            {
+                <div class="tdr-folder" style="padding:14px; margin-top:14px; max-width:420px">
+                    <div class="tdr-field">
+                        <label>Current password</label>
+                        <input class="tdr-input" type="password" @bind="_currentPw" />
+                    </div>
+                    <div class="tdr-field">
+                        <label>New password</label>
+                        <input class="tdr-input" type="password" @bind="_newPw" />
+                    </div>
+                    <button class="tdr-btn" @onclick="ChangePassword" disabled="@_busy">update password</button>
+                </div>
+            }
+
+            <div class="tdr-prefs-grid">
+                <div>
+                    <h2 style="font-weight:800; font-size:14px; margin-bottom:8px">Appearance</h2>
+                    <div class="tdr-sidebar-label" style="margin:0 0 4px">Theme</div>
+                    <div class="tdr-theme-swatch">
+                        <div class="tdr-theme-opt newsprint @(Pref.Theme == ThemePreference.Newsprint ? "active" : "")"
+                             @onclick="() => SetTheme(ThemePreference.Newsprint)"><span>Newsprint</span></div>
+                        <div class="tdr-theme-opt evening @(Pref.Theme == ThemePreference.Evening ? "active" : "")"
+                             @onclick="() => SetTheme(ThemePreference.Evening)"><span>Evening</span></div>
+                        <div class="tdr-theme-opt auto @(Pref.Theme == ThemePreference.Auto ? "active" : "")"
+                             @onclick="() => SetTheme(ThemePreference.Auto)"><span>Auto</span></div>
+                    </div>
+                    <div class="tdr-hint">Auto turns on the Evening edition after sunset (local 19:00).</div>
+                </div>
+
+                <div>
+                    <h2 style="font-weight:800; font-size:14px; margin-bottom:8px">Reading</h2>
+                    <div class="tdr-sidebar-label" style="margin:0 0 4px">Headline font</div>
+                    <div style="display:flex; gap:6px; margin-bottom:12px">
+                        @foreach (var (val, label) in Fonts)
+                        {
+                            <span class="tdr-theme-opt @(Pref.HeadlineFont == val ? "active" : "")" @onclick="() => SetFont(val)"
+                                  style="font-family:@FontStack(val)">@label</span>
+                        }
+                    </div>
+                    <div class="tdr-sidebar-label" style="margin:0 0 4px">Density</div>
+                    <div style="display:flex; gap:6px">
+                        @foreach (var (val, label) in Densities)
+                        {
+                            <span class="tdr-theme-opt @(Pref.Density == val ? "active" : "")" @onclick="() => SetDensity(val)">@label</span>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @if (_saved)
+            {
+                <div class="tdr-hint" style="margin-top:16px">↳ saved &amp; synced to every device.</div>
+            }
+            @if (_error is not null)
+            {
+                <div class="tdr-error">@_error</div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private UserDto? _user;
+    private PreferencesDto Pref => _user?.Preferences ?? new PreferencesDto();
+    private string _name = "";
+    private bool _changingPw;
+    private string _currentPw = "";
+    private string _newPw = "";
+    private bool _busy;
+    private bool _saved;
+    private string? _error;
+
+    private static readonly (HeadlineFont, string)[] Fonts =
+        [(HeadlineFont.PtSerif, "Source Serif"), (HeadlineFont.Newsreader, "Newsreader"), (HeadlineFont.Lora, "Lora")];
+    private static readonly (ReadingDensity, string)[] Densities =
+        [(ReadingDensity.Compact, "Compact"), (ReadingDensity.Balanced, "Balanced"), (ReadingDensity.Airy, "Airy")];
+
+    protected override void OnInitialized()
+    {
+        _user = Auth.CurrentUser;
+        _name = _user?.DisplayName ?? "";
+    }
+
+    private async Task SaveName()
+    {
+        _busy = true; _error = null;
+        try
+        {
+            _user = await Api.UpdateProfileAsync(new UpdateProfileRequest { DisplayName = _name.Trim() });
+            Auth.UpdateUser(_user);
+            Flash();
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task ChangePassword()
+    {
+        _busy = true; _error = null;
+        try
+        {
+            await Api.ChangePasswordAsync(new ChangePasswordRequest { CurrentPassword = _currentPw, NewPassword = _newPw });
+            _changingPw = false; _currentPw = ""; _newPw = "";
+            Flash();
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private Task SetTheme(ThemePreference t) => SavePref(p => p.Theme = t);
+    private Task SetFont(HeadlineFont f) => SavePref(p => p.HeadlineFont = f);
+    private Task SetDensity(ReadingDensity d) => SavePref(p => p.Density = d);
+
+    private async Task SavePref(Action<PreferencesDto> mutate)
+    {
+        var pref = new PreferencesDto { Theme = Pref.Theme, HeadlineFont = Pref.HeadlineFont, Density = Pref.Density };
+        mutate(pref);
+        _error = null;
+        try
+        {
+            _user = await Api.UpdatePreferencesAsync(pref);
+            Auth.UpdateUser(_user);
+            Flash();
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+    }
+
+    private void Flash() { _saved = true; }
+
+    private static string FontStack(HeadlineFont f) => f switch
+    {
+        HeadlineFont.Newsreader => "'Newsreader', serif",
+        HeadlineFont.Lora => "'Lora', serif",
+        _ => "'Source Serif 4', serif",
+    };
+}

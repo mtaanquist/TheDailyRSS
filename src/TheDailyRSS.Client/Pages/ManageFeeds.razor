@@ -1,0 +1,238 @@
+@page "/feeds"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject AppState State
+@inject IJSRuntime JS
+
+<PageTitle>Manage feeds · The Daily RSS</PageTitle>
+
+<div class="tdr-main">
+    <div class="tdr-page-head">
+        <h1>Manage feeds</h1>
+        <span class="sub">@_categories.Count categories · @TotalFeeds feeds</span>
+        <span class="spacer"></span>
+        <div class="actions">
+            <button class="tdr-btn ghost" @onclick="() => _creatingFolder = true">+ new folder</button>
+            <button class="tdr-btn" @onclick="() => _showAdd = true">+ add feed</button>
+        </div>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="tdr-error">@_error</div>
+    }
+
+    @if (_creatingFolder)
+    {
+        <div class="tdr-folder" style="padding:12px">
+            <div style="display:flex; gap:8px; align-items:center">
+                <input class="tdr-input" style="max-width:280px" placeholder="Folder name (e.g. World)"
+                       @bind="_newFolderName" @onkeydown="NewFolderKey" />
+                <button class="tdr-btn" @onclick="CreateFolder" disabled="@string.IsNullOrWhiteSpace(_newFolderName)">create</button>
+                <button class="tdr-link muted" @onclick="@(() => { _creatingFolder = false; _newFolderName = ""; })">cancel</button>
+            </div>
+        </div>
+    }
+
+    @if (_categories.Count == 0 && !_creatingFolder)
+    {
+        <div class="tdr-empty">
+            <div class="tdr-empty-mark">⋮⋮</div>
+            <h1 class="tdr-empty-title">No folders yet</h1>
+            <p class="tdr-empty-sub">Create a folder, then add feeds to it — or import an OPML file below.</p>
+            <button class="tdr-btn" @onclick="() => _creatingFolder = true">+ new folder</button>
+        </div>
+    }
+
+    @foreach (var cat in _categories)
+    {
+        <div class="tdr-folder">
+            <div class="tdr-folder-head">
+                <span class="tdr-grip">⋮⋮</span>
+                <span class="tdr-feed-dot" style="background:@cat.Color"></span>
+                @if (_renamingId == cat.Id)
+                {
+                    <input class="tdr-input" style="max-width:220px" @bind="_renameValue" />
+                    <button class="tdr-link" @onclick="() => SaveRename(cat)">save</button>
+                    <button class="tdr-link muted" @onclick="() => _renamingId = null">cancel</button>
+                }
+                else
+                {
+                    <span class="nm">@cat.Name</span>
+                    <span class="n">@FeedsIn(cat.Id).Count feeds</span>
+                    <div class="actions">
+                        <button class="tdr-link muted" @onclick="() => StartRename(cat)">rename</button>
+                        <span>·</span>
+                        <button class="tdr-link" @onclick="() => DeleteCategory(cat)">delete</button>
+                    </div>
+                }
+            </div>
+
+            @foreach (var f in FeedsIn(cat.Id))
+            {
+                <div class="tdr-feedrow">
+                    <span class="tdr-grip">⋮⋮</span>
+                    <div class="tdr-avatar" style="width:22px; height:22px; font-size:11px">@f.IconText</div>
+                    <div class="ttl">
+                        <div>@f.Title</div>
+                        @if (f.LastFetchError is not null)
+                        {
+                            <div class="err">⚠ @f.LastFetchError</div>
+                        }
+                    </div>
+                    <span class="meta">@f.UnreadCount unread · @f.TotalCount total</span>
+                    <select class="tdr-select" style="width:auto; font-size:11px; padding:3px 6px"
+                            value="@f.CategoryId" @onchange="@(e => MoveFeed(f, Guid.Parse((string)e.Value!)))">
+                        @foreach (var c in _categories)
+                        {
+                            <option value="@c.Id" selected="@(c.Id == f.CategoryId)">@c.Name</option>
+                        }
+                    </select>
+                    <button class="tdr-link muted" @onclick="() => RefreshFeed(f)">refresh</button>
+                    <button class="tdr-link" @onclick="() => DeleteFeed(f)">✕</button>
+                </div>
+            }
+            @if (FeedsIn(cat.Id).Count == 0)
+            {
+                <div class="tdr-feedrow" style="font-style:italic; color:var(--ink-3)">No feeds here yet.</div>
+            }
+        </div>
+    }
+
+    <div class="tdr-folder" style="padding:14px; background:transparent; border-style:dashed">
+        <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap">
+            <strong style="font-family:var(--headline)">OPML</strong>
+            <label class="tdr-btn ghost" style="cursor:pointer; margin:0">
+                import…
+                <InputFile OnChange="ImportOpml" accept=".opml,.xml" style="display:none" />
+            </label>
+            <button class="tdr-btn ghost" @onclick="ExportOpml">export</button>
+            @if (_importResult is { } r)
+            {
+                <span class="tdr-hint">↳ imported @r.FeedsAdded feeds in @r.CategoriesCreated new folders (@r.Skipped skipped)</span>
+            }
+        </div>
+    </div>
+
+    <div class="tdr-note" style="margin-top:18px">use the dropdown to move a feed between folders</div>
+</div>
+
+<AddFeedDialog @bind-Visible="_showAdd" Categories="_categories" OnAdded="ReloadAll" />
+
+@code {
+    private List<CategoryDto> _categories = [];
+    private List<FeedDto> _feeds = [];
+    private bool _creatingFolder;
+    private string _newFolderName = "";
+    private bool _showAdd;
+    private Guid? _renamingId;
+    private string _renameValue = "";
+    private string? _error;
+    private OpmlImportResult? _importResult;
+
+    private int TotalFeeds => _feeds.Count;
+    private List<FeedDto> FeedsIn(Guid catId) => _feeds.Where(f => f.CategoryId == catId).ToList();
+
+    protected override Task OnInitializedAsync() => Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            _categories = await Api.GetCategoriesAsync();
+            _feeds = await Api.GetFeedsAsync();
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+    }
+
+    private async Task ReloadAll()
+    {
+        await Load();
+        await State.RefreshAsync();
+    }
+
+    private async Task NewFolderKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CreateFolder();
+    }
+
+    private async Task CreateFolder()
+    {
+        if (string.IsNullOrWhiteSpace(_newFolderName)) return;
+        try
+        {
+            await Api.CreateCategoryAsync(new CreateCategoryRequest { Name = _newFolderName.Trim(), Color = NextColor() });
+            _newFolderName = "";
+            _creatingFolder = false;
+            await ReloadAll();
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+    }
+
+    private void StartRename(CategoryDto cat) { _renamingId = cat.Id; _renameValue = cat.Name; }
+
+    private async Task SaveRename(CategoryDto cat)
+    {
+        try
+        {
+            await Api.UpdateCategoryAsync(cat.Id, new UpdateCategoryRequest { Name = _renameValue.Trim(), Color = cat.Color });
+            _renamingId = null;
+            await ReloadAll();
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+    }
+
+    private async Task DeleteCategory(CategoryDto cat)
+    {
+        if (!await Confirm($"Delete “{cat.Name}” and all its feeds?")) return;
+        await Api.DeleteCategoryAsync(cat.Id);
+        await ReloadAll();
+    }
+
+    private async Task DeleteFeed(FeedDto feed)
+    {
+        if (!await Confirm($"Unsubscribe from “{feed.Title}”?")) return;
+        await Api.DeleteFeedAsync(feed.Id);
+        await ReloadAll();
+    }
+
+    private async Task MoveFeed(FeedDto feed, Guid newCat)
+    {
+        if (newCat == feed.CategoryId) return;
+        await Api.MoveFeedAsync(feed.Id, new MoveFeedRequest { CategoryId = newCat });
+        await ReloadAll();
+    }
+
+    private async Task RefreshFeed(FeedDto feed)
+    {
+        await Api.RefreshFeedAsync(feed.Id);
+        await ReloadAll();
+    }
+
+    private async Task ImportOpml(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            using var stream = e.File.OpenReadStream(5 * 1024 * 1024);
+            using var sr = new StreamReader(stream);
+            var content = await sr.ReadToEndAsync();
+            _importResult = await Api.ImportOpmlAsync(content);
+            await ReloadAll();
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+    }
+
+    private async Task ExportOpml()
+    {
+        var xml = await Api.ExportOpmlAsync();
+        await JS.InvokeVoidAsync("tdrDownload", "subscriptions.opml", xml, "text/x-opml");
+    }
+
+    private async Task<bool> Confirm(string message) => await JS.InvokeAsync<bool>("confirm", message);
+
+    private string NextColor()
+    {
+        string[] palette = ["#a83020", "#37a", "#7a4", "#a73", "#74a", "#2a7a2a"];
+        return palette[_categories.Count % palette.Length];
+    }
+}

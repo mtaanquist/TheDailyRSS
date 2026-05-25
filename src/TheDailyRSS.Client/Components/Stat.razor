@@ -1,0 +1,11 @@
+<div class="tdr-stat">
+    <div class="lbl">@Label</div>
+    <div class="val">@Value</div>
+    <div class="sub">@Sub</div>
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public string Sub { get; set; } = "";
+}

@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: thedailyrss
+      POSTGRES_USER: thedailyrss
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change-me-in-prod}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U thedailyrss -d thedailyrss"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Default: "Host=db;Port=5432;Database=thedailyrss;Username=thedailyrss;Password=${DB_PASSWORD:-change-me-in-prod}"
+      # Edition cut-off timezone (IANA). Articles are grouped by calendar day in this zone.
+      Feeds__EditionTimeZone: "${EDITION_TZ:-UTC}"
+      Feeds__RefreshIntervalMinutes: "${REFRESH_MINUTES:-20}"
+      # Optional: pin a JWT signing key. Left blank, one is generated and persisted under /data.
+      Jwt__Key: "${JWT_KEY:-}"
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    volumes:
+      - app-data:/data
+
+volumes:
+  db-data:
+  app-data:

@@ -1,0 +1,15 @@
+## .NET
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+.vs/
+artifacts/
+
+## App runtime data (JWT signing key, etc.)
+data/
+src/TheDailyRSS.Server/data/
+
+## Env
+.env

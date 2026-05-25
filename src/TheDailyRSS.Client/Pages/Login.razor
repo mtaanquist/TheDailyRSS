@@ -1,0 +1,117 @@
+@page "/login"
+@layout AuthLayout
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<PageTitle>Sign in · The Daily RSS</PageTitle>
+
+<div class="tdr-auth">
+    <section class="tdr-auth-pitch">
+        <div class="nameplate">THE DAILY RSS</div>
+        <div class="tagline">your feeds, set in type · est. 2026</div>
+        <div style="margin-top:28px; max-width:560px; margin-left:auto; margin-right:auto">
+            <h2 style="font-weight:800; font-size:30px; line-height:1.1">The news, read like a paper —<br />one edition a day.</h2>
+            <p style="font-style:italic; color:var(--ink-2); margin-top:14px; font-size:15px; line-height:1.6">
+                Gather every feed into folders, and The Daily RSS lays them out as a newspaper.
+                Miss a day? Flip back to an earlier edition and read it just as it printed.
+            </p>
+            <div class="tdr-note" style="margin-top:26px">“the news, read like a paper”</div>
+        </div>
+    </section>
+
+    <aside class="tdr-auth-card">
+        <div class="eyebrow">SUBSCRIBE / SIGN IN</div>
+        <h1>@(_mode == Mode.SignIn ? "Welcome back," : "Join the press,") <br />@(_mode == Mode.SignIn ? "to your desk." : "start an edition.")</h1>
+        <div class="lede">One account · syncs everywhere · keeps your spot.</div>
+
+        <div class="tdr-auth-tabs">
+            <button class="@(_mode == Mode.SignIn ? "active" : "")" @onclick="() => Switch(Mode.SignIn)">Sign in</button>
+            <button class="@(_mode == Mode.SignUp ? "active" : "")" @onclick="() => Switch(Mode.SignUp)">Create account</button>
+        </div>
+
+        <EditForm Model="this" OnValidSubmit="Submit">
+            @if (_mode == Mode.SignUp)
+            {
+                <div class="tdr-field">
+                    <label>Name</label>
+                    <input class="tdr-input" @bind="_name" @bind:event="oninput" placeholder="Your name" />
+                </div>
+            }
+            <div class="tdr-field">
+                <label>Email</label>
+                <input class="tdr-input" type="email" @bind="_email" @bind:event="oninput" placeholder="you@example.com" />
+            </div>
+            <div class="tdr-field">
+                <label>Password</label>
+                <input class="tdr-input" type="password" @bind="_password" @bind:event="oninput" placeholder="@(_mode == Mode.SignUp ? "at least 8 characters" : "••••••••")" />
+            </div>
+
+            @if (_error is not null)
+            {
+                <div class="tdr-error">@_error</div>
+            }
+
+            <button class="tdr-btn block" type="submit" disabled="@_busy">
+                @(_busy ? "…" : _mode == Mode.SignIn ? "Sign in →" : "Create account →")
+            </button>
+        </EditForm>
+
+        <div style="margin-top:18px; font-style:italic; font-size:11px; color:var(--ink-2); text-align:center; line-height:1.4">
+            Self-hosted &amp; yours alone — no card, no tracking.
+        </div>
+    </aside>
+</div>
+
+@code {
+    private enum Mode { SignIn, SignUp }
+
+    [SupplyParameterFromQuery(Name = "returnUrl")] public string? ReturnUrl { get; set; }
+
+    private Mode _mode = Mode.SignIn;
+    private string _name = "";
+    private string _email = "";
+    private string _password = "";
+    private string? _error;
+    private bool _busy;
+
+    protected override void OnInitialized()
+    {
+        if (Auth.IsAuthenticated) GoBack();
+    }
+
+    private void Switch(Mode mode) { _mode = mode; _error = null; }
+
+    private async Task Submit()
+    {
+        _error = null;
+        if (string.IsNullOrWhiteSpace(_email) || string.IsNullOrWhiteSpace(_password))
+        {
+            _error = "Email and password are required.";
+            return;
+        }
+        if (_mode == Mode.SignUp && string.IsNullOrWhiteSpace(_name))
+        {
+            _error = "Please tell us your name.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            if (_mode == Mode.SignIn)
+                await Auth.LoginAsync(_email.Trim(), _password);
+            else
+                await Auth.RegisterAsync(_email.Trim(), _name.Trim(), _password);
+            GoBack();
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        catch (Exception) { _error = "Something went wrong. Is the server running?"; }
+        finally { _busy = false; }
+    }
+
+    private void GoBack()
+    {
+        var target = string.IsNullOrWhiteSpace(ReturnUrl) ? "/" : Uri.UnescapeDataString(ReturnUrl);
+        Nav.NavigateTo(target, replace: true);
+    }
+}

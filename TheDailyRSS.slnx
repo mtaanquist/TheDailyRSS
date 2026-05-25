@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TheDailyRSS.Client/TheDailyRSS.Client.csproj" />
+    <Project Path="src/TheDailyRSS.Server/TheDailyRSS.Server.csproj" />
+    <Project Path="src/TheDailyRSS.Shared/TheDailyRSS.Shared.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TheDailyRSS.Tests/TheDailyRSS.Tests.csproj" />
+  </Folder>
+</Solution>

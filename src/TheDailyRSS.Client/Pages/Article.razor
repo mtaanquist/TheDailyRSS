@@ -1,0 +1,105 @@
+@page "/article/{Id:guid}"
+@attribute [Authorize]
+@using System.Text.RegularExpressions
+@inject ApiClient Api
+@inject AppState State
+@inject NavigationManager Nav
+
+<PageTitle>@(_article?.Title ?? "Article") · The Daily RSS</PageTitle>
+
+<div class="tdr-main">
+    @if (_article is null)
+    {
+        <p style="font-style:italic; color:var(--ink-3)">@(_error ?? "Fetching the story…")</p>
+    }
+    else
+    {
+        var a = _article;
+        <article class="tdr-article">
+            <button class="tdr-link muted" @onclick="GoBack">← back to the edition</button>
+
+            <div class="kicker" style="margin-top:14px">@a.CategoryName · @a.FeedTitle</div>
+            <h1>@a.Title</h1>
+            <div class="byline">
+                @if (!string.IsNullOrWhiteSpace(a.Author))
+                {
+                    <span>By @a.Author</span><span>·</span>
+                }
+                <span style="font-style:italic">@a.PublishedAt.ToLocalTime().ToString("dddd, MMMM d · HH:mm")</span>
+                <span class="spacer"></span>
+                <StarButton Saved="a.IsSaved" SavedChanged="ToggleSave" />
+            </div>
+
+            @if (!string.IsNullOrEmpty(a.ImageUrl))
+            {
+                <div class="hero"><img src="@a.ImageUrl" alt="" referrerpolicy="no-referrer" /></div>
+            }
+
+            <div class="content">
+                @if (!string.IsNullOrWhiteSpace(a.ContentHtml))
+                {
+                    @((MarkupString)Sanitize(a.ContentHtml))
+                }
+                else if (!string.IsNullOrWhiteSpace(a.Summary))
+                {
+                    <p>@a.Summary</p>
+                }
+                else
+                {
+                    <p style="font-style:italic; color:var(--ink-2)">No preview text — read it at the source.</p>
+                }
+            </div>
+
+            <div class="actions">
+                <a class="tdr-btn" href="@a.Url" target="_blank" rel="noopener noreferrer">read at source ↗</a>
+                <button class="tdr-link muted" @onclick="ToggleRead">@(a.IsRead ? "mark unread" : "mark read")</button>
+            </div>
+        </article>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private ArticleDto? _article;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _article = null;
+        _error = null;
+        try
+        {
+            _article = await Api.GetArticleAsync(Id);
+            if (!_article.IsRead)
+            {
+                await Api.SetReadAsync(Id, true);
+                _article = _article with { IsRead = true };
+                await State.RefreshAsync();
+            }
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+    }
+
+    private void GoBack() => Nav.NavigateTo("/");
+
+    private async Task ToggleSave(bool saved)
+    {
+        await Api.SetSavedAsync(Id, saved);
+        if (_article is not null) _article = _article with { IsSaved = saved };
+    }
+
+    private async Task ToggleRead()
+    {
+        if (_article is null) return;
+        var next = !_article.IsRead;
+        await Api.SetReadAsync(Id, next);
+        _article = _article with { IsRead = next };
+        await State.RefreshAsync();
+    }
+
+    /// <summary>Strip script/style/iframe so feed HTML can't run in our origin.</summary>
+    private static string Sanitize(string html) =>
+        Regex.Replace(html, "<(script|style|iframe)[^>]*>.*?</\\1>", "",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+}

@@ -1,0 +1,172 @@
+@implements IDisposable
+@inject AppState State
+@inject ApiClient Api
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<nav class="tdr-sidebar @(Open ? "open" : "")">
+    @if (Auth.CurrentUser is { } user)
+    {
+        <a class="tdr-acct" href="/settings/profile" style="text-decoration:none">
+            <div class="tdr-avatar">@user.Initials</div>
+            <div class="who">
+                <div class="nm">@user.DisplayName</div>
+                <div class="em">@user.Email</div>
+            </div>
+        </a>
+    }
+
+    <div class="tdr-sidebar-label">Feeds</div>
+
+    <button class="tdr-feed-item special @(IsActive(null, false) ? "active" : "")" @onclick="@(() => Go(null, false))">
+        <span style="font-family:var(--typer); font-size:9px">●</span>
+        <span class="name">Today's stories</span>
+        <span class="count">@State.UnreadTotal</span>
+    </button>
+    <button class="tdr-feed-item special @(IsActive(null, true) ? "active" : "")" @onclick="@(() => Go(null, true))">
+        <span style="font-family:var(--typer); font-size:9px">☆</span>
+        <span class="name">Saved</span>
+    </button>
+
+    <div class="tdr-sidebar-divider"></div>
+
+    @foreach (var c in State.Categories)
+    {
+        var active = IsActive(c.Id, false);
+        <div>
+            <button class="tdr-feed-item @(active ? "active" : "")" @onclick="@(() => Go(c.Id, false))">
+                <span class="tdr-feed-dot" style="background:@c.Color"></span>
+                <span class="name">@c.Name</span>
+                <span class="count">@c.UnreadCount</span>
+            </button>
+            @if (active && _subFeeds is not null)
+            {
+                <div class="tdr-subfeeds">
+                    @foreach (var f in _subFeeds)
+                    {
+                        <div class="tdr-subfeed">
+                            <span class="name">@f.Title</span>
+                            <span class="count">@f.UnreadCount</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    <button class="tdr-addfeed" @onclick="() => _showAdd = true">+ add feed</button>
+
+    <div class="tdr-sidebar-foot">
+        <a href="/feeds">Manage feeds</a>
+        <a href="/settings/profile">Account &amp; preferences</a>
+        <a href="/settings/devices">Sync &amp; devices</a>
+        <button @onclick="ToggleTheme">Toggle theme</button>
+        <button @onclick="SignOut">Sign out</button>
+    </div>
+</nav>
+
+<AddFeedDialog @bind-Visible="_showAdd" Categories="State.Categories"
+               DefaultCategoryId="_activeCat" OnAdded="OnFeedAdded" />
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback OnNavigate { get; set; }
+    [Inject] public ThemeService Theme { get; set; } = default!;
+
+    private bool _showAdd;
+    private Guid? _activeCat;
+    private bool _activeSaved;
+    private List<FeedDto>? _subFeeds;
+
+    protected override async Task OnInitializedAsync()
+    {
+        State.Changed += OnStateChanged;
+        Nav.LocationChanged += OnLocationChanged;
+        ReadSelection();
+        await State.EnsureLoadedAsync();
+        await LoadSubFeeds();
+    }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        ReadSelection();
+        await LoadSubFeeds();
+        StateHasChanged();
+    }
+
+    private void ReadSelection()
+    {
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        _activeSaved = QueryValue(uri.Query, "saved") == "true";
+        _activeCat = Guid.TryParse(QueryValue(uri.Query, "cat"), out var g) ? g : null;
+    }
+
+    private async Task LoadSubFeeds()
+    {
+        if (_activeCat is { } id)
+        {
+            try { _subFeeds = await Api.GetFeedsAsync(id); }
+            catch { _subFeeds = null; }
+        }
+        else _subFeeds = null;
+    }
+
+    private bool IsActive(Guid? cat, bool saved) => _activeSaved == saved && _activeCat == cat;
+
+    private async Task Go(Guid? cat, bool saved)
+    {
+        var path = CurrentEditionPath();
+        var query = new List<string>();
+        if (cat is { } c) query.Add($"cat={c}");
+        if (saved) query.Add("saved=true");
+        Nav.NavigateTo(path + (query.Count > 0 ? "?" + string.Join("&", query) : ""));
+        await OnNavigate.InvokeAsync();
+    }
+
+    /// <summary>Keep the current edition date when switching sections; otherwise go to the latest.</summary>
+    private string CurrentEditionPath()
+    {
+        var rel = Nav.ToBaseRelativePath(Nav.Uri);
+        var path = "/" + rel.Split('?')[0];
+        return path.StartsWith("/edition/") ? path : "/";
+    }
+
+    private async Task OnFeedAdded()
+    {
+        await State.RefreshAsync();
+        await LoadSubFeeds();
+    }
+
+    private async Task ToggleTheme()
+    {
+        var current = Auth.CurrentUser?.Preferences ?? new PreferencesDto();
+        current.Theme = current.Theme == ThemePreference.Evening ? ThemePreference.Newsprint : ThemePreference.Evening;
+        var updated = await Api.UpdatePreferencesAsync(current);
+        Auth.UpdateUser(updated);
+    }
+
+    private async Task SignOut()
+    {
+        await Auth.LogoutAsync();
+        Nav.NavigateTo("/login", replace: true);
+    }
+
+    private static string? QueryValue(string query, string key)
+    {
+        if (string.IsNullOrEmpty(query)) return null;
+        foreach (var part in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = part.Split('=', 2);
+            if (kv.Length == 2 && kv[0] == key) return Uri.UnescapeDataString(kv[1]);
+        }
+        return null;
+    }
+
+    public void Dispose()
+    {
+        State.Changed -= OnStateChanged;
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}

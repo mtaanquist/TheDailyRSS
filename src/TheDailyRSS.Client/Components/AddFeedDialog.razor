@@ -1,0 +1,144 @@
+@inject ApiClient Api
+
+@if (Visible)
+{
+    <div class="tdr-overlay" @onclick="Close">
+        <div class="tdr-modal" @onclick:stopPropagation="true">
+            <div class="tdr-modal-head">
+                <h2>Add a feed</h2>
+                <button class="x" @onclick="Close">✕ CLOSE</button>
+            </div>
+            <hr />
+
+            <div class="tdr-field">
+                <label>URL or site</label>
+                <input class="tdr-input" placeholder="https://www.theverge.com" @bind="_url" @bind:event="oninput"
+                       @onkeydown="OnKey" />
+                <div class="tdr-hint">↳ we'll find the RSS feed automatically</div>
+            </div>
+
+            <button class="tdr-btn ghost" @onclick="Detect" disabled="@(_busy || string.IsNullOrWhiteSpace(_url))">
+                @(_detecting ? "finding…" : "find feed →")
+            </button>
+
+            @if (_error is not null)
+            {
+                <div class="tdr-error">@_error</div>
+            }
+
+            @if (_result is { Found: true })
+            {
+                <div class="tdr-preview">
+                    <div class="row">
+                        <div class="glyph">@_result.IconText</div>
+                        <div style="flex:1">
+                            <div style="font-weight:700">@_result.Title</div>
+                            <div style="font-family:var(--typer); font-size:10px; color:var(--ink-3)">@_result.SiteUrl</div>
+                        </div>
+                        <span class="tdr-chip green">✓ FOUND</span>
+                    </div>
+                    @if (_result.RecentHeadlines.Length > 0)
+                    {
+                        <div style="margin-top:10px; font-style:italic; font-size:11px; color:var(--ink-2)">recent headlines:</div>
+                        @foreach (var h in _result.RecentHeadlines)
+                        {
+                            <div style="font-size:12.5px; margin-top:3px">@h</div>
+                        }
+                    }
+                </div>
+
+                <div class="tdr-field" style="margin-top:14px">
+                    <label>Add to folder</label>
+                    <div class="tdr-folder-chips">
+                        @foreach (var c in Categories)
+                        {
+                            <button class="tdr-folder-chip @(c.Id == _categoryId ? "active" : "")"
+                                    @onclick="() => _categoryId = c.Id">@c.Name</button>
+                        }
+                    </div>
+                </div>
+            }
+
+            <div class="tdr-modal-actions">
+                <button class="tdr-link muted" @onclick="Close">cancel</button>
+                <button class="tdr-btn" @onclick="Subscribe"
+                        disabled="@(_busy || _result is not { Found: true } || _categoryId is null)">
+                    @(_subscribing ? "subscribing…" : "subscribe")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback<bool> VisibleChanged { get; set; }
+    [Parameter] public IReadOnlyList<CategoryDto> Categories { get; set; } = [];
+    [Parameter] public Guid? DefaultCategoryId { get; set; }
+    [Parameter] public EventCallback OnAdded { get; set; }
+
+    private string _url = "";
+    private FeedDetectResult? _result;
+    private Guid? _categoryId;
+    private string? _error;
+    private bool _detecting;
+    private bool _subscribing;
+    private bool _busy => _detecting || _subscribing;
+
+    protected override void OnParametersSet()
+    {
+        _categoryId ??= DefaultCategoryId ?? Categories.FirstOrDefault()?.Id;
+    }
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Detect();
+    }
+
+    private async Task Detect()
+    {
+        if (string.IsNullOrWhiteSpace(_url)) return;
+        _error = null;
+        _result = null;
+        _detecting = true;
+        try
+        {
+            _result = await Api.DetectFeedAsync(new AddFeedRequest { Url = _url, CategoryId = _categoryId ?? Guid.Empty });
+            if (_result is { Found: false })
+                _error = "Couldn't find an RSS or Atom feed at that address.";
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _detecting = false; }
+    }
+
+    private async Task Subscribe()
+    {
+        if (_result is not { Found: true } || _categoryId is null) return;
+        _error = null;
+        _subscribing = true;
+        try
+        {
+            await Api.AddFeedAsync(new AddFeedRequest { Url = _result.FeedUrl ?? _url, CategoryId = _categoryId.Value });
+            await OnAdded.InvokeAsync();
+            Reset();
+            await VisibleChanged.InvokeAsync(false);
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _subscribing = false; }
+    }
+
+    private async Task Close()
+    {
+        Reset();
+        await VisibleChanged.InvokeAsync(false);
+    }
+
+    private void Reset()
+    {
+        _url = "";
+        _result = null;
+        _error = null;
+        _detecting = false;
+        _subscribing = false;
+    }
+}

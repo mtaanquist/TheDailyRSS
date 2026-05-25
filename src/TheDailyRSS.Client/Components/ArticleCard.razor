@@ -1,0 +1,40 @@
+@inject NavigationManager Nav
+
+<div class="tdr-story @(Article.IsRead ? "read" : "")" @onclick="Open">
+    <div class="tdr-kicker">
+        <span>@Article.FeedTitle · @Relative(Article.PublishedAt)</span>
+        <span style="margin-left:auto">
+            <StarButton Saved="Article.IsSaved" Size="13" SavedChanged="ToggleSave" />
+        </span>
+    </div>
+    <h2>@Article.Title</h2>
+    @if (ShowImage && !string.IsNullOrEmpty(Article.ImageUrl))
+    {
+        <div style="margin-top:6px"><NewsImage Src="@Article.ImageUrl" Height="70" /></div>
+    }
+    @if (!string.IsNullOrWhiteSpace(Article.Summary))
+    {
+        <div class="teaser">@Article.Summary</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ArticleSummaryDto Article { get; set; } = default!;
+    [Parameter] public bool ShowImage { get; set; } = true;
+    [Parameter] public EventCallback<(Guid Id, bool Saved)> OnSaveToggled { get; set; }
+
+    private void Open() => Nav.NavigateTo($"/article/{Article.Id}");
+
+    private Task ToggleSave(bool saved) => OnSaveToggled.InvokeAsync((Article.Id, saved));
+
+    public static string Relative(DateTimeOffset when)
+    {
+        var delta = DateTimeOffset.Now - when;
+        if (delta < TimeSpan.Zero) delta = TimeSpan.Zero;
+        if (delta.TotalMinutes < 1) return "just now";
+        if (delta.TotalMinutes < 60) return $"{(int)delta.TotalMinutes}m";
+        if (delta.TotalHours < 24) return $"{(int)delta.TotalHours}h";
+        if (delta.TotalDays < 7) return $"{(int)delta.TotalDays}d";
+        return when.ToString("MMM d");
+    }
+}
