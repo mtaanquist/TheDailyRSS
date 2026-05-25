@@ -597,7 +597,7 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
     }
     .tdr-mobile-top .burger { font-size: 20px; background: none; border: none; cursor: pointer; color: var(--ink); text-decoration: none; }
     .tdr-mobile-top a.burger:hover, .tdr-mobile-top a.burger:active { color: var(--red); }
-    .tdr-mobile-top .mt-title { flex: 1; display: flex; flex-direction: column; align-items: center; line-height: 1.05; min-width: 0; }
+    .tdr-mobile-top .mt-title { flex: 1; display: flex; flex-direction: column; align-items: center; line-height: 1.05; min-width: 0; color: var(--ink); text-decoration: none; }
     .tdr-mobile-top .mt-brand { font-family: var(--headline); font-weight: 900; font-size: 20px; letter-spacing: -0.5px; }
     .tdr-mobile-top .mt-date { font-family: var(--typer); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-3); margin-top: 2px; }
     .tdr-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 89; }
