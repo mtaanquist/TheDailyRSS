@@ -559,8 +559,20 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
        clips everything on the right. Center and wrap them instead. */
     .tdr-masthead-meta { flex-wrap: wrap; justify-content: center; gap: 2px 14px; }
     /* The edition nav buttons are wide; let them wrap instead of being clipped
-       by the shell's overflow:hidden on narrow phones. */
-    .tdr-editionbar { flex-wrap: wrap; gap: 8px 10px; padding: 8px 14px; }
+       by the shell's overflow:hidden on narrow phones. Put the date on its own
+       centered line so the prev/next buttons sit balanced together below it,
+       and size the buttons up for comfortable tapping. */
+    .tdr-editionbar { flex-wrap: wrap; gap: 8px 10px; padding: 10px 14px; }
+    .tdr-editionbar .tdr-edition-date { flex-basis: 100%; order: -1; text-align: center; }
+    .tdr-editionbar .tdr-navbtn { padding: 7px 14px; }
+    /* Without :hover on touch, the bare text links read as static labels.
+       Give the toolbar actions a border so they're clearly tappable controls. */
+    .tdr-toolbar { gap: 10px 12px; align-items: center; }
+    .tdr-toolbar .title { flex-basis: 100%; }
+    .tdr-toolbar .spacer { display: none; }
+    .tdr-toolbar button.tdr-link {
+        border: 1px solid var(--ink-2); color: var(--ink); padding: 6px 12px;
+    }
     .tdr-lead-grid { grid-template-columns: 1fr; }
     .tdr-grid { grid-template-columns: 1fr; }
     .tdr-grid-item { border-left: none; padding-left: 0; border-top: 1px dotted var(--rule); padding-top: 12px; }
