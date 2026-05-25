@@ -553,24 +553,22 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
         /* Open below the header so the burger (in the header, kept on top) stays
            tappable and toggles the drawer closed instead of being covered by it. */
         display: flex; position: fixed; top: 0; right: 30%; bottom: 0; left: 0; z-index: 90;
-        padding-top: calc(48px + env(safe-area-inset-top));
+        padding-top: calc(54px + env(safe-area-inset-top));
         box-shadow: 4px 0 16px var(--shadow); width: auto;
     }
     /* Reclaim the footer's vertical space for reading on phones; its links live
        in the sidebar drawer. Pad the scroll area's bottom for the home indicator. */
     .tdr-footer { display: none; }
     .tdr-main { padding: 10px 14px calc(40px + env(safe-area-inset-bottom)); }
-    /* The three meta items don't fit one line on a phone; without wrapping they
-       force the page wider than the viewport and the shell's overflow:hidden
-       clips everything on the right. Center and wrap them instead. */
-    .tdr-masthead-meta { flex-wrap: wrap; justify-content: center; gap: 2px 14px; }
-    /* The edition nav buttons are wide; let them wrap instead of being clipped
-       by the shell's overflow:hidden on narrow phones. Put the date on its own
-       centered line so the prev/next buttons sit balanced together below it,
-       and size the buttons up for comfortable tapping. */
-    .tdr-editionbar { flex-wrap: wrap; gap: 8px 10px; padding: 10px 14px; }
-    .tdr-editionbar .tdr-edition-date { flex-basis: 100%; order: -1; text-align: center; }
-    .tdr-editionbar .tdr-navbtn { padding: 7px 14px; }
+    /* The date now lives in the sticky header, so drop the Vol/No. + unread meta
+       row and the duplicate big nameplate to keep the mobile masthead compact —
+       it's left showing just the category line ("— Local —"). */
+    .tdr-masthead { padding: 8px 14px; }
+    .tdr-masthead-meta { display: none; }
+    /* Slim, inline edition nav sitting either side of the date label; the buttons
+       wrap only as a fallback. Word labels collapse to bare arrows below 400px. */
+    .tdr-editionbar { flex-wrap: wrap; gap: 6px 8px; padding: 8px 14px; }
+    .tdr-editionbar .tdr-navbtn { padding: 4px 10px; }
     /* Keep the title + "unread only" toggle on one line (toggle pinned right via
        the flex spacer); "mark all read" wraps below as a bordered button — on
        touch there's no :hover, so the border is what signals it's tappable. */
@@ -582,7 +580,7 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
     .tdr-grid { grid-template-columns: 1fr; }
     .tdr-grid-item { border-left: none; padding-left: 0; border-top: 1px dotted var(--rule); padding-top: 12px; }
     .tdr-grid-item:nth-child(3n+1) { border-top: 1px dotted var(--rule); padding-top: 12px; }
-    .tdr-masthead-title { font-size: 30px; }
+    .tdr-masthead-title { display: none; } /* duplicate of the sticky-bar brand */
     .tdr-settings { flex-direction: column; }
     .tdr-settings-nav { width: auto; border-right: none; border-bottom: 1px solid var(--rule); display: flex; flex-wrap: wrap; gap: 4px; }
     .tdr-settings-nav a { margin: 0; }
@@ -599,6 +597,13 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
     }
     .tdr-mobile-top .burger { font-size: 20px; background: none; border: none; cursor: pointer; color: var(--ink); text-decoration: none; }
     .tdr-mobile-top a.burger:hover, .tdr-mobile-top a.burger:active { color: var(--red); }
-    .tdr-mobile-top .mt-title { font-family: var(--headline); font-weight: 900; font-size: 20px; flex: 1; text-align: center; letter-spacing: -0.5px; }
+    .tdr-mobile-top .mt-title { flex: 1; display: flex; flex-direction: column; align-items: center; line-height: 1.05; min-width: 0; }
+    .tdr-mobile-top .mt-brand { font-family: var(--headline); font-weight: 900; font-size: 20px; letter-spacing: -0.5px; }
+    .tdr-mobile-top .mt-date { font-family: var(--typer); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-3); margin-top: 2px; }
     .tdr-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 89; }
+}
+
+/* On the narrowest phones, collapse the edition nav labels to bare arrows. */
+@media (max-width: 400px) {
+    .tdr-editionbar .tdr-navbtn .lbl { display: none; }
 }
