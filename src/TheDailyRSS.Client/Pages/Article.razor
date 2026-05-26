@@ -54,6 +54,30 @@
                 <a class="tdr-btn" href="@a.Url" target="_blank" rel="noopener noreferrer">read at source ↗</a>
                 <button class="tdr-link muted" @onclick="ToggleRead">@(a.IsRead ? "mark unread" : "mark read")</button>
             </div>
+
+            @if (_neighbors is { } nb && (nb.Prev is not null || nb.Next is not null))
+            {
+                <nav class="tdr-article-nav">
+                    @if (nb.Prev is { } prev)
+                    {
+                        <a class="prev" href="/article/@prev.Id">
+                            <span class="dir"><Icon Name="arrow-left" Size="13" /> Previous</span>
+                            <span class="hd">@prev.Title</span>
+                        </a>
+                    }
+                    else
+                    {
+                        <span></span>
+                    }
+                    @if (nb.Next is { } next)
+                    {
+                        <a class="next" href="/article/@next.Id">
+                            <span class="dir">Next <Icon Name="arrow-right" Size="13" /></span>
+                            <span class="hd">@next.Title</span>
+                        </a>
+                    }
+                </nav>
+            }
         </article>
     }
 </div>
@@ -62,11 +86,13 @@
     [Parameter] public Guid Id { get; set; }
 
     private ArticleDto? _article;
+    private ArticleNeighborsDto? _neighbors;
     private string? _error;
 
     protected override async Task OnParametersSetAsync()
     {
         _article = null;
+        _neighbors = null;
         _error = null;
         try
         {
@@ -77,6 +103,8 @@
                 _article = _article with { IsRead = true };
                 await State.RefreshAsync();
             }
+            // Neighbours aren't needed for the first paint — load them after the story shows.
+            _neighbors = await Api.GetArticleNeighborsAsync(Id);
         }
         catch (ApiException ex) { _error = ex.Message; }
     }

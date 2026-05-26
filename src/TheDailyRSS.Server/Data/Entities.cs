@@ -12,6 +12,7 @@ public sealed class AppUser : IdentityUser<Guid>
     public ThemePreference Theme { get; set; } = ThemePreference.Newsprint;
     public HeadlineFont HeadlineFont { get; set; } = HeadlineFont.PtSerif;
     public ReadingDensity Density { get; set; } = ReadingDensity.Balanced;
+    public bool ShowUnread { get; set; } = true;
 
     public List<Subscription> Subscriptions { get; set; } = new();
     public List<UserArticleState> ArticleStates { get; set; } = new();

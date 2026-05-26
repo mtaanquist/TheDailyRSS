@@ -77,6 +77,7 @@ public sealed class ApiClient(HttpClient http)
         GetAsync<EditionDto>($"api/editions/{D(date)}?{Query(categoryId, sourceId, saved, unreadOnly)}");
 
     public Task<ArticleDto> GetArticleAsync(Guid id) => GetAsync<ArticleDto>($"api/articles/{id}");
+    public Task<ArticleNeighborsDto> GetArticleNeighborsAsync(Guid id) => GetAsync<ArticleNeighborsDto>($"api/articles/{id}/neighbors");
     public Task SetReadAsync(Guid id, bool value) => SendAsync(HttpMethod.Post, $"api/articles/{id}/read", new SetBool(value));
     public Task SetSavedAsync(Guid id, bool value) => SendAsync(HttpMethod.Post, $"api/articles/{id}/save", new SetBool(value));
     public Task SetPositionAsync(Guid id, int percent) => SendAsync(HttpMethod.Post, $"api/articles/{id}/position", new SetPosition(percent));

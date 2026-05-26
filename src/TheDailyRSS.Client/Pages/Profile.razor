@@ -79,12 +79,19 @@
                         }
                     </div>
                     <div class="tdr-sidebar-label" style="margin:0 0 4px">Density</div>
-                    <div style="display:flex; gap:6px">
+                    <div style="display:flex; gap:6px; margin-bottom:12px">
                         @foreach (var (val, label) in Densities)
                         {
                             <span class="tdr-theme-opt @(Pref.Density == val ? "active" : "")" @onclick="() => SetDensity(val)">@label</span>
                         }
                     </div>
+
+                    <div class="tdr-sidebar-label" style="margin:0 0 4px">Unread</div>
+                    <label class="tdr-toggle-row" @onclick="() => SetShowUnread(!Pref.ShowUnread)">
+                        <span class="tdr-toggle @(Pref.ShowUnread ? "on" : "")"><span class="knob"></span></span>
+                        <span>Show unread counts &amp; filter</span>
+                    </label>
+                    <div class="tdr-hint">Turn off for a cleaner read. Stories you've opened are still tracked and dimmed.</div>
                 </div>
             </div>
 
@@ -151,10 +158,11 @@
     private Task SetTheme(ThemePreference t) => SavePref(p => p.Theme = t);
     private Task SetFont(HeadlineFont f) => SavePref(p => p.HeadlineFont = f);
     private Task SetDensity(ReadingDensity d) => SavePref(p => p.Density = d);
+    private Task SetShowUnread(bool v) => SavePref(p => p.ShowUnread = v);
 
     private async Task SavePref(Action<PreferencesDto> mutate)
     {
-        var pref = new PreferencesDto { Theme = Pref.Theme, HeadlineFont = Pref.HeadlineFont, Density = Pref.Density };
+        var pref = new PreferencesDto { Theme = Pref.Theme, HeadlineFont = Pref.HeadlineFont, Density = Pref.Density, ShowUnread = Pref.ShowUnread };
         mutate(pref);
         _error = null;
         try

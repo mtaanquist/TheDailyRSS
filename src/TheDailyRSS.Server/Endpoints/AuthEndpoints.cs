@@ -115,6 +115,7 @@ public static class AuthEndpoints
         user.Theme = req.Theme;
         user.HeadlineFont = req.HeadlineFont;
         user.Density = req.Density;
+        user.ShowUnread = req.ShowUnread;
         await users.UpdateAsync(user);
         return Results.Ok(user.ToDto(await users.GetRolesAsync(user)));
     }

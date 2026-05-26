@@ -90,7 +90,7 @@
     private SyncStatusDto? _status;
 
     private static readonly string[] SyncItems =
-        ["Feeds", "Read / unread", "Saved articles", "Reading position", "Preferences", "Past editions"];
+        ["Feeds", "Read / unread", "Read later", "Reading position", "Preferences", "Past editions"];
 
     private string LastSync => _status?.LastSyncAt is { } t ? $"last refresh {Relative(t)}" : "no refresh yet";
 

@@ -29,13 +29,16 @@
     <div class="tdr-sidebar-label">Feeds</div>
 
     <button class="tdr-feed-item special @(IsActive(null, false) ? "active" : "")" @onclick="@(() => GoSection(null, false))">
-        <span style="font-family:var(--typer); font-size:9px">●</span>
+        <Icon Name="newspaper" Size="14" />
         <span class="name">Today's stories</span>
-        <span class="count">@State.UnreadTotal</span>
+        @if (ShowUnread)
+        {
+            <span class="count">@State.UnreadTotal</span>
+        }
     </button>
     <button class="tdr-feed-item special @(IsActive(null, true) ? "active" : "")" @onclick="@(() => GoSection(null, true))">
-        <span style="font-family:var(--typer); font-size:9px">☆</span>
-        <span class="name">Saved</span>
+        <Icon Name="bookmark" Size="14" />
+        <span class="name">Read later</span>
     </button>
 
     <div class="tdr-sidebar-divider"></div>
@@ -47,12 +50,15 @@
         <div>
             <div class="tdr-feed-item @(active ? "active" : "")">
                 <button class="tdr-folder-toggle" @onclick="() => ToggleExpand(c.Id)" aria-label="Toggle folder">
-                    @(expanded ? "▾" : "▸")
+                    <Icon Name="@(expanded ? "chevron-down" : "chevron-right")" Size="12" />
                 </button>
                 <span class="tdr-feed-dot" style="background:@c.Color"></span>
                 <button class="tdr-folder-name" @onclick="@(() => GoSection(c.Slug, false))">
                     <span class="name">@c.Name</span>
-                    <span class="count">@c.UnreadCount</span>
+                    @if (ShowUnread)
+                    {
+                        <span class="count">@c.UnreadCount</span>
+                    }
                 </button>
             </div>
             @if (expanded && _feedsByCat.TryGetValue(c.Id, out var feeds))
@@ -63,7 +69,10 @@
                         <button class="tdr-subfeed @(_activeSrc == f.SourceId ? "active" : "")"
                                 @onclick="@(() => GoSource(f.SourceId))">
                             <span class="name">@f.Title</span>
-                            <span class="count">@f.UnreadCount</span>
+                            @if (ShowUnread)
+                            {
+                                <span class="count">@f.UnreadCount</span>
+                            }
                         </button>
                     }
                     @if (feeds.Count == 0)
@@ -75,7 +84,7 @@
         </div>
     }
 
-    <button class="tdr-addfeed" @onclick="() => _showAdd = true">+ add feed</button>
+    <button class="tdr-addfeed" @onclick="() => _showAdd = true"><Icon Name="plus" Size="13" /> add feed</button>
 
     <div class="tdr-sidebar-foot">
         <a href="/feeds">Manage feeds</a>
@@ -93,6 +102,8 @@
 @code {
     [Parameter] public bool Open { get; set; }
     [Parameter] public EventCallback OnNavigate { get; set; }
+
+    private bool ShowUnread => Auth.CurrentUser?.Preferences.ShowUnread ?? true;
 
     private bool _showAdd;
     private Guid? _activeCat;

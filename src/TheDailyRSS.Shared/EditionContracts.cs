@@ -38,6 +38,12 @@ public sealed record ArticleDto(
 /// <summary>One day that has at least one article — used by the archive picker.</summary>
 public sealed record EditionDateDto(DateOnly Date, int ArticleCount, int UnreadCount);
 
+/// <summary>A minimal article reference (id + headline) for navigation links.</summary>
+public sealed record ArticleLinkDto(Guid Id, string Title);
+
+/// <summary>The stories on either side of the one being read, within the same edition.</summary>
+public sealed record ArticleNeighborsDto(ArticleLinkDto? Prev, ArticleLinkDto? Next);
+
 /// <summary>A category's slice of an edition (a "section" of the paper).</summary>
 public sealed record EditionSectionDto(
     Guid CategoryId,

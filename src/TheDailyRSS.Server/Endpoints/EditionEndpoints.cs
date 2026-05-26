@@ -11,8 +11,14 @@ namespace TheDailyRSS.Server.Endpoints;
 
 public static class EditionEndpoints
 {
-    /// <summary>How many articles each category contributes to the curated front page.</summary>
-    private const int FrontPageSectionSize = 5;
+    /// <summary>How many articles a category contributes to the curated front page: 5–8, varied per
+    /// section and per day for a more newspapery layout. Deterministic in (date, category) so the count
+    /// is stable across refreshes of the same edition.</summary>
+    private static int FrontPageSectionSize(DateOnly date, Guid categoryId)
+    {
+        var hash = (uint)HashCode.Combine(date.DayNumber, categoryId);
+        return 5 + (int)(hash % 4);
+    }
 
     public static void MapEditionEndpoints(this IEndpointRouteBuilder app)
     {
@@ -24,6 +30,7 @@ public static class EditionEndpoints
 
         var articles = app.MapGroup("/api/articles").RequireAuthorization();
         articles.MapGet("/{id:guid}", GetArticle);
+        articles.MapGet("/{id:guid}/neighbors", GetNeighbors);
         articles.MapPost("/{id:guid}/read", SetRead);
         articles.MapPost("/{id:guid}/save", SetSaved);
         articles.MapPost("/{id:guid}/position", SetPosition);
@@ -151,7 +158,7 @@ public static class EditionEndpoints
                 .GroupBy(s => (s.CategoryId, s.CategoryName, s.CategoryColor))
                 .Select(g => new EditionSectionDto(
                     g.Key.CategoryId, g.Key.CategoryName, g.Key.CategoryColor,
-                    g.Count(), g.Take(FrontPageSectionSize).ToList()))
+                    g.Count(), g.Take(FrontPageSectionSize(date, g.Key.CategoryId)).ToList()))
                 .OrderBy(s => order.TryGetValue(s.CategoryId, out var o) ? o : int.MaxValue)
                 .ToList();
         }
@@ -221,6 +228,30 @@ public static class EditionEndpoints
                 a.Url))
             .FirstOrDefaultAsync(ct);
         return dto is null ? Results.NotFound() : Results.Ok(dto);
+    }
+
+    /// <summary>The previous/next stories in the same edition (day), in the same order the edition grid
+    /// uses (newest first). Keyword filters apply so neighbours match what the reader actually browses.</summary>
+    private static async Task<IResult> GetNeighbors(Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
+    {
+        var uid = principal.GetUserId();
+        var editionDate = await Subscribed(db, uid)
+            .Where(a => a.Id == id)
+            .Select(a => (DateOnly?)a.EditionDate)
+            .FirstOrDefaultAsync(ct);
+        if (editionDate is not { } day) return Results.NotFound();
+
+        var filters = await LoadFiltersAsync(db, uid, ct);
+        var ordered = await ApplyKeywords(Subscribed(db, uid), filters)
+            .Where(a => a.EditionDate == day)
+            .OrderByDescending(a => a.PublishedAt).ThenBy(a => a.Id)
+            .Select(a => new ArticleLinkDto(a.Id, a.Title))
+            .ToListAsync(ct);
+
+        var i = ordered.FindIndex(a => a.Id == id);
+        var prev = i > 0 ? ordered[i - 1] : null;
+        var next = i >= 0 && i < ordered.Count - 1 ? ordered[i + 1] : null;
+        return Results.Ok(new ArticleNeighborsDto(prev, next));
     }
 
     // ── Per-user state (lazy upsert) ────────────────────────────────────
