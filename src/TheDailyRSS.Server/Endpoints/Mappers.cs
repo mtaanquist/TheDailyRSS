@@ -23,7 +23,7 @@ public static class Mappers
         Initials(u.DisplayName),
         u.CreatedAt,
         roles?.Contains(Auth.Roles.Admin) ?? false,
-        new PreferencesDto { Theme = u.Theme, HeadlineFont = u.HeadlineFont, Density = u.Density });
+        new PreferencesDto { Theme = u.Theme, HeadlineFont = u.HeadlineFont, Density = u.Density, ShowUnread = u.ShowUnread });
 
     public static SessionDto ToDto(this UserSession s, Guid currentSessionId) => new(
         s.Id, s.DeviceLabel, s.UserAgent, s.IpAddress, s.CreatedAt, s.LastSeenAt, s.Id == currentSessionId);

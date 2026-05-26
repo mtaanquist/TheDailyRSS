@@ -49,6 +49,7 @@ public sealed class PreferencesDto
     public ThemePreference Theme { get; set; } = ThemePreference.Newsprint;
     public HeadlineFont HeadlineFont { get; set; } = HeadlineFont.PtSerif;
     public ReadingDensity Density { get; set; } = ReadingDensity.Balanced;
+    public bool ShowUnread { get; set; } = true;
 }
 
 public sealed class UpdateProfileRequest
