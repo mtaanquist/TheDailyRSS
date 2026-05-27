@@ -34,6 +34,7 @@ public static class EditionEndpoints
         articles.MapGet("/{id:guid}/neighbors", GetNeighbors);
         articles.MapPost("/{id:guid}/read", SetRead);
         articles.MapPost("/{id:guid}/save", SetSaved);
+        articles.MapPost("/{id:guid}/hide", SetHidden);
         articles.MapPost("/{id:guid}/position", SetPosition);
     }
 
@@ -42,6 +43,10 @@ public static class EditionEndpoints
     /// <summary>Articles the user can see: those belonging to a source they subscribe to.</summary>
     private static IQueryable<Article> Subscribed(AppDbContext db, Guid uid) =>
         db.Articles.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid));
+
+    /// <summary>Drops articles the user has hidden. Applied everywhere except the Hidden view itself.</summary>
+    private static IQueryable<Article> NotHidden(IQueryable<Article> q, Guid uid) =>
+        q.Where(a => !a.States.Any(s => s.UserId == uid && s.IsHidden));
 
     /// <summary>Drops articles matching any of the user's mute terms. Bare terms match whole words;
     /// a <c>*</c> wildcard matches partials (see <see cref="KeywordMatching"/>). Postgres runs the
@@ -75,7 +80,7 @@ public static class EditionEndpoints
             sub.CustomTitle ?? a.Source!.Title, a.Source!.IconText,
             sub.CategoryId, sub.Category!.Name, sub.Category.Color,
             a.ImageUrl, a.PublishedAt,
-            st != null && st.IsRead, st != null && st.IsSaved, a.Url);
+            st != null && st.IsRead, st != null && st.IsSaved, st != null && st.IsHidden, a.Url);
 
     // ── Reads ───────────────────────────────────────────────────────────
 
@@ -83,7 +88,7 @@ public static class EditionEndpoints
     {
         var uid = principal.GetUserId();
         var filters = await LoadFiltersAsync(db, uid, ct);
-        var visible = ApplyKeywords(Subscribed(db, uid), filters);
+        var visible = NotHidden(ApplyKeywords(Subscribed(db, uid), filters), uid);
 
         var grouped = await (
             from a in visible
@@ -106,32 +111,34 @@ public static class EditionEndpoints
         Guid? categoryId, Guid? sourceId, bool? unreadOnly, CancellationToken ct)
     {
         var uid = principal.GetUserId();
-        var latestQuery = Subscribed(db, uid);
+        var latestQuery = NotHidden(Subscribed(db, uid), uid);
         if (sourceId is { } sid) latestQuery = latestQuery.Where(a => a.SourceId == sid);
         var latest = await latestQuery.MaxAsync(a => (DateOnly?)a.EditionDate, ct);
         var date = latest ?? Today(opts.Value);
-        return await BuildEdition(uid, date, categoryId, sourceId, saved: false, unreadOnly ?? false, db, opts.Value, ct);
+        return await BuildEdition(uid, date, categoryId, sourceId, saved: false, hidden: false, unreadOnly ?? false, db, opts.Value, ct);
     }
 
     private static async Task<IResult> GetEdition(
         string date, ClaimsPrincipal principal, AppDbContext db, IOptions<FeedOptions> opts,
-        Guid? categoryId, Guid? sourceId, bool? saved, bool? unreadOnly, CancellationToken ct)
+        Guid? categoryId, Guid? sourceId, bool? saved, bool? hidden, bool? unreadOnly, CancellationToken ct)
     {
         if (!DateOnly.TryParse(date, out var d))
             return Results.BadRequest(new { error = "Invalid date." });
-        return await BuildEdition(principal.GetUserId(), d, categoryId, sourceId, saved ?? false, unreadOnly ?? false, db, opts.Value, ct);
+        return await BuildEdition(principal.GetUserId(), d, categoryId, sourceId, saved ?? false, hidden ?? false, unreadOnly ?? false, db, opts.Value, ct);
     }
 
     private static async Task<IResult> BuildEdition(
-        Guid uid, DateOnly date, Guid? categoryId, Guid? sourceId, bool saved, bool unreadOnly,
+        Guid uid, DateOnly date, Guid? categoryId, Guid? sourceId, bool saved, bool hidden, bool unreadOnly,
         AppDbContext db, FeedOptions opts, CancellationToken ct)
     {
         var filters = await LoadFiltersAsync(db, uid, ct);
         var query = ApplyKeywords(Subscribed(db, uid), filters);
 
-        // "Saved" is a cross-date pseudo-section; everything else is bound to the day.
-        if (saved) query = query.Where(a => a.States.Any(s => s.UserId == uid && s.IsSaved));
-        else query = query.Where(a => a.EditionDate == date);
+        // "Saved" and "Hidden" are cross-date pseudo-sections; everything else is bound to the day.
+        // Hidden articles are dropped from every view except the Hidden list itself.
+        if (hidden) query = query.Where(a => a.States.Any(s => s.UserId == uid && s.IsHidden));
+        else if (saved) query = NotHidden(query, uid).Where(a => a.States.Any(s => s.UserId == uid && s.IsSaved));
+        else query = NotHidden(query, uid).Where(a => a.EditionDate == date);
 
         if (categoryId is { } cid)
             query = query.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid && s.CategoryId == cid));
@@ -152,7 +159,7 @@ public static class EditionEndpoints
         // Front page (no drill-down): a curated slice of every category, in taxonomy order.
         // A single-category view keeps the full flat list.
         List<EditionSectionDto> sections;
-        if (categoryId is null && sourceId is null && !saved)
+        if (categoryId is null && sourceId is null && !saved && !hidden)
         {
             var order = await db.Categories.ToDictionaryAsync(c => c.Id, c => c.SortOrder, ct);
             sections = rest
@@ -172,13 +179,13 @@ public static class EditionEndpoints
                 .ToList();
         }
 
-        var unreadTotal = await ApplyKeywords(Subscribed(db, uid), filters)
+        var unreadTotal = await NotHidden(ApplyKeywords(Subscribed(db, uid), filters), uid)
             .CountAsync(a => !a.States.Any(s => s.UserId == uid && s.IsRead), ct);
 
         DateOnly? prev = null, next = null;
-        if (!saved)
+        if (!saved && !hidden)
         {
-            var dateQuery = ApplyKeywords(Subscribed(db, uid), filters);
+            var dateQuery = NotHidden(ApplyKeywords(Subscribed(db, uid), filters), uid);
             if (categoryId is { } c2)
                 dateQuery = dateQuery.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid && s.CategoryId == c2));
             if (sourceId is { } src2)
@@ -204,7 +211,7 @@ public static class EditionEndpoints
             NextDate: next,
             UnreadTotal: unreadTotal,
             CategoryId: categoryId,
-            CategoryName: saved ? "Saved" : heading,
+            CategoryName: hidden ? "Hidden" : saved ? "Saved" : heading,
             Lead: lead,
             Articles: rest,
             Sections: sections);
@@ -225,7 +232,8 @@ public static class EditionEndpoints
                 sub.CustomTitle ?? a.Source!.Title, a.Source!.IconText,
                 sub.CategoryId, sub.Category!.Name, sub.Category.Color,
                 a.ImageUrl, a.PublishedAt,
-                st != null && st.IsRead, st != null && st.IsSaved, st != null ? st.ReadingPositionPercent : 0,
+                st != null && st.IsRead, st != null && st.IsSaved, st != null && st.IsHidden,
+                st != null ? st.ReadingPositionPercent : 0,
                 a.Url))
             .FirstOrDefaultAsync(ct);
         return dto is null ? Results.NotFound() : Results.Ok(dto);
@@ -243,7 +251,7 @@ public static class EditionEndpoints
         if (editionDate is not { } day) return Results.NotFound();
 
         var filters = await LoadFiltersAsync(db, uid, ct);
-        var ordered = await ApplyKeywords(Subscribed(db, uid), filters)
+        var ordered = await NotHidden(ApplyKeywords(Subscribed(db, uid), filters), uid)
             .Where(a => a.EditionDate == day)
             .OrderByDescending(a => a.PublishedAt).ThenBy(a => a.Id)
             .Select(a => new ArticleLinkDto(a.Id, a.Title))
@@ -295,6 +303,16 @@ public static class EditionEndpoints
         return Results.NoContent();
     }
 
+    private static async Task<IResult> SetHidden(Guid id, SetBoolRequest req, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
+    {
+        var state = await GetOrCreateStateAsync(db, principal.GetUserId(), id, ct);
+        if (state is null) return Results.NotFound();
+        state.IsHidden = req.Value;
+        state.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
+    }
+
     private static async Task<IResult> SetPosition(Guid id, SetPositionRequest req, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
     {
         var state = await GetOrCreateStateAsync(db, principal.GetUserId(), id, ct);
@@ -316,7 +334,7 @@ public static class EditionEndpoints
         var uid = principal.GetUserId();
         var filters = await LoadFiltersAsync(db, uid, ct);
 
-        var query = ApplyKeywords(Subscribed(db, uid), filters)
+        var query = NotHidden(ApplyKeywords(Subscribed(db, uid), filters), uid)
             .Where(a => a.EditionDate == d && !a.States.Any(s => s.UserId == uid && s.IsRead));
         if (categoryId is { } cid)
             query = query.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid && s.CategoryId == cid));

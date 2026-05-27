@@ -14,6 +14,7 @@ public sealed record ArticleSummaryDto(
     DateTimeOffset PublishedAt,
     bool IsRead,
     bool IsSaved,
+    bool IsHidden,
     string Url);
 
 /// <summary>Full article for the reading pane.</summary>
@@ -32,6 +33,7 @@ public sealed record ArticleDto(
     DateTimeOffset PublishedAt,
     bool IsRead,
     bool IsSaved,
+    bool IsHidden,
     int ReadingPositionPercent,
     string Url);
 

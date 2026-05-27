@@ -40,6 +40,10 @@
         <Icon Name="bookmark" Size="14" />
         <span class="name">Read later</span>
     </button>
+    <button class="tdr-feed-item special @(_activeHidden ? "active" : "")" @onclick="GoHidden">
+        <Icon Name="eye-off" Size="14" />
+        <span class="name">Hidden</span>
+    </button>
 
     <div class="tdr-sidebar-divider"></div>
 
@@ -109,6 +113,7 @@
     private Guid? _activeCat;
     private Guid? _activeSrc;
     private bool _activeSaved;
+    private bool _activeHidden;
     private readonly HashSet<Guid> _expanded = new();
     private readonly Dictionary<Guid, List<FeedDto>> _feedsByCat = new();
 
@@ -136,7 +141,8 @@
         var seg = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].Split('/', StringSplitOptions.RemoveEmptyEntries);
         var first = seg.Length > 0 ? seg[0] : "";
         _activeSaved = first == "saved";
-        _activeCat = first is "" or "today" or "saved"
+        _activeHidden = first == "hidden";
+        _activeCat = first is "" or "today" or "saved" or "hidden"
             ? null
             : State.Categories.FirstOrDefault(c => string.Equals(c.Slug, first, StringComparison.OrdinalIgnoreCase))?.Id;
         _activeSrc = Guid.TryParse(QueryValue(uri.Query, "src"), out var s) ? s : null;
@@ -172,7 +178,13 @@
         catch { _feedsByCat[catId] = new(); }
     }
 
-    private bool IsActive(Guid? cat, bool saved) => _activeSaved == saved && _activeCat == cat;
+    private bool IsActive(Guid? cat, bool saved) => !_activeHidden && _activeSaved == saved && _activeCat == cat;
+
+    private async Task GoHidden()
+    {
+        Nav.NavigateTo("/hidden");
+        await OnNavigate.InvokeAsync();
+    }
 
     /// <summary>Navigate to a section by slug (null = today's front page), keeping the current date.</summary>
     private async Task GoSection(string? slug, bool saved)
