@@ -12,12 +12,13 @@ namespace TheDailyRSS.Server.Endpoints;
 public static class EditionEndpoints
 {
     /// <summary>How many articles a category contributes to the curated front page: 5–8, varied per
-    /// section and per day for a more newspapery layout. Deterministic in (date, category) so the count
-    /// is stable across refreshes of the same edition.</summary>
+    /// section and per day for a more newspapery layout. Deterministic in (date, category) — uses a stable
+    /// hash (not <see cref="HashCode"/>, which is per-process randomized) so the count stays the same across
+    /// refreshes and restarts of the same edition.</summary>
     private static int FrontPageSectionSize(DateOnly date, Guid categoryId)
     {
-        var hash = (uint)HashCode.Combine(date.DayNumber, categoryId);
-        return 5 + (int)(hash % 4);
+        var h = unchecked((uint)(date.DayNumber * 92821) ^ (uint)categoryId.GetHashCode());
+        return 5 + (int)(h % 4);
     }
 
     public static void MapEditionEndpoints(this IEndpointRouteBuilder app)

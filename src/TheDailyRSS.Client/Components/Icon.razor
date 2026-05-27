@@ -1,7 +1,7 @@
 @* Inline Lucide-style stroke icons (matches the sign-out SVG in Sidebar.razor). *@
 <svg class="tdr-icon @Class" viewBox="0 0 24 24" width="@Size" height="@Size" fill="none"
      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    @((MarkupString)Path(Name))
+    @(new MarkupString(Path(Name)))
 </svg>
 
 @code {
