@@ -155,9 +155,10 @@ public sealed class ApiTests(AppFixture fx)
         // News (SortOrder 0) precedes Technology (SortOrder 4).
         Assert.Equal("News", ed.Sections[0].Name);
         Assert.Equal("Technology", ed.Sections[1].Name);
-        // Each section is capped to the front-page slice size.
-        Assert.All(ed.Sections, s => Assert.True(s.Articles.Count <= 5));
-        Assert.Equal(5, ed.Sections[0].Articles.Count); // 7 news articles → capped at 5
+        // Each section is capped to its front-page slice size (5–8, varied per day/category).
+        Assert.All(ed.Sections, s => Assert.True(s.Articles.Count <= 8));
+        Assert.InRange(ed.Sections[0].Articles.Count, 5, 7); // 7 news articles → capped into the 5–8 range
+        Assert.Equal(3, ed.Sections[1].Articles.Count); // 3 tech articles → all shown (below the cap)
     }
 
     [Fact]
