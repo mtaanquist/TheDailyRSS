@@ -120,17 +120,6 @@ html[data-density="airy"] { --story-gap: 26px; }
 .tdr-main { flex: 1; min-width: 0; overflow-y: auto; padding: 16px 24px 40px; transition: opacity 0.15s ease; }
 /* While the next edition loads, keep the current one visible but gently dimmed. */
 .tdr-main.loading { opacity: 0.45; }
-.tdr-footer {
-    flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
-    gap: 12px; flex-wrap: wrap; padding: 10px 24px;
-    /* Keep the footer clear of the iPhone home indicator. */
-    padding-bottom: calc(10px + env(safe-area-inset-bottom));
-    border-top: 1px solid var(--rule); background: var(--paper);
-    font-family: var(--typer); font-size: 10px; letter-spacing: 1px;
-    text-transform: uppercase; color: var(--ink-3);
-}
-.tdr-footer a { color: var(--ink-2); text-decoration: none; }
-.tdr-footer a:hover { color: var(--red); }
 
 /* ---------- masthead ---------- */
 .tdr-masthead {
@@ -232,6 +221,19 @@ button.tdr-subfeed:hover { background: var(--card); color: var(--ink); }
     cursor: pointer; padding: 2px 0;
 }
 .tdr-sidebar-foot a:hover, .tdr-sidebar-foot button:hover { color: var(--red); }
+.tdr-sidebar-colophon {
+    margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--rule);
+    /* Keep the copyright clear of the iPhone home indicator on the mobile slide-out menu. */
+    padding-bottom: env(safe-area-inset-bottom);
+    display: flex; flex-direction: column; gap: 6px;
+    font-family: var(--typer); font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+}
+.tdr-sidebar-colophon .gh {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--ink-2); text-decoration: none; width: fit-content;
+}
+.tdr-sidebar-colophon .gh:hover { color: var(--red); }
+.tdr-sidebar-colophon .copy { color: var(--ink-3); }
 
 /* ---------- account chip at top of sidebar ---------- */
 .tdr-acct { display: flex; align-items: center; gap: 8px; padding: 4px 4px 10px; border-bottom: 1px dashed var(--rule); margin-bottom: 6px; }
@@ -562,9 +564,7 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
         padding-top: calc(54px + env(safe-area-inset-top));
         box-shadow: 4px 0 16px var(--shadow); width: auto;
     }
-    /* Reclaim the footer's vertical space for reading on phones; its links live
-       in the sidebar drawer. Pad the scroll area's bottom for the home indicator. */
-    .tdr-footer { display: none; }
+    /* Pad the scroll area's bottom for the home indicator. */
     .tdr-main { padding: 10px 14px calc(40px + env(safe-area-inset-bottom)); }
     /* Brand + date now live in the sticky header, so drop the whole scrolling
        masthead (Vol/No. + unread row, duplicate nameplate, category line) and let
