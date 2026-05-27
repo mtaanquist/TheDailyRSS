@@ -233,7 +233,6 @@ button.tdr-subfeed:hover { background: var(--card); color: var(--ink); }
     color: var(--ink-2); text-decoration: none; width: fit-content;
 }
 .tdr-sidebar-colophon .gh:hover { color: var(--red); }
-.tdr-sidebar-colophon .copy { color: var(--ink-3); }
 
 /* ---------- account chip at top of sidebar ---------- */
 .tdr-acct { display: flex; align-items: center; gap: 8px; padding: 4px 4px 10px; border-bottom: 1px dashed var(--rule); margin-bottom: 6px; }
