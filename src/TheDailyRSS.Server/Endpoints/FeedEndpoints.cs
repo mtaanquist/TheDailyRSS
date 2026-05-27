@@ -23,6 +23,7 @@ public static class FeedEndpoints
         group.MapDelete("/{id:guid}", Delete);
         group.MapPost("/{id:guid}/move", Move);
         group.MapPost("/{id:guid}/refresh", Refresh);
+        group.MapPost("/refresh", RefreshAll);
 
         var opml = app.MapGroup("/api/opml").RequireAuthorization();
         opml.MapGet("", ExportOpml);
@@ -140,6 +141,21 @@ public static class FeedEndpoints
             .FirstOrDefaultAsync(s => s.Id == id && s.UserId == uid, ct);
         if (sub?.Source is null) return Results.NotFound();
         var added = await fetcher.RefreshAsync(sub.Source, ct);
+        return Results.Ok(new { added });
+    }
+
+    private static async Task<IResult> RefreshAll(
+        ClaimsPrincipal principal, AppDbContext db, FeedFetchService fetcher, CancellationToken ct)
+    {
+        var uid = principal.GetUserId();
+        // Distinct shared sources across the user's subscriptions (a source is fetched once).
+        var sources = await db.Subscriptions.Where(s => s.UserId == uid)
+            .Select(s => s.Source!)
+            .Distinct()
+            .ToListAsync(ct);
+        var added = 0;
+        foreach (var source in sources)
+            added += await fetcher.RefreshAsync(source, ct);
         return Results.Ok(new { added });
     }
 

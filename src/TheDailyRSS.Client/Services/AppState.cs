@@ -3,13 +3,25 @@ using TheDailyRSS.Shared;
 namespace TheDailyRSS.Client.Services;
 
 /// <summary>Shared, cached sidebar state (categories + edition archive) used across pages.</summary>
-public sealed class AppState(ApiClient api)
+public sealed class AppState(ApiClient api, LocalStorage storage)
 {
+    private const string ExpandedKey = "tdr.expanded";
+
     public IReadOnlyList<CategoryDto> Categories { get; private set; } = [];
     public IReadOnlyList<EditionDateDto> EditionDates { get; private set; } = [];
     public bool Loaded { get; private set; }
 
     public event Action? Changed;
+
+    /// <summary>Raised when something outside the edition view (e.g. an F5/"r" hotkey)
+    /// asks the current edition to re-pull its stories.</summary>
+    public event Func<Task>? ReloadRequested;
+
+    public Task RequestReloadAsync() => ReloadRequested?.Invoke() ?? Task.CompletedTask;
+
+    /// <summary>Desktop "fill the window" mode: drops the 1100px cap and hides the gutters.</summary>
+    public bool Expanded { get; private set; }
+    private bool _expandedLoaded;
 
     public int UnreadTotal => Categories.Sum(c => c.UnreadCount);
     public int SavedCount { get; private set; }
@@ -33,9 +45,21 @@ public sealed class AppState(ApiClient api)
 
     public async Task RefreshAsync()
     {
+        if (!_expandedLoaded)
+        {
+            Expanded = await storage.GetAsync(ExpandedKey) == "1";
+            _expandedLoaded = true;
+        }
         Categories = await api.GetCategoriesAsync();
         EditionDates = await api.GetEditionDatesAsync();
         Loaded = true;
+        Changed?.Invoke();
+    }
+
+    public async Task ToggleExpandedAsync()
+    {
+        Expanded = !Expanded;
+        await storage.SetAsync(ExpandedKey, Expanded ? "1" : "0");
         Changed?.Invoke();
     }
 

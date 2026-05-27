@@ -115,11 +115,23 @@ html[data-density="airy"] { --story-gap: 26px; }
     border-left: 1px solid var(--rule);
     border-right: 1px solid var(--rule);
 }
-.tdr-body { display: flex; flex: 1; min-height: 0; }
+/* "Fill window" mode drops the centred cap so the gutters disappear. */
+.tdr-app.tdr-expanded { max-width: none; border-left: none; border-right: none; }
+/* position:relative anchors the floating expand button to the content area's corner. */
+.tdr-body { position: relative; display: flex; flex: 1; min-height: 0; }
 /* The newspaper area is the only scroll region. */
 .tdr-main { flex: 1; min-width: 0; overflow-y: auto; padding: 16px 24px 40px; transition: opacity 0.15s ease; }
 /* While the next edition loads, keep the current one visible but gently dimmed. */
 .tdr-main.loading { opacity: 0.45; }
+.tdr-expand-btn {
+    position: absolute; top: 10px; right: 14px; z-index: 5;
+    width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+    background: var(--paper); border: 1px solid var(--rule); color: var(--ink-2); cursor: pointer;
+}
+.tdr-expand-btn:hover { color: var(--ink); border-color: var(--ink-2); }
+/* Desktop only — on mobile the app is already full-width (no gutters). */
+@media (max-width: 800px) { .tdr-expand-btn { display: none; } }
+.tdr-masthead-title.clickable { cursor: pointer; }
 
 /* ---------- masthead ---------- */
 .tdr-masthead {
