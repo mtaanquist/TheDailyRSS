@@ -14,6 +14,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<UserArticleState> UserArticleStates => Set<UserArticleState>();
     public DbSet<KeywordFilter> KeywordFilters => Set<KeywordFilter>();
     public DbSet<UserSession> Sessions => Set<UserSession>();
+    public DbSet<AiSummary> AiSummaries => Set<AiSummary>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -120,6 +121,23 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(x => x.DeviceLabel).HasMaxLength(120);
             e.Property(x => x.UserAgent).HasMaxLength(1000);
             e.Property(x => x.IpAddress).HasMaxLength(64);
+        });
+
+        b.Entity<AiSummary>(e =>
+        {
+            // One cached summary per user, kind and period; regenerating overwrites it.
+            e.HasIndex(x => new { x.UserId, x.Kind, x.PeriodStart, x.PeriodEnd }).IsUnique();
+            e.Property(x => x.Model).HasMaxLength(200);
+            e.HasOne(x => x.User)
+                .WithMany(u => u.AiSummaries)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<AppUser>(e =>
+        {
+            e.Property(x => x.AiBaseUrl).HasMaxLength(2000);
+            e.Property(x => x.AiModel).HasMaxLength(200);
         });
     }
 }

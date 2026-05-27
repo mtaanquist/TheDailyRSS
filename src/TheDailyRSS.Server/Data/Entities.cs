@@ -14,10 +14,52 @@ public sealed class AppUser : IdentityUser<Guid>
     public ReadingDensity Density { get; set; } = ReadingDensity.Balanced;
     public bool ShowUnread { get; set; } = true;
 
+    // ── Bring-your-own-key AI summaries (opt-in, per-user) ──────────────
+    /// <summary>Master opt-in. When false, no AI affordances appear and no summaries are generated.</summary>
+    public bool AiEnabled { get; set; }
+
+    /// <summary>OpenAI-compatible base URL, e.g. <c>https://api.openai.com/v1</c>.</summary>
+    public string? AiBaseUrl { get; set; }
+
+    /// <summary>Chat-completions model id, e.g. <c>gpt-4o-mini</c>.</summary>
+    public string? AiModel { get; set; }
+
+    /// <summary>The user's API key, encrypted at rest via DataProtection. Never leaves the server.</summary>
+    public string? AiApiKeyEncrypted { get; set; }
+
+    /// <summary>Free-text description of the reader's interests; steers every digest.</summary>
+    public string? AiSystemPrompt { get; set; }
+
+    /// <summary>Pre-generate the previous day's digest in the background.</summary>
+    public bool AiAutoDaily { get; set; }
+
+    /// <summary>Pre-generate the previous week's digest in the background.</summary>
+    public bool AiAutoWeekly { get; set; }
+
     public List<Subscription> Subscriptions { get; set; } = new();
     public List<UserArticleState> ArticleStates { get; set; } = new();
     public List<KeywordFilter> KeywordFilters { get; set; } = new();
     public List<UserSession> Sessions { get; set; } = new();
+    public List<AiSummary> AiSummaries { get; set; } = new();
+}
+
+/// <summary>A cached AI-generated digest for one user over a date range. Daily summaries set
+/// <see cref="PeriodStart"/> == <see cref="PeriodEnd"/>; weekly summaries span seven days.</summary>
+public sealed class AiSummary
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid UserId { get; set; }
+    public AppUser? User { get; set; }
+
+    public AiSummaryKind Kind { get; set; }
+    public DateOnly PeriodStart { get; set; }
+    public DateOnly PeriodEnd { get; set; }
+
+    public string Content { get; set; } = "";
+    public string Model { get; set; } = "";
+    public int ArticleCount { get; set; }
+    public DateTimeOffset GeneratedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
 /// <summary>

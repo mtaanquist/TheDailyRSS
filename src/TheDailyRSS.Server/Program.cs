@@ -93,6 +93,12 @@ builder.Services.AddHttpClient("feeds", c =>
     c.DefaultRequestHeaders.Accept.ParseAdd("application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.8");
 }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = true, MaxAutomaticRedirections = 5 });
 
+// Client for users' own OpenAI-compatible LLM endpoints (BYOK summaries).
+builder.Services.AddHttpClient("ai", c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(120);
+});
+
 // Persist DataProtection keys to the data volume so they survive container restarts.
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir, "keys")));
@@ -102,7 +108,9 @@ builder.Services.AddScoped<FeedDiscoveryService>();
 builder.Services.AddScoped<FeedFetchService>();
 builder.Services.AddScoped<FeedSourceService>();
 builder.Services.AddScoped<OpmlService>();
+builder.Services.AddScoped<AiSummaryService>();
 builder.Services.AddHostedService<FeedRefreshBackgroundService>();
+builder.Services.AddHostedService<AiSummaryBackgroundService>();
 
 var app = builder.Build();
 
@@ -133,6 +141,7 @@ app.MapFeedEndpoints();
 app.MapEditionEndpoints();
 app.MapKeywordEndpoints();
 app.MapAdminEndpoints();
+app.MapAiEndpoints();
 
 app.MapFallbackToFile("index.html");
 

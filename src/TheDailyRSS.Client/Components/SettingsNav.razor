@@ -6,6 +6,7 @@
     <a class="@(Current == "profile" ? "active" : "")" href="/settings/profile">Preferences</a>
     <a class="@(Current == "feeds" ? "active" : "")" href="/feeds">Feeds</a>
     <a class="@(Current == "keywords" ? "active" : "")" href="/settings/keywords">Muted words</a>
+    <a class="@(Current == "ai" ? "active" : "")" href="/settings/ai">AI summaries</a>
     <a class="@(Current == "devices" ? "active" : "")" href="/settings/devices">Sync</a>
     @if (Auth.CurrentUser?.IsAdmin == true)
     {

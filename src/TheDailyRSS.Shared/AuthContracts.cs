@@ -50,6 +50,10 @@ public sealed class PreferencesDto
     public HeadlineFont HeadlineFont { get; set; } = HeadlineFont.PtSerif;
     public ReadingDensity Density { get; set; } = ReadingDensity.Balanced;
     public bool ShowUnread { get; set; } = true;
+
+    /// <summary>Read-only mirror of the AI opt-in, so the client can gate AI affordances without an
+    /// extra request. Managed via the AI settings endpoint, not the preferences endpoint.</summary>
+    public bool AiEnabled { get; set; }
 }
 
 public sealed class UpdateProfileRequest
