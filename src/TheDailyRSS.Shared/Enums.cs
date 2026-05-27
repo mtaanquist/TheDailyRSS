@@ -24,6 +24,15 @@ public enum ReadingDensity
     Airy = 2,
 }
 
+/// <summary>The period an AI digest covers.</summary>
+public enum AiSummaryKind
+{
+    /// <summary>A single edition day.</summary>
+    Daily = 0,
+    /// <summary>A 7-day range ("The Weekly").</summary>
+    Weekly = 1,
+}
+
 /// <summary>Which article fields a keyword filter matches against.</summary>
 public enum KeywordScope
 {

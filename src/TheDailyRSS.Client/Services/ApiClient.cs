@@ -86,6 +86,15 @@ public sealed class ApiClient(HttpClient http)
     public Task MarkEditionReadAsync(DateOnly date, Guid? categoryId) =>
         SendAsync(HttpMethod.Post, $"api/editions/{D(date)}/mark-read" + (categoryId is { } c ? $"?categoryId={c}" : ""));
 
+    // ── AI summaries (BYOK) ───────────────────────────────────────
+    public Task<AiSettingsDto> GetAiSettingsAsync() => GetAsync<AiSettingsDto>("api/ai/settings");
+    public Task<AiSettingsDto> UpdateAiSettingsAsync(UpdateAiSettingsRequest req) => PutAsync<AiSettingsDto>("api/ai/settings", req);
+
+    public Task<AiSummaryDto?> GetDailySummaryAsync(DateOnly date) => GetOrNullAsync<AiSummaryDto>($"api/ai/summary/daily/{D(date)}");
+    public Task<AiSummaryDto> GenerateDailySummaryAsync(DateOnly date) => PostAsync<AiSummaryDto>($"api/ai/summary/daily/{D(date)}", new { });
+    public Task<AiSummaryDto?> GetWeeklySummaryAsync(DateOnly date) => GetOrNullAsync<AiSummaryDto>($"api/ai/summary/weekly/{D(date)}");
+    public Task<AiSummaryDto> GenerateWeeklySummaryAsync(DateOnly date) => PostAsync<AiSummaryDto>($"api/ai/summary/weekly/{D(date)}", new { });
+
     private static string Query(Guid? categoryId, Guid? sourceId, bool? saved, bool unreadOnly, bool hidden = false)
     {
         var parts = new List<string>();
@@ -99,6 +108,15 @@ public sealed class ApiClient(HttpClient http)
 
     // ── plumbing ──────────────────────────────────────────────────
     private async Task<T> GetAsync<T>(string url) => await ReadAsync<T>(await http.GetAsync(url));
+
+    /// <summary>GET that returns default(T) on 404 instead of throwing — for optional cached resources.</summary>
+    private async Task<T?> GetOrNullAsync<T>(string url)
+    {
+        var resp = await http.GetAsync(url);
+        if (resp.StatusCode == HttpStatusCode.NotFound) return default;
+        if (!resp.IsSuccessStatusCode) await ThrowAsync(resp);
+        return await resp.Content.ReadFromJsonAsync<T>();
+    }
     private async Task<T> PostAsync<T>(string url, object body) => await ReadAsync<T>(await http.PostAsJsonAsync(url, body));
     private async Task<T> PutAsync<T>(string url, object body) => await ReadAsync<T>(await http.PutAsJsonAsync(url, body));
 

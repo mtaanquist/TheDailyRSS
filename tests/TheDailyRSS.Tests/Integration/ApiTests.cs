@@ -235,4 +235,69 @@ public sealed class ApiTests(AppFixture fx)
         Assert.Equal(0, ed!.UnreadTotal);
         Assert.Equal(3, await fx.CountAsync(db => db.UserArticleStates.Where(s => s.UserId == u.Id && s.IsRead)));
     }
+
+    [Fact]
+    public async Task Ai_settings_roundtrip_never_returns_key_and_stores_ciphertext()
+    {
+        var (client, u) = await fx.RegisterAsync(U());
+
+        // Defaults: off, no key.
+        var initial = await client.GetFromJsonAsync<AiSettingsDto>("/api/ai/settings");
+        Assert.False(initial!.Enabled);
+        Assert.False(initial.HasApiKey);
+
+        var put = await client.PutAsJsonAsync("/api/ai/settings", new UpdateAiSettingsRequest
+        {
+            Enabled = true,
+            BaseUrl = "https://api.example.com/v1",
+            Model = "gpt-4o-mini",
+            SystemPrompt = "I care about .NET and EU tech policy.",
+            ApiKey = "sk-secret-key-value",
+        });
+        put.EnsureSuccessStatusCode();
+        var saved = (await put.Content.ReadFromJsonAsync<AiSettingsDto>())!;
+        Assert.True(saved.Enabled);
+        Assert.Equal("gpt-4o-mini", saved.Model);
+        Assert.True(saved.HasApiKey);
+
+        // The opt-in is mirrored onto the user's preferences for client gating.
+        var me = await client.GetFromJsonAsync<UserDto>("/api/auth/me");
+        Assert.True(me!.Preferences.AiEnabled);
+
+        // The key is encrypted at rest — the stored value is neither null nor the plaintext.
+        using var scope = fx.NewScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var stored = await db.Users.Where(x => x.Id == u.Id).Select(x => x.AiApiKeyEncrypted).FirstAsync();
+        Assert.False(string.IsNullOrEmpty(stored));
+        Assert.DoesNotContain("sk-secret-key-value", stored);
+
+        // Omitting the key on a later update leaves it intact; clearing removes it.
+        await client.PutAsJsonAsync("/api/ai/settings", new UpdateAiSettingsRequest
+        {
+            Enabled = true, BaseUrl = saved.BaseUrl, Model = saved.Model, SystemPrompt = saved.SystemPrompt,
+        });
+        Assert.True((await client.GetFromJsonAsync<AiSettingsDto>("/api/ai/settings"))!.HasApiKey);
+
+        await client.PutAsJsonAsync("/api/ai/settings", new UpdateAiSettingsRequest
+        {
+            Enabled = false, ClearApiKey = true,
+        });
+        var cleared = await client.GetFromJsonAsync<AiSettingsDto>("/api/ai/settings");
+        Assert.False(cleared!.HasApiKey);
+        Assert.False(cleared.Enabled);
+    }
+
+    [Fact]
+    public async Task Ai_summary_generation_requires_configuration()
+    {
+        var (client, _) = await fx.RegisterAsync(U());
+
+        // No cached summary for an arbitrary day.
+        var miss = await client.GetAsync("/api/ai/summary/daily/2026-05-10");
+        Assert.Equal(HttpStatusCode.NotFound, miss.StatusCode);
+
+        // Generating without AI configured fails cleanly (not a 500).
+        var gen = await client.PostAsync("/api/ai/summary/daily/2026-05-10", null);
+        Assert.Equal(HttpStatusCode.BadRequest, gen.StatusCode);
+    }
 }

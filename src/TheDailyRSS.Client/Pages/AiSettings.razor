@@ -1,0 +1,178 @@
+@page "/settings/ai"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject AuthService Auth
+
+<PageTitle>AI summaries · The Daily RSS</PageTitle>
+
+<div class="tdr-breadcrumb" style="padding:12px 24px; border-bottom:1px solid var(--rule); margin:0">
+    <a href="/">Home</a> › Settings › <b>AI summaries</b>
+</div>
+
+<div class="tdr-settings">
+    <SettingsNav Current="ai" />
+
+    <div class="tdr-settings-main">
+        <h1 style="font-weight:900; font-size:26px">AI summaries</h1>
+        <div style="font-style:italic; font-size:13px; color:var(--ink-2); margin-bottom:18px">
+            Bring your own OpenAI-compatible endpoint &amp; key. Generate a digest of a day's edition,
+            or "The Weekly" — steered by what you tell it you care about. Your key is stored encrypted
+            and never leaves the server.
+        </div>
+
+        @if (_loaded)
+        {
+            <label class="tdr-toggle-row" @onclick="() => { _s.Enabled = !_s.Enabled; }">
+                <span class="tdr-toggle @(_s.Enabled ? "on" : "")"><span class="knob"></span></span>
+                <span>Enable AI summaries</span>
+            </label>
+            <div class="tdr-hint">When off, nothing AI-related appears anywhere in the paper.</div>
+
+            <div class="tdr-folder" style="padding:14px; margin-top:16px; max-width:560px">
+                <div class="tdr-field">
+                    <label>Endpoint base URL</label>
+                    <input class="tdr-input" @bind="_s.BaseUrl" placeholder="https://api.openai.com/v1" />
+                </div>
+                <div class="tdr-field">
+                    <label>Model</label>
+                    <input class="tdr-input" @bind="_s.Model" placeholder="gpt-4o-mini" />
+                </div>
+                <div class="tdr-field">
+                    <label>API key</label>
+                    @if (_hasKey && !_replacingKey)
+                    {
+                        <div style="display:flex; gap:8px; align-items:center">
+                            <span style="font-size:13px; color:var(--ink-2)">•••••••• key stored</span>
+                            <button class="tdr-link" @onclick="() => _replacingKey = true">replace</button>
+                            <button class="tdr-link danger" @onclick="ClearKey">remove</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <input class="tdr-input" type="password" @bind="_apiKey" placeholder="sk-…" autocomplete="off" />
+                        @if (_hasKey)
+                        {
+                            <button class="tdr-link" style="margin-top:4px" @onclick="() => { _replacingKey = false; _apiKey = string.Empty; }">keep existing key</button>
+                        }
+                    }
+                </div>
+            </div>
+
+            <h2 style="font-weight:800; font-size:14px; margin:18px 0 6px">Your interests</h2>
+            <div class="tdr-hint" style="margin-bottom:6px">
+                A system prompt describing what matters to you — topics, regions, tone. The digest is weighted toward this.
+            </div>
+            <textarea class="tdr-input" rows="5" style="max-width:560px; width:100%"
+                      @bind="_s.SystemPrompt"
+                      placeholder="e.g. I'm a backend engineer in Copenhagen. Prioritise AI, .NET, EU tech policy and local Danish news. Skip celebrity and sports."></textarea>
+
+            <h2 style="font-weight:800; font-size:14px; margin:18px 0 6px">Automatic digests</h2>
+            <label class="tdr-toggle-row" @onclick="() => { _s.AutoDaily = !_s.AutoDaily; }">
+                <span class="tdr-toggle @(_s.AutoDaily ? "on" : "")"><span class="knob"></span></span>
+                <span>Pre-generate yesterday's daily digest</span>
+            </label>
+            <label class="tdr-toggle-row" @onclick="() => { _s.AutoWeekly = !_s.AutoWeekly; }">
+                <span class="tdr-toggle @(_s.AutoWeekly ? "on" : "")"><span class="knob"></span></span>
+                <span>Pre-generate last week's "Weekly"</span>
+            </label>
+            <div class="tdr-hint">Otherwise digests are generated on demand when you open them.</div>
+
+            <div style="margin-top:18px; display:flex; gap:10px; align-items:center">
+                <button class="tdr-btn" @onclick="Save" disabled="@_busy">save settings</button>
+                @if (_saved) { <span class="tdr-hint">↳ saved &amp; synced.</span> }
+            </div>
+
+            @if (_error is not null) { <div class="tdr-error">@_error</div> }
+        }
+    </div>
+</div>
+
+@code {
+    private AiSettingsDto? _orig;
+    private EditModel _s = new();
+    private bool _loaded;
+    private bool _hasKey;
+    private bool _replacingKey;
+    private string _apiKey = "";
+    private bool _busy;
+    private bool _saved;
+    private string? _error;
+
+    private sealed class EditModel
+    {
+        public bool Enabled { get; set; }
+        public string? BaseUrl { get; set; }
+        public string? Model { get; set; }
+        public string? SystemPrompt { get; set; }
+        public bool AutoDaily { get; set; }
+        public bool AutoWeekly { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _orig = await Api.GetAiSettingsAsync();
+            _s = new EditModel
+            {
+                Enabled = _orig.Enabled,
+                BaseUrl = _orig.BaseUrl,
+                Model = _orig.Model,
+                SystemPrompt = _orig.SystemPrompt,
+                AutoDaily = _orig.AutoDaily,
+                AutoWeekly = _orig.AutoWeekly,
+            };
+            _hasKey = _orig.HasApiKey;
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _loaded = true; }
+    }
+
+    private async Task ClearKey()
+    {
+        _busy = true; _error = null;
+        try
+        {
+            await SaveCore(clearKey: true);
+            _hasKey = false; _replacingKey = false; _apiKey = "";
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task Save()
+    {
+        _busy = true; _error = null; _saved = false;
+        try
+        {
+            await SaveCore(clearKey: false);
+            _apiKey = ""; _replacingKey = false;
+            _saved = true;
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task SaveCore(bool clearKey)
+    {
+        var result = await Api.UpdateAiSettingsAsync(new UpdateAiSettingsRequest
+        {
+            Enabled = _s.Enabled,
+            BaseUrl = _s.BaseUrl,
+            Model = _s.Model,
+            SystemPrompt = _s.SystemPrompt,
+            AutoDaily = _s.AutoDaily,
+            AutoWeekly = _s.AutoWeekly,
+            ApiKey = string.IsNullOrWhiteSpace(_apiKey) ? null : _apiKey,
+            ClearApiKey = clearKey,
+        });
+        _hasKey = result.HasApiKey;
+
+        // Reflect the opt-in into the cached user so AI affordances toggle immediately.
+        if (Auth.CurrentUser is { } u)
+        {
+            u.Preferences.AiEnabled = result.Enabled;
+            Auth.UpdateUser(u);
+        }
+    }
+}

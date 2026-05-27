@@ -31,9 +31,12 @@ public sealed class AppFixture : IAsyncLifetime
             builder.UseSetting("DataDir", Path.Combine(Path.GetTempPath(), "tdr-tests-" + Guid.NewGuid().ToString("N")));
             builder.ConfigureServices(services =>
             {
-                // Drop the background fetcher so tests never reach out to the network.
-                var hosted = services.SingleOrDefault(d => d.ImplementationType == typeof(FeedRefreshBackgroundService));
-                if (hosted is not null) services.Remove(hosted);
+                // Drop the background services so tests never reach out to the network.
+                foreach (var t in new[] { typeof(FeedRefreshBackgroundService), typeof(AiSummaryBackgroundService) })
+                {
+                    var hosted = services.SingleOrDefault(d => d.ImplementationType == t);
+                    if (hosted is not null) services.Remove(hosted);
+                }
             });
         });
         // Touching Services builds the host and runs startup migration + role seed.
