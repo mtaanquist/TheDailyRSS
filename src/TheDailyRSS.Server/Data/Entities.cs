@@ -124,6 +124,10 @@ public sealed class UserArticleState
 
     public bool IsRead { get; set; }
     public bool IsSaved { get; set; }
+
+    /// <summary>The reader dismissed this story; it's dropped from editions but listed in the Hidden view.</summary>
+    public bool IsHidden { get; set; }
+
     public int ReadingPositionPercent { get; set; }
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

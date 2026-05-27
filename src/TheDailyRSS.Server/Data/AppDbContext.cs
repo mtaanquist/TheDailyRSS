@@ -91,6 +91,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             e.HasKey(x => new { x.UserId, x.ArticleId });
             e.HasIndex(x => new { x.UserId, x.IsSaved });
             e.HasIndex(x => new { x.UserId, x.IsRead });
+            e.HasIndex(x => new { x.UserId, x.IsHidden });
 
             e.HasOne(x => x.User)
                 .WithMany(u => u.ArticleStates)

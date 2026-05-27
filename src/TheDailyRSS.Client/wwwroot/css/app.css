@@ -346,6 +346,12 @@ button.tdr-subfeed:hover { background: var(--card); color: var(--ink); }
 .tdr-star.saved { color: var(--red); }
 .tdr-star svg { display: block; }
 
+/* hide button */
+.tdr-hide { background: none; border: none; cursor: pointer; padding: 0; line-height: 0; color: var(--ink-3); opacity: .65; }
+.tdr-hide:hover { opacity: 1; color: var(--ink); }
+.tdr-hide.hidden { color: var(--red); opacity: 1; }
+.tdr-hide svg { display: block; }
+
 /* ============================================================
    Article reading page
    ============================================================ */

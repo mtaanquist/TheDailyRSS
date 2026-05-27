@@ -27,6 +27,7 @@ else
             <span style="font-style:italic">@a.PublishedAt.ToLocalTime().ToString("dddd, MMMM d · HH:mm")</span>
             <span class="spacer"></span>
             <StarButton Saved="a.IsSaved" SavedChanged="ToggleSave" />
+            <HideButton Hidden="a.IsHidden" HiddenChanged="ToggleHide" />
         </div>
 
         @if (!string.IsNullOrEmpty(a.ImageUrl))
@@ -113,6 +114,13 @@ else
     {
         await Api.SetSavedAsync(Id, saved);
         if (_article is not null) _article = _article with { IsSaved = saved };
+    }
+
+    private async Task ToggleHide(bool hidden)
+    {
+        await Api.SetHiddenAsync(Id, hidden);
+        if (_article is not null) _article = _article with { IsHidden = hidden };
+        await State.RefreshAsync();
     }
 
     private async Task ToggleRead()

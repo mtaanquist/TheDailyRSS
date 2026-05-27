@@ -3,8 +3,9 @@
 <div class="tdr-story @(Article.IsRead ? "read" : "")" @onclick="Open">
     <div class="tdr-kicker">
         <span>@Article.FeedTitle · @Relative(Article.PublishedAt)</span>
-        <span style="margin-left:auto">
+        <span style="margin-left:auto; display:inline-flex; align-items:center; gap:2px">
             <StarButton Saved="Article.IsSaved" Size="13" SavedChanged="ToggleSave" />
+            <HideButton Hidden="Article.IsHidden" Size="13" HiddenChanged="ToggleHide" />
         </span>
     </div>
     <h2>@Article.Title</h2>
@@ -22,10 +23,13 @@
     [Parameter, EditorRequired] public ArticleSummaryDto Article { get; set; } = default!;
     [Parameter] public bool ShowImage { get; set; } = true;
     [Parameter] public EventCallback<(Guid Id, bool Saved)> OnSaveToggled { get; set; }
+    [Parameter] public EventCallback<(Guid Id, bool Hidden)> OnHideToggled { get; set; }
 
     private void Open() => Nav.NavigateTo($"/article/{Article.Id}");
 
     private Task ToggleSave(bool saved) => OnSaveToggled.InvokeAsync((Article.Id, saved));
+
+    private Task ToggleHide(bool hidden) => OnHideToggled.InvokeAsync((Article.Id, hidden));
 
     public static string Relative(DateTimeOffset when)
     {

@@ -73,23 +73,25 @@ public sealed class ApiClient(HttpClient http)
     public Task<EditionDto> GetLatestEditionAsync(Guid? categoryId, Guid? sourceId, bool unreadOnly) =>
         GetAsync<EditionDto>($"api/editions/latest?{Query(categoryId, sourceId, null, unreadOnly)}");
 
-    public Task<EditionDto> GetEditionAsync(DateOnly date, Guid? categoryId, Guid? sourceId, bool saved, bool unreadOnly) =>
-        GetAsync<EditionDto>($"api/editions/{D(date)}?{Query(categoryId, sourceId, saved, unreadOnly)}");
+    public Task<EditionDto> GetEditionAsync(DateOnly date, Guid? categoryId, Guid? sourceId, bool saved, bool unreadOnly, bool hidden = false) =>
+        GetAsync<EditionDto>($"api/editions/{D(date)}?{Query(categoryId, sourceId, saved, unreadOnly, hidden)}");
 
     public Task<ArticleDto> GetArticleAsync(Guid id) => GetAsync<ArticleDto>($"api/articles/{id}");
     public Task<ArticleNeighborsDto> GetArticleNeighborsAsync(Guid id) => GetAsync<ArticleNeighborsDto>($"api/articles/{id}/neighbors");
     public Task SetReadAsync(Guid id, bool value) => SendAsync(HttpMethod.Post, $"api/articles/{id}/read", new SetBool(value));
     public Task SetSavedAsync(Guid id, bool value) => SendAsync(HttpMethod.Post, $"api/articles/{id}/save", new SetBool(value));
+    public Task SetHiddenAsync(Guid id, bool value) => SendAsync(HttpMethod.Post, $"api/articles/{id}/hide", new SetBool(value));
     public Task SetPositionAsync(Guid id, int percent) => SendAsync(HttpMethod.Post, $"api/articles/{id}/position", new SetPosition(percent));
     public Task MarkEditionReadAsync(DateOnly date, Guid? categoryId) =>
         SendAsync(HttpMethod.Post, $"api/editions/{D(date)}/mark-read" + (categoryId is { } c ? $"?categoryId={c}" : ""));
 
-    private static string Query(Guid? categoryId, Guid? sourceId, bool? saved, bool unreadOnly)
+    private static string Query(Guid? categoryId, Guid? sourceId, bool? saved, bool unreadOnly, bool hidden = false)
     {
         var parts = new List<string>();
         if (categoryId is { } c) parts.Add($"categoryId={c}");
         if (sourceId is { } s) parts.Add($"sourceId={s}");
         if (saved is true) parts.Add("saved=true");
+        if (hidden) parts.Add("hidden=true");
         if (unreadOnly) parts.Add("unreadOnly=true");
         return string.Join("&", parts);
     }

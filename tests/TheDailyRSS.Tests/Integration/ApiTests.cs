@@ -185,6 +185,42 @@ public sealed class ApiTests(AppFixture fx)
     }
 
     [Fact]
+    public async Task Hidden_article_drops_from_edition_and_shows_in_the_hidden_view()
+    {
+        var (client, u) = await fx.RegisterAsync(U());
+        var url = "https://feed.test/" + Guid.NewGuid().ToString("N");
+        var date = new DateOnly(2026, 5, 14);
+        var (_, ids) = await fx.SeedSourceAsync(u.Id, News, url, date, "Keep one", "Hide me", "Keep two");
+
+        var hideId = await IdForTitle(client, date, "Hide me");
+
+        var resp = await client.PostAsJsonAsync($"/api/articles/{hideId}/hide", new { Value = true });
+        resp.EnsureSuccessStatusCode();
+
+        // Gone from the day's edition…
+        var after = await client.GetFromJsonAsync<EditionDto>($"/api/editions/{date:yyyy-MM-dd}");
+        Assert.DoesNotContain("Hide me", Titles(after!));
+        Assert.Contains("Keep one", Titles(after!));
+
+        // …but listed in the Hidden view.
+        var hidden = await client.GetFromJsonAsync<EditionDto>($"/api/editions/{date:yyyy-MM-dd}?hidden=true");
+        Assert.Equal("Hidden", hidden!.CategoryName);
+        Assert.Contains("Hide me", Titles(hidden));
+
+        // Un-hiding brings it back to the edition.
+        (await client.PostAsJsonAsync($"/api/articles/{hideId}/hide", new { Value = false })).EnsureSuccessStatusCode();
+        var restored = await client.GetFromJsonAsync<EditionDto>($"/api/editions/{date:yyyy-MM-dd}");
+        Assert.Contains("Hide me", Titles(restored!));
+    }
+
+    private static async Task<Guid> IdForTitle(HttpClient client, DateOnly date, string title)
+    {
+        var ed = await client.GetFromJsonAsync<EditionDto>($"/api/editions/{date:yyyy-MM-dd}");
+        var all = ed!.Sections.SelectMany(s => s.Articles).Concat(ed.Lead is null ? [] : new[] { ed.Lead });
+        return all.First(a => a.Title == title).Id;
+    }
+
+    [Fact]
     public async Task Mark_edition_read_creates_state_rows_for_untouched_articles()
     {
         var (client, u) = await fx.RegisterAsync(U());
