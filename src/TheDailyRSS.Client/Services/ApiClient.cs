@@ -53,6 +53,7 @@ public sealed class ApiClient(HttpClient http)
     public Task DeleteFeedAsync(Guid id) => SendAsync(HttpMethod.Delete, $"api/feeds/{id}");
     public Task MoveFeedAsync(Guid id, MoveFeedRequest req) => SendAsync(HttpMethod.Post, $"api/feeds/{id}/move", req);
     public Task RefreshFeedAsync(Guid id) => SendAsync(HttpMethod.Post, $"api/feeds/{id}/refresh");
+    public Task RefreshAllFeedsAsync() => SendAsync(HttpMethod.Post, "api/feeds/refresh");
 
     public async Task<OpmlImportResult> ImportOpmlAsync(string content)
     {

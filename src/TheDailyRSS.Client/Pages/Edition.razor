@@ -29,7 +29,7 @@ else
                 <span>Unread · @ed.UnreadTotal</span>
             }
         </div>
-        <h1 class="tdr-masthead-title">The Daily RSS</h1>
+        <h1 class="tdr-masthead-title clickable" @onclick="Refresh" role="button" title="Refresh stories">The Daily RSS</h1>
         <div class="tdr-masthead-rule">
             <span>— @(ed.CategoryName ?? "from your feeds") —</span>
         </div>
@@ -172,6 +172,20 @@ else
     /// <summary>The section slug for the page we're on ("today", "saved", "hidden", or a category slug).</summary>
     private string CurrentSlug => Saved ? "saved" : Hidden ? "hidden" : string.IsNullOrEmpty(Slug) ? "today" : Slug!;
 
+    protected override void OnInitialized() => State.ReloadRequested += Refresh;
+
+    /// <summary>Re-pull every feed server-side, then reload the edition in place.</summary>
+    private async Task Refresh()
+    {
+        _loading = true;
+        StateHasChanged();
+        try { await Api.RefreshAllFeedsAsync(); }
+        catch (ApiException) { /* still re-fetch what we have */ }
+        await State.RefreshAsync();
+        await Load();
+        StateHasChanged();
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         var key = $"{Slug}|{Date}|{Src}|{Unread}";
@@ -208,7 +222,11 @@ else
         finally { _loading = false; }
     }
 
-    public void Dispose() => State.SetHeaderDate(null);
+    public void Dispose()
+    {
+        State.ReloadRequested -= Refresh;
+        State.SetHeaderDate(null);
+    }
 
     /// <summary>Maps the URL slug to a category id; null for the front page / saved / unknown.</summary>
     private Guid? ResolveCategoryId() =>

@@ -1,8 +1,9 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 @inject AppState State
+@inject IJSRuntime JS
 
-<div class="tdr-app">
+<div class="tdr-app @(State.Expanded ? "tdr-expanded" : "")">
     <div class="tdr-mobile-top">
         <button class="burger" @onclick="() => _navOpen = !_navOpen" aria-label="Menu">☰</button>
         <a class="mt-title" href="/">
@@ -21,6 +22,10 @@
         {
             <div class="tdr-scrim" @onclick="() => _navOpen = false"></div>
         }
+        <button class="tdr-expand-btn" @onclick="() => State.ToggleExpandedAsync()"
+                title="@(State.Expanded ? "Restore width" : "Fill window")" aria-label="Toggle full width">
+            <Icon Name="@(State.Expanded ? "minimize" : "maximize")" Size="16" />
+        </button>
         <main class="tdr-main">
             @Body
         </main>
@@ -29,8 +34,24 @@
 
 @code {
     private bool _navOpen;
+    private DotNetObjectReference<MainLayout>? _ref;
 
     protected override void OnInitialized() => State.Changed += OnStateChanged;
     private void OnStateChanged() => InvokeAsync(StateHasChanged);
-    public void Dispose() => State.Changed -= OnStateChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _ref = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("tdrHotkeys.register", _ref);
+    }
+
+    [JSInvokable] public Task OnRefreshHotkey() => State.RequestReloadAsync();
+
+    public void Dispose()
+    {
+        State.Changed -= OnStateChanged;
+        _ = JS.InvokeVoidAsync("tdrHotkeys.unregister");
+        _ref?.Dispose();
+    }
 }
