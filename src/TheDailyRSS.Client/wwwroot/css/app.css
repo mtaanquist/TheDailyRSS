@@ -533,6 +533,9 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
 .tdr-settings-nav a.active { background: var(--accent); color: var(--accent-fg); font-weight: 700; }
 .tdr-settings-nav a.danger { color: var(--red); }
 .tdr-settings-main { flex: 1; padding: 18px 26px; }
+/* Shared settings-page typography (previously repeated as inline styles on every page). */
+.tdr-settings-main h1 { font-weight: 900; font-size: 26px; }
+.tdr-settings-intro { font-style: italic; font-size: 13px; color: var(--ink-2); margin-bottom: 18px; }
 .tdr-breadcrumb { font-family: var(--serif); font-style: italic; font-size: 13px; color: var(--ink-2); margin-bottom: 14px; }
 .tdr-breadcrumb b { color: var(--ink); font-style: normal; }
 
