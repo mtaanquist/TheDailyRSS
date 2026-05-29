@@ -30,7 +30,9 @@ else
             <HideButton Hidden="a.IsHidden" HiddenChanged="ToggleHide" />
             @if (a.Fields is { Count: > 0 })
             {
-                <button class="tdr-link" title="Mute by field" @onclick="() => _showFilter = true">filter…</button>
+                <button class="tdr-filter" title="Mute by field" @onclick="() => _showFilter = true">
+                    <Icon Name="filter" Size="16" />
+                </button>
             }
         </div>
 
@@ -62,43 +64,47 @@ else
         @if (_showFilter)
         {
             <div class="tdr-overlay" @onclick="() => _showFilter = false">
-                <div class="tdr-modal" @onclick:stopPropagation="true">
-                    <h2 style="margin:0 0 6px; font-weight:900; font-size:18px">Mute by field</h2>
-                    <p style="font-style:italic; color:var(--ink-2); font-size:13px; margin:0 0 14px">
+                <div class="tdr-modal tdr-filter-modal" @onclick:stopPropagation="true">
+                    <div class="tdr-modal-head">
+                        <h2>Mute by field</h2>
+                        <button class="x" @onclick="() => _showFilter = false" aria-label="Close">✕</button>
+                    </div>
+                    <p class="tdr-filter-intro">
                         Pick a value the feed itself attached to this story. Future stories with the same
-                        field/value combination will be kept out of your editions.
+                        field and value will be kept out of your editions. Per-feed rules only apply to
+                        <b>@a.FeedTitle</b>.
                     </p>
+
                     @if (_filterError is not null)
                     {
                         <div class="tdr-error" style="margin-bottom:10px">@_filterError</div>
                     }
-                    <div class="tdr-field-list">
+
+                    <div class="tdr-filter-list">
                         @foreach (var entry in a.Fields)
                         {
                             foreach (var value in entry.Value)
                             {
                                 var key = entry.Key;
                                 var val = value;
-                                <div class="tdr-field-row">
-                                    <div class="kv">
-                                        <span class="k">@key</span>
-                                        <span class="v">@val</span>
+                                <div class="tdr-filter-row">
+                                    <span class="k">@key</span>
+                                    <span class="v">@val</span>
+                                    <div class="actions">
+                                        <button class="tdr-chip" disabled="@_filterBusy"
+                                                title="Mute on every feed"
+                                                @onclick="() => Mute(key, val, scoped: false)">
+                                            Everywhere
+                                        </button>
+                                        <button class="tdr-chip" disabled="@_filterBusy"
+                                                title="Mute only on @a.FeedTitle"
+                                                @onclick="() => Mute(key, val, scoped: true)">
+                                            Just this feed
+                                        </button>
                                     </div>
-                                    <span class="spacer"></span>
-                                    <button class="tdr-link" disabled="@_filterBusy"
-                                            @onclick="() => Mute(key, val, scoped: false)">
-                                        mute everywhere
-                                    </button>
-                                    <button class="tdr-link" disabled="@_filterBusy"
-                                            @onclick="() => Mute(key, val, scoped: true)">
-                                        on @a.FeedTitle only
-                                    </button>
                                 </div>
                             }
                         }
-                    </div>
-                    <div style="text-align:right; margin-top:14px">
-                        <button class="tdr-link muted" @onclick="() => _showFilter = false">close</button>
                     </div>
                 </div>
             </div>
