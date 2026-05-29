@@ -5,14 +5,7 @@
 
 <PageTitle>Account &amp; preferences · The Daily RSS</PageTitle>
 
-<div class="tdr-breadcrumb" style="padding:12px 24px; border-bottom:1px solid var(--rule); margin:0">
-    <a href="/">Home</a> › Settings › <b>Account &amp; preferences</b>
-</div>
-
-<div class="tdr-settings">
-    <SettingsNav Current="profile" />
-
-    <div class="tdr-settings-main">
+<SettingsShell Current="profile" Crumb="Account & preferences">
         @if (_user is { } user)
         {
             <h1 style="font-weight:900; font-size:26px">Your account</h1>
@@ -104,8 +97,7 @@
                 <div class="tdr-error">@_error</div>
             }
         }
-    </div>
-</div>
+</SettingsShell>
 
 @code {
     private UserDto? _user;

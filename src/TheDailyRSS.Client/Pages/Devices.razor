@@ -4,14 +4,7 @@
 
 <PageTitle>Sync · The Daily RSS</PageTitle>
 
-<div class="tdr-breadcrumb" style="padding:12px 24px; border-bottom:1px solid var(--rule); margin:0">
-    <a href="/">Home</a> › Settings › <b>Sync</b>
-</div>
-
-<div class="tdr-settings">
-    <SettingsNav Current="devices" />
-
-    <div class="tdr-settings-main">
+<SettingsShell Current="devices" Crumb="Sync">
         <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap">
             <h1 style="font-weight:900; font-size:26px">Sync</h1>
             <span style="font-style:italic; font-size:13px; color:var(--ink-2)">
@@ -82,8 +75,7 @@
                 ↳ sign out of all other devices
             </button>
         }
-    </div>
-</div>
+</SettingsShell>
 
 @code {
     private List<SessionDto> _sessions = [];

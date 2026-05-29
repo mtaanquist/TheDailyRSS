@@ -4,14 +4,7 @@
 
 <PageTitle>Filters · The Daily RSS</PageTitle>
 
-<div class="tdr-breadcrumb" style="padding:12px 24px; border-bottom:1px solid var(--rule); margin:0">
-    <a href="/">Home</a> › Settings › <b>Filters</b>
-</div>
-
-<div class="tdr-settings">
-    <SettingsNav Current="keywords" />
-
-    <div class="tdr-settings-main">
+<SettingsShell Current="keywords" Crumb="Filters">
         <h1 style="font-weight:900; font-size:26px">Muted words</h1>
         <div style="font-style:italic; font-size:13px; color:var(--ink-2); margin-bottom:18px">
             Articles matching one of these terms are kept out of your editions — handy for things like
@@ -101,8 +94,7 @@
                 }
             </div>
         }
-    </div>
-</div>
+</SettingsShell>
 
 @code {
     private List<KeywordFilterDto> _items = [];

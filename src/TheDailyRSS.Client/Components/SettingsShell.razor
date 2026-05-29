@@ -1,0 +1,20 @@
+@* Shared chrome for the settings pages: the breadcrumb, the settings nav and the main column.
+   Pages supply their Current tab, the trailing breadcrumb label, and their body as ChildContent. *@
+
+<div class="tdr-breadcrumb" style="padding:12px 24px; border-bottom:1px solid var(--rule); margin:0">
+    <a href="/">Home</a> › Settings › <b>@Crumb</b>
+</div>
+
+<div class="tdr-settings">
+    <SettingsNav Current="@Current" />
+
+    <div class="tdr-settings-main">
+        @ChildContent
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Current { get; set; } = "";
+    [Parameter, EditorRequired] public string Crumb { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}
