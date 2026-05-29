@@ -86,18 +86,25 @@ builder.Services.AddAuthorization(o =>
     o.AddPolicy(Roles.Admin, p => p.RequireRole(Roles.Admin)));
 
 // ── App services ────────────────────────────────────────────────────
+// Both outbound clients fetch user-supplied URLs, so both use the SSRF-guarded handler that
+// blocks private/loopback/link-local targets, and both cap the buffered response body.
+var maxResponseBytes = builder.Configuration.GetSection(FeedOptions.SectionName)
+    .Get<FeedOptions>()?.MaxResponseBytes ?? new FeedOptions().MaxResponseBytes;
+
 builder.Services.AddHttpClient("feeds", c =>
 {
     c.Timeout = TimeSpan.FromSeconds(30);
+    c.MaxResponseContentBufferSize = maxResponseBytes;
     c.DefaultRequestHeaders.UserAgent.ParseAdd("TheDailyRSS/1.0 (+https://github.com/self-hosted)");
     c.DefaultRequestHeaders.Accept.ParseAdd("application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.8");
-}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = true, MaxAutomaticRedirections = 5 });
+}).ConfigurePrimaryHttpMessageHandler(() => SsrfGuard.CreateHandler(allowAutoRedirect: true, maxRedirects: 5));
 
 // Client for users' own OpenAI-compatible LLM endpoints (BYOK summaries).
 builder.Services.AddHttpClient("ai", c =>
 {
     c.Timeout = TimeSpan.FromSeconds(120);
-});
+    c.MaxResponseContentBufferSize = maxResponseBytes;
+}).ConfigurePrimaryHttpMessageHandler(() => SsrfGuard.CreateHandler(allowAutoRedirect: false));
 
 // Persist DataProtection keys to the data volume so they survive container restarts.
 builder.Services.AddDataProtection()

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Security.Claims;
 using TheDailyRSS.Server.Auth;
 using TheDailyRSS.Server.Data;
@@ -165,10 +166,19 @@ public static class FeedEndpoints
         return Results.File(System.Text.Encoding.UTF8.GetBytes(xml), "text/x-opml", "subscriptions.opml");
     }
 
-    private static async Task<IResult> ImportOpml(HttpRequest request, ClaimsPrincipal principal, OpmlService opml, CancellationToken ct)
+    private static async Task<IResult> ImportOpml(
+        HttpRequest request, ClaimsPrincipal principal, OpmlService opml,
+        IOptions<FeedOptions> opts, CancellationToken ct)
     {
-        using var sr = new StreamReader(request.Body);
-        var content = await sr.ReadToEndAsync(ct);
+        var maxBytes = opts.Value.MaxResponseBytes;
+        if (request.ContentLength is { } len && len > maxBytes)
+            return Results.BadRequest(new { error = "OPML file is too large." });
+
+        // Bound the read even when Content-Length is absent (chunked upload).
+        using var limited = new StreamReader(request.Body);
+        var content = await limited.ReadToEndAsync(ct);
+        if (content.Length > maxBytes)
+            return Results.BadRequest(new { error = "OPML file is too large." });
         if (string.IsNullOrWhiteSpace(content))
             return Results.BadRequest(new { error = "Empty OPML." });
         try

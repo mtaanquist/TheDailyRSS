@@ -42,8 +42,7 @@ public sealed class FeedFetchService(
             source.LastModified = resp.Content.Headers.LastModified?.ToString("R");
 
             await using var stream = await resp.Content.ReadAsStreamAsync(ct);
-            using var buffered = new MemoryStream();
-            await stream.CopyToAsync(buffered, ct);
+            using var buffered = await ReadCappedAsync(stream, _options.MaxResponseBytes, ct);
             buffered.Position = 0;
 
             var parsed = reader.Parse(buffered, source.FeedUrl);
@@ -134,6 +133,26 @@ public sealed class FeedFetchService(
                 && !keepIds.Contains(a.Id)
                 && !db.UserArticleStates.Any(s => s.ArticleId == a.Id && s.IsSaved))
             .ExecuteDeleteAsync(ct);
+    }
+
+    /// <summary>Copies at most <paramref name="maxBytes"/> from the response stream, throwing if the
+    /// source exceeds the cap. <see cref="HttpClient.MaxResponseContentBufferSize"/> does not apply to
+    /// <c>ReadAsStreamAsync</c>, so the bound is enforced here for the feed-fetch path.</summary>
+    private static async Task<MemoryStream> ReadCappedAsync(Stream source, int maxBytes, CancellationToken ct)
+    {
+        var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        int read;
+        while ((read = await source.ReadAsync(chunk, ct)) > 0)
+        {
+            if (buffer.Length + read > maxBytes)
+            {
+                await buffer.DisposeAsync();
+                throw new InvalidOperationException($"Feed response exceeded the {maxBytes}-byte limit.");
+            }
+            buffer.Write(chunk, 0, read);
+        }
+        return buffer;
     }
 
     private static TimeZoneInfo ResolveTimeZone(string id)
