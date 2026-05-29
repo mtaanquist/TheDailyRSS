@@ -277,36 +277,23 @@ else
     }
 
     /// <summary>Maps the URL slug to a category id; null for the front page / saved / unknown.</summary>
-    private Guid? ResolveCategoryId() =>
-        string.IsNullOrEmpty(Slug) || Slug is "today" or "saved" or "hidden"
-            ? null
-            : State.Categories.FirstOrDefault(c => string.Equals(c.Slug, Slug, StringComparison.OrdinalIgnoreCase))?.Id;
+    private Guid? ResolveCategoryId() => EditionRoutes.CategoryIdForSlug(State.Categories, Slug);
 
     private void Open(Guid id) => Nav.NavigateTo($"/article/{id}");
 
     private void Navigate(DateOnly? date)
     {
         if (date is null) return;
-        Nav.NavigateTo(WithQuery(PathFor(CurrentSlug, date)));
+        Nav.NavigateTo(WithQuery(EditionRoutes.Path(CurrentSlug, date)));
     }
 
-    private void GoLatest() => Nav.NavigateTo(WithQuery(PathFor(CurrentSlug, null)));
+    private void GoLatest() => Nav.NavigateTo(WithQuery(EditionRoutes.Path(CurrentSlug, null)));
 
     private string SectionUrl(Guid catId)
     {
         var slug = State.Categories.FirstOrDefault(c => c.Id == catId)?.Slug ?? "today";
-        return WithQuery(PathFor(slug, CurrentDate));
+        return WithQuery(EditionRoutes.Path(slug, CurrentDate));
     }
-
-    /// <summary>Builds a reader URL: "/" or "/today/{date}" for the front page,
-    /// "/saved" for saved, "/{slug}" or "/{slug}/{date}" for a section.</summary>
-    private static string PathFor(string slug, DateOnly? date) => slug switch
-    {
-        "saved" => "/saved",
-        "hidden" => "/hidden",
-        "today" => date is null ? "/" : $"/today/{date:yyyy-MM-dd}",
-        _ => date is null ? $"/{slug}" : $"/{slug}/{date:yyyy-MM-dd}",
-    };
 
     private string WithQuery(string path)
     {
@@ -319,7 +306,7 @@ else
     private void ToggleUnread()
     {
         Unread = !Unread;
-        Nav.NavigateTo(WithQuery(PathFor(CurrentSlug, CurrentDate)));
+        Nav.NavigateTo(WithQuery(EditionRoutes.Path(CurrentSlug, CurrentDate)));
     }
 
     private async Task OnSave((Guid Id, bool Saved) e)
