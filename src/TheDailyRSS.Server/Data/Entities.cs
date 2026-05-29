@@ -180,7 +180,8 @@ public sealed class UserArticleState
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
-/// <summary>A per-user mute term. Articles matching are hidden from editions.</summary>
+/// <summary>A per-user mute term. Articles matching are hidden from editions.
+/// Optionally scoped to a single <see cref="FeedSource"/> — null means every subscribed feed.</summary>
 public sealed class KeywordFilter
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -191,6 +192,10 @@ public sealed class KeywordFilter
     /// <summary>Stored lower-cased for case-insensitive matching.</summary>
     public string Term { get; set; } = "";
     public KeywordScope Scope { get; set; } = KeywordScope.Everywhere;
+
+    /// <summary>When set, the rule only mutes articles from this feed.</summary>
+    public Guid? SourceId { get; set; }
+    public FeedSource? Source { get; set; }
 }
 
 /// <summary>A per-user mute rule that targets a single captured feed-item field/value pair

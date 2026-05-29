@@ -541,6 +541,9 @@ namespace TheDailyRSS.Server.Data.Migrations
                     b.Property<int>("Scope")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("SourceId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Term")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -551,7 +554,9 @@ namespace TheDailyRSS.Server.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId", "Term")
+                    b.HasIndex("SourceId");
+
+                    b.HasIndex("UserId", "Term", "SourceId")
                         .IsUnique();
 
                     b.ToTable("KeywordFilters");
@@ -778,11 +783,18 @@ namespace TheDailyRSS.Server.Data.Migrations
 
             modelBuilder.Entity("TheDailyRSS.Server.Data.KeywordFilter", b =>
                 {
+                    b.HasOne("TheDailyRSS.Server.Data.FeedSource", "Source")
+                        .WithMany()
+                        .HasForeignKey("SourceId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("TheDailyRSS.Server.Data.AppUser", "User")
                         .WithMany("KeywordFilters")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Source");
 
                     b.Navigation("User");
                 });

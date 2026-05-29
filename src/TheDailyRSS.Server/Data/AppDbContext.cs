@@ -115,11 +115,18 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
 
         b.Entity<KeywordFilter>(e =>
         {
-            e.HasIndex(x => new { x.UserId, x.Term }).IsUnique();
+            // Including SourceId in the key lets the same term coexist as a global mute
+            // and a per-feed mute. Postgres treats NULLs as distinct, so the dup-check for
+            // the "global" case (SourceId = null) lives in endpoint code.
+            e.HasIndex(x => new { x.UserId, x.Term, x.SourceId }).IsUnique();
             e.Property(x => x.Term).HasMaxLength(120);
             e.HasOne(x => x.User)
                 .WithMany(u => u.KeywordFilters)
                 .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Source)
+                .WithMany()
+                .HasForeignKey(x => x.SourceId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

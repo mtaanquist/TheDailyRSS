@@ -36,6 +36,13 @@
                         <option value="@KeywordScope.Everywhere">Anywhere in article</option>
                         <option value="@KeywordScope.TitleOnly">Title only</option>
                     </select>
+                    <select class="tdr-select" style="width:auto" @bind="_sourceId">
+                        <option value="">On every feed</option>
+                        @foreach (var f in _feeds)
+                        {
+                            <option value="@f.SourceId">Only on @f.Title</option>
+                        }
+                    </select>
                     <button class="tdr-btn" @onclick="Add" disabled="@(_busy || string.IsNullOrWhiteSpace(_term))">mute</button>
                 </div>
             </div>
@@ -55,6 +62,7 @@
                             <div>@k.Term</div>
                             <div class="err" style="color:var(--ink-3); font-style:italic">
                                 @(k.Scope == KeywordScope.TitleOnly ? "title only" : "anywhere in article")
+                                · @(k.SourceId is null ? "any feed" : $"only on {k.SourceTitle ?? "this feed"}")
                             </div>
                         </div>
                         <span class="spacer"></span>
@@ -99,7 +107,9 @@
 @code {
     private List<KeywordFilterDto> _items = [];
     private List<FieldFilterDto> _fields = [];
+    private List<FeedDto> _feeds = [];
     private string _term = "";
+    private string _sourceId = "";        // "" = every feed; otherwise the FeedSource id as string
     private KeywordScope _scope = KeywordScope.Everywhere;
     private bool _busy;
     private string? _error;
@@ -112,6 +122,7 @@
         {
             _items = await Api.GetKeywordsAsync();
             _fields = await Api.GetFieldFiltersAsync();
+            _feeds = (await Api.GetFeedsAsync()).OrderBy(f => f.Title).ToList();
         }
         catch (ApiException ex) { _error = ex.Message; }
     }
@@ -128,7 +139,13 @@
         _busy = true;
         try
         {
-            await Api.AddKeywordAsync(new CreateKeywordRequest { Term = _term.Trim(), Scope = _scope });
+            Guid? sourceId = Guid.TryParse(_sourceId, out var sid) ? sid : null;
+            await Api.AddKeywordAsync(new CreateKeywordRequest
+            {
+                Term = _term.Trim(),
+                Scope = _scope,
+                SourceId = sourceId,
+            });
             _term = "";
             await Load();
         }
