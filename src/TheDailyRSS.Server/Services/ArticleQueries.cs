@@ -16,6 +16,25 @@ public static class ArticleQueries
     public static IQueryable<Article> Subscribed(AppDbContext db, Guid uid) =>
         db.Articles.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid));
 
+    /// <summary>The reader's visible article set — subscribed sources with keyword and field mutes
+    /// applied (and, unless <paramref name="includeHidden"/>, hidden articles dropped). Loads both
+    /// filter lists and composes them in the one correct order, so call sites don't re-assemble the
+    /// pipeline by hand. Use <paramref name="includeHidden"/> = true for the Hidden view.</summary>
+    public static async Task<IQueryable<Article>> VisibleAsync(
+        AppDbContext db, Guid uid, CancellationToken ct, bool includeHidden = false)
+    {
+        var keywords = await LoadFiltersAsync(db, uid, ct);
+        var fields = await LoadFieldFiltersAsync(db, uid, ct);
+        var q = ApplyMutes(db, uid, keywords, fields);
+        return includeHidden ? q : NotHidden(q, uid);
+    }
+
+    /// <summary>Composes the subscribed set with already-loaded keyword + field mutes (no hidden
+    /// filter). Lets a caller that needs the muted set several times load the filters just once.</summary>
+    public static IQueryable<Article> ApplyMutes(
+        AppDbContext db, Guid uid, List<KeywordFilter> keywords, List<FieldFilter> fields) =>
+        ApplyFieldFilters(ApplyKeywords(Subscribed(db, uid), keywords), fields);
+
     /// <summary>Drops articles the user has hidden. Applied everywhere except the Hidden view itself.</summary>
     public static IQueryable<Article> NotHidden(IQueryable<Article> q, Guid uid) =>
         q.Where(a => !a.States.Any(s => s.UserId == uid && s.IsHidden));

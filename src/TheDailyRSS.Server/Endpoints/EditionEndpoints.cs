@@ -57,9 +57,7 @@ public static class EditionEndpoints
     private static async Task<IResult> ListDates(ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
     {
         var uid = principal.GetUserId();
-        var filters = await LoadFiltersAsync(db, uid, ct);
-        var fieldFilters = await LoadFieldFiltersAsync(db, uid, ct);
-        var visible = NotHidden(ApplyFieldFilters(ApplyKeywords(Subscribed(db, uid), filters), fieldFilters), uid);
+        var visible = await VisibleAsync(db, uid, ct);
 
         var grouped = await (
             from a in visible
@@ -102,9 +100,12 @@ public static class EditionEndpoints
         Guid uid, DateOnly date, Guid? categoryId, Guid? sourceId, bool saved, bool hidden, bool unreadOnly,
         AppDbContext db, FeedOptions opts, CancellationToken ct)
     {
-        var filters = await LoadFiltersAsync(db, uid, ct);
+        var keywords = await LoadFiltersAsync(db, uid, ct);
         var fieldFilters = await LoadFieldFiltersAsync(db, uid, ct);
-        var query = ApplyFieldFilters(ApplyKeywords(Subscribed(db, uid), filters), fieldFilters);
+        // Load the mute filters once; the muted set is reused for the listing, the unread total and
+        // the prev/next probing below.
+        var muted = ApplyMutes(db, uid, keywords, fieldFilters);
+        var query = muted;
 
         // "Saved" and "Hidden" are cross-date pseudo-sections; everything else is bound to the day.
         // Hidden articles are dropped from every view except the Hidden list itself.
@@ -151,13 +152,13 @@ public static class EditionEndpoints
                 .ToList();
         }
 
-        var unreadTotal = await NotHidden(ApplyFieldFilters(ApplyKeywords(Subscribed(db, uid), filters), fieldFilters), uid)
+        var unreadTotal = await NotHidden(muted, uid)
             .CountAsync(a => !a.States.Any(s => s.UserId == uid && s.IsRead), ct);
 
         DateOnly? prev = null, next = null;
         if (!saved && !hidden)
         {
-            var dateQuery = NotHidden(ApplyFieldFilters(ApplyKeywords(Subscribed(db, uid), filters), fieldFilters), uid);
+            var dateQuery = NotHidden(muted, uid);
             if (categoryId is { } c2)
                 dateQuery = dateQuery.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid && s.CategoryId == c2));
             if (sourceId is { } src2)
@@ -243,9 +244,8 @@ public static class EditionEndpoints
             .FirstOrDefaultAsync(ct);
         if (editionDate is not { } day) return Results.NotFound();
 
-        var filters = await LoadFiltersAsync(db, uid, ct);
-        var fieldFilters = await LoadFieldFiltersAsync(db, uid, ct);
-        var ordered = await NotHidden(ApplyFieldFilters(ApplyKeywords(Subscribed(db, uid), filters), fieldFilters), uid)
+        var visible = await VisibleAsync(db, uid, ct);
+        var ordered = await visible
             .Where(a => a.EditionDate == day)
             .OrderByDescending(a => a.PublishedAt).ThenBy(a => a.Id)
             .Select(a => new ArticleLinkDto(a.Id, a.Title))
@@ -315,10 +315,8 @@ public static class EditionEndpoints
             return Results.BadRequest(new { error = "Invalid date." });
 
         var uid = principal.GetUserId();
-        var filters = await LoadFiltersAsync(db, uid, ct);
-        var fieldFilters = await LoadFieldFiltersAsync(db, uid, ct);
-
-        var query = NotHidden(ApplyFieldFilters(ApplyKeywords(Subscribed(db, uid), filters), fieldFilters), uid)
+        var visible = await VisibleAsync(db, uid, ct);
+        var query = visible
             .Where(a => a.EditionDate == d && !a.States.Any(s => s.UserId == uid && s.IsRead));
         if (categoryId is { } cid)
             query = query.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid && s.CategoryId == cid));
