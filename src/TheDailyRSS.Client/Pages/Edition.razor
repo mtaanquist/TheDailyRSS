@@ -127,7 +127,7 @@ else
                     <div class="tdr-kicker">
                         <span class="tdr-lead-flag">Lead Story</span>
                         <span>@lead.FeedTitle</span>
-                        <span>@ArticleCard.Relative(lead.PublishedAt)</span>
+                        <span>@RelativeTime.Terse(lead.PublishedAt)</span>
                         <span style="margin-left:auto; display:inline-flex; align-items:center; gap:4px">
                             <StarButton Saved="lead.IsSaved" SavedChanged="@(s => OnSave((lead.Id, s)))" />
                             <HideButton Hidden="lead.IsHidden" HiddenChanged="@(h => OnHide((lead.Id, h)))" />
