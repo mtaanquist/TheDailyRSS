@@ -44,7 +44,7 @@ public sealed record UserDto(
     bool IsAdmin,
     PreferencesDto Preferences);
 
-public sealed class PreferencesDto
+public sealed record PreferencesDto
 {
     public ThemePreference Theme { get; set; } = ThemePreference.Newsprint;
     public HeadlineFont HeadlineFont { get; set; } = HeadlineFont.PtSerif;
