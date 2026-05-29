@@ -1,0 +1,4 @@
+node_modules/
+chrome/
+shots/
+package-lock.json
