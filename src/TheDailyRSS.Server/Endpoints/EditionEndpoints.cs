@@ -85,7 +85,7 @@ public static class EditionEndpoints
         var latestQuery = NotHidden(Subscribed(db, uid), uid);
         if (sourceId is { } sid) latestQuery = latestQuery.Where(a => a.SourceId == sid);
         var latest = await latestQuery.MaxAsync(a => (DateOnly?)a.EditionDate, ct);
-        var date = latest ?? Today(opts.Value);
+        var date = latest ?? EditionClock.Today(opts.Value);
         return await BuildEdition(uid, date, categoryId, sourceId, saved: false, hidden: false, unreadOnly ?? false, db, opts.Value, ct);
     }
 
@@ -178,7 +178,7 @@ public static class EditionEndpoints
             VolumeLabel: Masthead.Volume(date),
             IssueLabel: Masthead.Issue(date),
             DateLabel: Masthead.DateLabel(date),
-            IsToday: date == Today(opts),
+            IsToday: date == EditionClock.Today(opts),
             PrevDate: prev,
             NextDate: next,
             UnreadTotal: unreadTotal,
@@ -365,13 +365,6 @@ public static class EditionEndpoints
         }
     }
 
-    private static DateOnly Today(FeedOptions opts)
-    {
-        TimeZoneInfo tz;
-        try { tz = TimeZoneInfo.FindSystemTimeZoneById(opts.EditionTimeZone); }
-        catch { tz = TimeZoneInfo.Utc; }
-        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz).DateTime);
-    }
 }
 
 public sealed record SetBoolRequest(bool Value);

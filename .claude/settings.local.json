@@ -11,7 +11,10 @@
       "Bash(curl -s -o /dev/null -w '%{http_code}\\\\n' http://localhost:8080/_framework/blazor.webassembly.js)",
       "Bash(curl -s -o /dev/null -w '%{http_code}\\\\n' \"http://localhost:8080/_framework/blazor.boot.json\")",
       "Bash(dotnet test *)",
-      "Bash(dotnet publish *)"
+      "Bash(dotnet publish *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit -q -m ' *)"
     ]
   }
 }

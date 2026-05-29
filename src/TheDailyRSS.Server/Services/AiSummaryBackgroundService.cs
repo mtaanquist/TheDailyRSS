@@ -47,7 +47,7 @@ public sealed class AiSummaryBackgroundService(
             .ToListAsync(ct);
         if (users.Count == 0) return;
 
-        var today = Today();
+        var today = EditionClock.Today(_options);
         var yesterday = today.AddDays(-1);
         var (weekStart, weekEnd) = AiSummaryService.WeekRange(today.AddDays(-7));
 
@@ -78,13 +78,5 @@ public sealed class AiSummaryBackgroundService(
         {
             log.LogWarning(ex, "Failed to pre-generate {Kind} summary for user {UserId}", kind, user.Id);
         }
-    }
-
-    private DateOnly Today()
-    {
-        TimeZoneInfo tz;
-        try { tz = TimeZoneInfo.FindSystemTimeZoneById(_options.EditionTimeZone); }
-        catch { tz = TimeZoneInfo.Utc; }
-        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz).DateTime);
     }
 }

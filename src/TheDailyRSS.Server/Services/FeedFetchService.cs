@@ -86,7 +86,6 @@ public sealed class FeedFetchService(
             .Select(a => a.ExternalId)
             .ToHashSetAsync(ct);
 
-        var tz = ResolveTimeZone(_options.EditionTimeZone);
         var added = 0;
 
         foreach (var item in parsed.Items)
@@ -94,7 +93,6 @@ public sealed class FeedFetchService(
             if (!existing.Add(item.ExternalId))
                 continue;
 
-            var local = TimeZoneInfo.ConvertTime(item.PublishedAt, tz);
             db.Articles.Add(new Article
             {
                 SourceId = source.Id,
@@ -108,7 +106,7 @@ public sealed class FeedFetchService(
                 // Npgsql's timestamptz only accepts UTC offsets; feeds may publish in local time.
                 PublishedAt = item.PublishedAt.ToUniversalTime(),
                 FetchedAt = DateTimeOffset.UtcNow,
-                EditionDate = DateOnly.FromDateTime(local.DateTime),
+                EditionDate = EditionClock.EditionDate(item.PublishedAt, _options.EditionTimeZone),
                 Fields = item.Fields,
             });
             added++;
@@ -153,12 +151,6 @@ public sealed class FeedFetchService(
             buffer.Write(chunk, 0, read);
         }
         return buffer;
-    }
-
-    private static TimeZoneInfo ResolveTimeZone(string id)
-    {
-        try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
-        catch { return TimeZoneInfo.Utc; }
     }
 
     [return: System.Diagnostics.CodeAnalysis.NotNullIfNotNull(nameof(value))]
