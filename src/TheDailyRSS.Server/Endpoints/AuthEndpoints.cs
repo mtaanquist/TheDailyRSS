@@ -121,14 +121,22 @@ public static class AuthEndpoints
     }
 
     private static async Task<IResult> ChangePassword(
-        ChangePasswordRequest req, System.Security.Claims.ClaimsPrincipal principal, UserManager<AppUser> users)
+        ChangePasswordRequest req, System.Security.Claims.ClaimsPrincipal principal,
+        UserManager<AppUser> users, AppDbContext db)
     {
         var user = await users.FindByIdAsync(principal.GetUserId().ToString());
         if (user is null) return Results.Unauthorized();
         var result = await users.ChangePasswordAsync(user, req.CurrentPassword, req.NewPassword);
-        return result.Succeeded
-            ? Results.NoContent()
-            : Results.BadRequest(new { error = string.Join(" ", result.Errors.Select(e => e.Description)) });
+        if (!result.Succeeded)
+            return Results.BadRequest(new { error = string.Join(" ", result.Errors.Select(e => e.Description)) });
+
+        // A password change should boot every other device (the common "I think I'm compromised" flow).
+        // The current session is kept so the user isn't logged out of the device they just used.
+        var current = principal.GetSessionId();
+        await db.Sessions
+            .Where(s => s.UserId == user.Id && s.Id != current && s.RevokedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.RevokedAt, DateTimeOffset.UtcNow));
+        return Results.NoContent();
     }
 
     private static async Task<IResult> ListSessions(
