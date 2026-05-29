@@ -1,5 +1,6 @@
 @page "/settings/ai"
 @attribute [Authorize]
+@inherits OperationComponent
 @inject ApiClient Api
 @inject AuthService Auth
 
@@ -71,11 +72,11 @@
             <div class="tdr-hint">Otherwise digests are generated on demand when you open them.</div>
 
             <div style="margin-top:18px; display:flex; gap:10px; align-items:center">
-                <button class="tdr-btn" @onclick="Save" disabled="@_busy">save settings</button>
+                <button class="tdr-btn" @onclick="Save" disabled="@Busy">save settings</button>
                 @if (_saved) { <span class="tdr-hint">↳ saved &amp; synced.</span> }
             </div>
 
-            @if (_error is not null) { <div class="tdr-error">@_error</div> }
+            @if (Error is not null) { <div class="tdr-error">@Error</div> }
         }
 </SettingsShell>
 
@@ -86,9 +87,7 @@
     private bool _hasKey;
     private bool _replacingKey;
     private string _apiKey = "";
-    private bool _busy;
     private bool _saved;
-    private string? _error;
 
     private sealed class EditModel
     {
@@ -102,7 +101,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        try
+        await RunAsync(async () =>
         {
             _orig = await Api.GetAiSettingsAsync();
             _s = new EditModel
@@ -115,34 +114,27 @@
                 AutoWeekly = _orig.AutoWeekly,
             };
             _hasKey = _orig.HasApiKey;
-        }
-        catch (ApiException ex) { _error = ex.Message; }
-        finally { _loaded = true; }
+        });
+        _loaded = true;
     }
 
-    private async Task ClearKey()
+    private Task ClearKey() => RunAsync(async () =>
     {
-        _busy = true; _error = null;
-        try
-        {
-            await SaveCore(clearKey: true);
-            _hasKey = false; _replacingKey = false; _apiKey = "";
-        }
-        catch (ApiException ex) { _error = ex.Message; }
-        finally { _busy = false; }
-    }
+        await SaveCore(clearKey: true);
+        _hasKey = false; _replacingKey = false; _apiKey = "";
+    });
 
     private async Task Save()
     {
-        _busy = true; _error = null; _saved = false;
-        try
+        _saved = false;
+        if (await RunAsync(async () =>
         {
             await SaveCore(clearKey: false);
             _apiKey = ""; _replacingKey = false;
+        }))
+        {
             _saved = true;
         }
-        catch (ApiException ex) { _error = ex.Message; }
-        finally { _busy = false; }
     }
 
     private async Task SaveCore(bool clearKey)

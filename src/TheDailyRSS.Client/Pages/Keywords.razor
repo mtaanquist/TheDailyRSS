@@ -1,5 +1,6 @@
 @page "/settings/keywords"
 @attribute [Authorize]
+@inherits OperationComponent
 @inject ApiClient Api
 
 <PageTitle>Filters · The Daily RSS</PageTitle>
@@ -14,9 +15,9 @@
             article, including link addresses — so muting <code>amazon.com</code> hides most deals posts.
         </div>
 
-        @if (_error is not null)
+        @if (Error is not null)
         {
-            <div class="tdr-error">@_error</div>
+            <div class="tdr-error">@Error</div>
         }
 
         <div class="tdr-folder" style="padding:14px; max-width:520px">
@@ -36,7 +37,7 @@
                             <option value="@f.SourceId">Only on @f.Title</option>
                         }
                     </select>
-                    <button class="tdr-btn" @onclick="Add" disabled="@(_busy || string.IsNullOrWhiteSpace(_term))">mute</button>
+                    <button class="tdr-btn" @onclick="Add" disabled="@(Busy || string.IsNullOrWhiteSpace(_term))">mute</button>
                 </div>
             </div>
         </div>
@@ -103,20 +104,14 @@
     private string _term = "";
     private string _sourceId = "";        // "" = every feed; otherwise the FeedSource id as string
     private KeywordScope _scope = KeywordScope.Everywhere;
-    private bool _busy;
-    private string? _error;
 
-    protected override Task OnInitializedAsync() => Load();
+    protected override Task OnInitializedAsync() => RunAsync(LoadAsync);
 
-    private async Task Load()
+    private async Task LoadAsync()
     {
-        try
-        {
-            _items = await Api.GetKeywordsAsync();
-            _fields = await Api.GetFieldFiltersAsync();
-            _feeds = (await Api.GetFeedsAsync()).OrderBy(f => f.Title).ToList();
-        }
-        catch (ApiException ex) { _error = ex.Message; }
+        _items = await Api.GetKeywordsAsync();
+        _fields = await Api.GetFieldFiltersAsync();
+        _feeds = (await Api.GetFeedsAsync()).OrderBy(f => f.Title).ToList();
     }
 
     private async Task OnKey(KeyboardEventArgs e)
@@ -127,9 +122,7 @@
     private async Task Add()
     {
         if (string.IsNullOrWhiteSpace(_term)) return;
-        _error = null;
-        _busy = true;
-        try
+        await RunAsync(async () =>
         {
             Guid? sourceId = Guid.TryParse(_sourceId, out var sid) ? sid : null;
             await Api.AddKeywordAsync(new CreateKeywordRequest
@@ -139,29 +132,13 @@
                 SourceId = sourceId,
             });
             _term = "";
-            await Load();
-        }
-        catch (ApiException ex) { _error = ex.Message; }
-        finally { _busy = false; }
+            await LoadAsync();
+        });
     }
 
-    private async Task Remove(KeywordFilterDto k)
-    {
-        try
-        {
-            await Api.DeleteKeywordAsync(k.Id);
-            await Load();
-        }
-        catch (ApiException ex) { _error = ex.Message; }
-    }
+    private Task Remove(KeywordFilterDto k) =>
+        RunAsync(async () => { await Api.DeleteKeywordAsync(k.Id); await LoadAsync(); });
 
-    private async Task RemoveField(FieldFilterDto f)
-    {
-        try
-        {
-            await Api.DeleteFieldFilterAsync(f.Id);
-            await Load();
-        }
-        catch (ApiException ex) { _error = ex.Message; }
-    }
+    private Task RemoveField(FieldFilterDto f) =>
+        RunAsync(async () => { await Api.DeleteFieldFilterAsync(f.Id); await LoadAsync(); });
 }

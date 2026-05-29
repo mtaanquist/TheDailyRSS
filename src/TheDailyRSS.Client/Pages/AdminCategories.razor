@@ -1,5 +1,6 @@
 @page "/settings/categories"
 @attribute [Authorize]
+@inherits OperationComponent
 @inject ApiClient Api
 @inject AppState State
 @inject IJSRuntime JS
@@ -12,9 +13,9 @@
             The newspaper sections everyone files their feeds into. Changes affect all readers.
         </div>
 
-        @if (_error is not null)
+        @if (Error is not null)
         {
-            <div class="tdr-error">@_error</div>
+            <div class="tdr-error">@Error</div>
         }
 
         <div class="tdr-folder" style="padding:14px; max-width:560px">
@@ -25,7 +26,7 @@
                     <input class="tdr-input" style="max-width:140px" placeholder="slug" @bind="_slug" @bind:event="oninput" />
                     <input class="tdr-input" type="color" style="max-width:54px; padding:2px" @bind="_color" />
                     <button class="tdr-btn" @onclick="Create"
-                            disabled="@(_busy || string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_slug))">add</button>
+                            disabled="@(Busy || string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_slug))">add</button>
                 </div>
             </div>
         </div>
@@ -66,59 +67,40 @@
     private Guid? _editingId;
     private string _editName = "";
     private string _editColor = "#a83020";
-    private bool _busy;
-    private string? _error;
 
-    protected override Task OnInitializedAsync() => Load();
+    protected override Task OnInitializedAsync() => RunAsync(LoadAsync);
 
-    private async Task Load()
-    {
-        try { _categories = await Api.GetAdminCategoriesAsync(); }
-        catch (ApiException ex) { _error = ex.Message; }
-    }
+    private async Task LoadAsync() => _categories = await Api.GetAdminCategoriesAsync();
 
     private async Task Create()
     {
         if (string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_slug)) return;
-        _error = null;
-        _busy = true;
-        try
+        await RunAsync(async () =>
         {
             await Api.CreateCategoryAsync(new CreateCategoryRequest { Name = _name.Trim(), Slug = _slug.Trim(), Color = _color });
             _name = ""; _slug = ""; _color = "#a83020";
-            await Reload();
-        }
-        catch (ApiException ex) { _error = ex.Message; }
-        finally { _busy = false; }
+            await ReloadAsync();
+        });
     }
 
     private void StartEdit(CategoryDto c) { _editingId = c.Id; _editName = c.Name; _editColor = c.Color; }
 
-    private async Task Save(CategoryDto c)
+    private Task Save(CategoryDto c) => RunAsync(async () =>
     {
-        try
-        {
-            await Api.UpdateCategoryAsync(c.Id, new UpdateCategoryRequest { Name = _editName.Trim(), Color = _editColor });
-            _editingId = null;
-            await Reload();
-        }
-        catch (ApiException ex) { _error = ex.Message; }
-    }
+        await Api.UpdateCategoryAsync(c.Id, new UpdateCategoryRequest { Name = _editName.Trim(), Color = _editColor });
+        _editingId = null;
+        await ReloadAsync();
+    });
 
     private async Task Delete(CategoryDto c)
     {
         if (!await Confirm($"Delete the “{c.Name}” section?")) return;
-        try
-        {
-            await Api.DeleteCategoryAsync(c.Id);
-            await Reload();
-        }
-        catch (ApiException ex) { _error = ex.Message; }
+        await RunAsync(async () => { await Api.DeleteCategoryAsync(c.Id); await ReloadAsync(); });
     }
 
-    private async Task Reload()
+    private async Task ReloadAsync()
     {
-        await Load();
+        await LoadAsync();
         await State.RefreshAsync();
     }
 
