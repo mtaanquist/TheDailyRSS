@@ -1,3 +1,4 @@
+using System.Xml;
 using System.Xml.Linq;
 using Microsoft.EntityFrameworkCore;
 using TheDailyRSS.Server.Data;
@@ -47,7 +48,9 @@ public sealed class OpmlService(AppDbContext db, FeedSourceService sources)
 
     public async Task<OpmlImportResult> ImportAsync(Guid userId, string opml, CancellationToken ct)
     {
-        var doc = XDocument.Parse(opml);
+        // Parse through an XmlReader with DTDs prohibited and no external resolver, so a hostile
+        // uploaded OPML can't trigger XXE (external entity / file disclosure) or entity-expansion DoS.
+        var doc = ParseSafely(opml);
         var body = doc.Root?.Element("body");
         if (body is null) return new OpmlImportResult(0, 0, 0);
 
@@ -114,4 +117,17 @@ public sealed class OpmlService(AppDbContext db, FeedSourceService sources)
     }
 
     private static bool IsFeed(XElement el) => el.Attribute("xmlUrl") is not null;
+
+    private static XDocument ParseSafely(string opml)
+    {
+        var settings = new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            MaxCharactersFromEntities = 1024,
+        };
+        using var stringReader = new StringReader(opml);
+        using var xmlReader = XmlReader.Create(stringReader, settings);
+        return XDocument.Load(xmlReader);
+    }
 }
