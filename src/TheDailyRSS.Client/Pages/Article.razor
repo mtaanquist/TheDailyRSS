@@ -213,14 +213,11 @@ else
         finally { _filterBusy = false; }
     }
 
-    /// <summary>Strip script/style/iframe so feed HTML can't run in our origin, then drop a
-    /// leading body image that just repeats the hero (e.g. The Verge leads every post with one).</summary>
-    private static string Sanitize(string html, string? heroUrl)
-    {
-        html = Regex.Replace(html, "<(script|style|iframe)[^>]*>.*?</\\1>", "",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline);
-        return string.IsNullOrEmpty(heroUrl) ? html : StripDuplicateHero(html, heroUrl);
-    }
+    /// <summary>Drops a leading body image that just repeats the hero (e.g. The Verge leads every
+    /// post with one). XSS sanitization is done authoritatively on the server (the API returns
+    /// already-sanitized ContentHtml via an allowlist HTML sanitizer); this is purely presentational.</summary>
+    private static string Sanitize(string html, string? heroUrl) =>
+        string.IsNullOrEmpty(heroUrl) ? html : StripDuplicateHero(html, heroUrl);
 
     /// <summary>Removes the first body image that matches the hero — its wrapping &lt;figure&gt; if any,
     /// else the bare &lt;img&gt;. Matches on the path before the query string so resized/cropped
