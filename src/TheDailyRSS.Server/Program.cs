@@ -104,6 +104,7 @@ builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir, "keys")));
 
 builder.Services.AddSingleton<FeedReader>();
+builder.Services.AddSingleton<HtmlSanitizationService>();
 builder.Services.AddScoped<FeedDiscoveryService>();
 builder.Services.AddScoped<FeedFetchService>();
 builder.Services.AddScoped<FeedSourceService>();
@@ -128,6 +129,33 @@ await using (var scope = app.Services.CreateAsyncScope())
 
 if (app.Environment.IsDevelopment())
     app.UseWebAssemblyDebugging();
+
+// ── Security headers ────────────────────────────────────────────────
+// Defence-in-depth behind the server-side HTML sanitizer: even if some markup slips through,
+// the CSP forbids inline/external script execution and blocks framing/clickjacking.
+// Blazor WASM needs 'wasm-unsafe-eval' for the .NET runtime; the app's own JS lives in external
+// files (js/app.js) so script-src stays strict (no 'unsafe-inline'). Google Fonts is allowlisted
+// for styles/fonts; feed images come from arbitrary http(s) hosts (and data: URIs), so img-src is broad.
+app.Use(async (ctx, next) =>
+{
+    var h = ctx.Response.Headers;
+    h["Content-Security-Policy"] =
+        "default-src 'self'; " +
+        "script-src 'self' 'wasm-unsafe-eval'; " +
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+        "img-src 'self' data: https: http:; " +
+        "font-src 'self' data: https://fonts.gstatic.com; " +
+        "connect-src 'self'; " +
+        "frame-src 'none'; " +
+        "object-src 'none'; " +
+        "base-uri 'self'; " +
+        "form-action 'self'; " +
+        "frame-ancestors 'none'";
+    h["X-Content-Type-Options"] = "nosniff";
+    h["X-Frame-Options"] = "DENY";
+    h["Referrer-Policy"] = "no-referrer";
+    await next();
+});
 
 app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();

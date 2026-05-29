@@ -191,7 +191,8 @@ public static class EditionEndpoints
         return Results.Ok(dto);
     }
 
-    private static async Task<IResult> GetArticle(Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
+    private static async Task<IResult> GetArticle(
+        Guid id, ClaimsPrincipal principal, AppDbContext db, HtmlSanitizationService sanitizer, CancellationToken ct)
     {
         var uid = principal.GetUserId();
         // Direct open by id deliberately ignores keyword/field filters (a held link still works).
@@ -223,7 +224,7 @@ public static class EditionEndpoints
             .ToDictionary(kv => kv.Key, kv => (IReadOnlyList<string>)kv.Value);
 
         return Results.Ok(new ArticleDto(
-            row.Id, row.Title, row.Summary, row.ContentHtml, row.Author,
+            row.Id, row.Title, row.Summary, sanitizer.Sanitize(row.ContentHtml), row.Author,
             row.FeedTitle, row.IconText,
             row.CategoryId, row.CategoryName, row.CategoryColor,
             row.ImageUrl, row.PublishedAt,
