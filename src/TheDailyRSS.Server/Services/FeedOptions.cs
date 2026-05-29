@@ -12,4 +12,8 @@ public sealed class FeedOptions
 
     /// <summary>Max articles kept per feed (older ones are pruned). 0 = keep all.</summary>
     public int MaxArticlesPerFeed { get; set; } = 500;
+
+    /// <summary>Hard cap on a single fetched feed/page response body. Guards against a hostile or
+    /// runaway endpoint exhausting memory. Applies to feed fetches, discovery scrapes and OPML import.</summary>
+    public int MaxResponseBytes { get; set; } = 16 * 1024 * 1024;
 }
