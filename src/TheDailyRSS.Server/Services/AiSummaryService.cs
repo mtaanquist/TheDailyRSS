@@ -82,7 +82,8 @@ public sealed class AiSummaryService(
         Guid uid, DateOnly start, DateOnly end, CancellationToken ct)
     {
         var filters = await LoadFiltersAsync(db, uid, ct);
-        var visible = NotHidden(ApplyKeywords(Subscribed(db, uid), filters), uid)
+        var fieldFilters = await LoadFieldFiltersAsync(db, uid, ct);
+        var visible = NotHidden(ApplyFieldFilters(ApplyKeywords(Subscribed(db, uid), filters), fieldFilters), uid)
             .Where(a => a.EditionDate >= start && a.EditionDate <= end);
 
         var items = await (

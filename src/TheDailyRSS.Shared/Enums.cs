@@ -41,3 +41,11 @@ public enum KeywordScope
     /// <summary>Match the headline only.</summary>
     TitleOnly = 1,
 }
+
+/// <summary>How a <c>FieldFilter</c>'s value is compared against captured feed-item field values.
+/// More operators may follow; today only exact (case-insensitive) match is supported.</summary>
+public enum FieldFilterOperator
+{
+    /// <summary>The captured value equals the filter value (case-insensitive).</summary>
+    Equals = 0,
+}

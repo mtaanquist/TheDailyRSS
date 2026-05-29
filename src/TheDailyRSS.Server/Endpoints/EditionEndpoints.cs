@@ -58,7 +58,8 @@ public static class EditionEndpoints
     {
         var uid = principal.GetUserId();
         var filters = await LoadFiltersAsync(db, uid, ct);
-        var visible = NotHidden(ApplyKeywords(Subscribed(db, uid), filters), uid);
+        var fieldFilters = await LoadFieldFiltersAsync(db, uid, ct);
+        var visible = NotHidden(ApplyFieldFilters(ApplyKeywords(Subscribed(db, uid), filters), fieldFilters), uid);
 
         var grouped = await (
             from a in visible
@@ -102,7 +103,8 @@ public static class EditionEndpoints
         AppDbContext db, FeedOptions opts, CancellationToken ct)
     {
         var filters = await LoadFiltersAsync(db, uid, ct);
-        var query = ApplyKeywords(Subscribed(db, uid), filters);
+        var fieldFilters = await LoadFieldFiltersAsync(db, uid, ct);
+        var query = ApplyFieldFilters(ApplyKeywords(Subscribed(db, uid), filters), fieldFilters);
 
         // "Saved" and "Hidden" are cross-date pseudo-sections; everything else is bound to the day.
         // Hidden articles are dropped from every view except the Hidden list itself.
@@ -149,13 +151,13 @@ public static class EditionEndpoints
                 .ToList();
         }
 
-        var unreadTotal = await NotHidden(ApplyKeywords(Subscribed(db, uid), filters), uid)
+        var unreadTotal = await NotHidden(ApplyFieldFilters(ApplyKeywords(Subscribed(db, uid), filters), fieldFilters), uid)
             .CountAsync(a => !a.States.Any(s => s.UserId == uid && s.IsRead), ct);
 
         DateOnly? prev = null, next = null;
         if (!saved && !hidden)
         {
-            var dateQuery = NotHidden(ApplyKeywords(Subscribed(db, uid), filters), uid);
+            var dateQuery = NotHidden(ApplyFieldFilters(ApplyKeywords(Subscribed(db, uid), filters), fieldFilters), uid);
             if (categoryId is { } c2)
                 dateQuery = dateQuery.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid && s.CategoryId == c2));
             if (sourceId is { } src2)
@@ -192,21 +194,41 @@ public static class EditionEndpoints
     private static async Task<IResult> GetArticle(Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
     {
         var uid = principal.GetUserId();
-        // Direct open by id deliberately ignores keyword filters (a held link still works).
-        var dto = await (
+        // Direct open by id deliberately ignores keyword/field filters (a held link still works).
+        // Project to an intermediate shape so the JSONB Fields can be reshaped into the
+        // DTO's read-only dictionary on the client side of the boundary.
+        var row = await (
             from a in db.Articles.Where(a => a.Id == id && a.Source!.Subscriptions.Any(s => s.UserId == uid))
             from sub in db.Subscriptions.Where(s => s.UserId == uid && s.SourceId == a.SourceId)
             from st in db.UserArticleStates.Where(s => s.UserId == uid && s.ArticleId == a.Id).DefaultIfEmpty()
-            select new ArticleDto(
+            select new
+            {
                 a.Id, a.Title, a.Summary, a.ContentHtml, a.Author,
-                sub.CustomTitle ?? a.Source!.Title, a.Source!.IconText,
-                sub.CategoryId, sub.Category!.Name, sub.Category.Color,
+                FeedTitle = sub.CustomTitle ?? a.Source!.Title,
+                a.Source!.IconText,
+                sub.CategoryId,
+                CategoryName = sub.Category!.Name,
+                CategoryColor = sub.Category.Color,
                 a.ImageUrl, a.PublishedAt,
-                st != null && st.IsRead, st != null && st.IsSaved, st != null && st.IsHidden,
-                st != null ? st.ReadingPositionPercent : 0,
-                a.Url))
+                IsRead = st != null && st.IsRead,
+                IsSaved = st != null && st.IsSaved,
+                IsHidden = st != null && st.IsHidden,
+                ReadingPositionPercent = st != null ? st.ReadingPositionPercent : 0,
+                a.Url, a.SourceId, a.Fields,
+            })
             .FirstOrDefaultAsync(ct);
-        return dto is null ? Results.NotFound() : Results.Ok(dto);
+        if (row is null) return Results.NotFound();
+
+        var fields = (IReadOnlyDictionary<string, IReadOnlyList<string>>)row.Fields
+            .ToDictionary(kv => kv.Key, kv => (IReadOnlyList<string>)kv.Value);
+
+        return Results.Ok(new ArticleDto(
+            row.Id, row.Title, row.Summary, row.ContentHtml, row.Author,
+            row.FeedTitle, row.IconText,
+            row.CategoryId, row.CategoryName, row.CategoryColor,
+            row.ImageUrl, row.PublishedAt,
+            row.IsRead, row.IsSaved, row.IsHidden, row.ReadingPositionPercent,
+            row.Url, row.SourceId, fields));
     }
 
     /// <summary>The previous/next stories in the same edition (day), in the same order the edition grid
@@ -221,7 +243,8 @@ public static class EditionEndpoints
         if (editionDate is not { } day) return Results.NotFound();
 
         var filters = await LoadFiltersAsync(db, uid, ct);
-        var ordered = await NotHidden(ApplyKeywords(Subscribed(db, uid), filters), uid)
+        var fieldFilters = await LoadFieldFiltersAsync(db, uid, ct);
+        var ordered = await NotHidden(ApplyFieldFilters(ApplyKeywords(Subscribed(db, uid), filters), fieldFilters), uid)
             .Where(a => a.EditionDate == day)
             .OrderByDescending(a => a.PublishedAt).ThenBy(a => a.Id)
             .Select(a => new ArticleLinkDto(a.Id, a.Title))
@@ -303,8 +326,9 @@ public static class EditionEndpoints
 
         var uid = principal.GetUserId();
         var filters = await LoadFiltersAsync(db, uid, ct);
+        var fieldFilters = await LoadFieldFiltersAsync(db, uid, ct);
 
-        var query = NotHidden(ApplyKeywords(Subscribed(db, uid), filters), uid)
+        var query = NotHidden(ApplyFieldFilters(ApplyKeywords(Subscribed(db, uid), filters), fieldFilters), uid)
             .Where(a => a.EditionDate == d && !a.States.Any(s => s.UserId == uid && s.IsRead));
         if (categoryId is { } cid)
             query = query.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid && s.CategoryId == cid));

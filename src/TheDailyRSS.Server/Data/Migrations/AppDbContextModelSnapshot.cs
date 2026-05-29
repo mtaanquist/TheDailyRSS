@@ -316,6 +316,10 @@ namespace TheDailyRSS.Server.Data.Migrations
                     b.Property<DateOnly>("EditionDate")
                         .HasColumnType("date");
 
+                    b.Property<string>("Fields")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
                     b.Property<string>("ExternalId")
                         .IsRequired()
                         .HasMaxLength(1000)
@@ -553,6 +557,41 @@ namespace TheDailyRSS.Server.Data.Migrations
                     b.ToTable("KeywordFilters");
                 });
 
+            modelBuilder.Entity("TheDailyRSS.Server.Data.FieldFilter", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FieldKey")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("Operator")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceId");
+
+                    b.HasIndex("UserId", "FieldKey", "Operator", "Value", "SourceId")
+                        .IsUnique();
+
+                    b.ToTable("FieldFilters");
+                });
+
             modelBuilder.Entity("TheDailyRSS.Server.Data.Subscription", b =>
                 {
                     b.Property<Guid>("Id")
@@ -748,6 +787,24 @@ namespace TheDailyRSS.Server.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("TheDailyRSS.Server.Data.FieldFilter", b =>
+                {
+                    b.HasOne("TheDailyRSS.Server.Data.FeedSource", "Source")
+                        .WithMany()
+                        .HasForeignKey("SourceId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("TheDailyRSS.Server.Data.AppUser", "User")
+                        .WithMany("FieldFilters")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Source");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("TheDailyRSS.Server.Data.Subscription", b =>
                 {
                     b.HasOne("TheDailyRSS.Server.Data.Category", "Category")
@@ -810,6 +867,8 @@ namespace TheDailyRSS.Server.Data.Migrations
                     b.Navigation("AiSummaries");
 
                     b.Navigation("ArticleStates");
+
+                    b.Navigation("FieldFilters");
 
                     b.Navigation("KeywordFilters");
 

@@ -58,6 +58,31 @@ public sealed class CreateKeywordRequest
     public KeywordScope Scope { get; set; } = KeywordScope.Everywhere;
 }
 
+/// <summary>A structured field-value mute rule. Captures came from the original feed XML
+/// (e.g. <c>&lt;category&gt;guides&lt;/category&gt;</c> → <c>FieldKey="category", Value="guides"</c>).
+/// <see cref="SourceId"/> scopes the rule to one feed; null means every subscribed feed.</summary>
+public sealed record FieldFilterDto(
+    Guid Id,
+    string FieldKey,
+    FieldFilterOperator Operator,
+    string Value,
+    Guid? SourceId,
+    string? SourceTitle);
+
+public sealed class CreateFieldFilterRequest
+{
+    [Required, MinLength(1), MaxLength(120)]
+    public string FieldKey { get; set; } = "";
+
+    [Required, MinLength(1), MaxLength(200)]
+    public string Value { get; set; } = "";
+
+    public FieldFilterOperator Operator { get; set; } = FieldFilterOperator.Equals;
+
+    /// <summary>Limit the rule to a single feed source. Null = applies across every subscription.</summary>
+    public Guid? SourceId { get; set; }
+}
+
 public sealed class AddFeedRequest
 {
     /// <summary>A site or feed URL. The server auto-detects the feed if a site URL is given.</summary>

@@ -35,7 +35,12 @@ public sealed record ArticleDto(
     bool IsSaved,
     bool IsHidden,
     int ReadingPositionPercent,
-    string Url);
+    string Url,
+    Guid SourceId,
+    /// <summary>Structured fields lifted from the source feed item — drives the "filter
+    /// from this article" affordance. Keys like <c>category</c>, <c>dc:creator</c>,
+    /// <c>media:keywords</c>; each maps to one or more captured values.</summary>
+    IReadOnlyDictionary<string, IReadOnlyList<string>> Fields);
 
 /// <summary>One day that has at least one article — used by the archive picker.</summary>
 public sealed record EditionDateDto(DateOnly Date, int ArticleCount, int UnreadCount);

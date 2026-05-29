@@ -10,6 +10,18 @@ public sealed partial class FeedReader
 {
     private static readonly XNamespace Media = "http://search.yahoo.com/mrss/";
     private static readonly XNamespace Content = "http://purl.org/rss/1.0/modules/content/";
+    private static readonly XNamespace Dc = "http://purl.org/dc/elements/1.1/";
+
+    /// <summary>Field elements we already lift into normalised columns — don't double-store
+    /// them under <see cref="ParsedItem.Fields"/>.</summary>
+    private static readonly HashSet<XName> ExcludedFieldNames = new()
+    {
+        Media + "content", Media + "thumbnail", Media + "description",
+        Content + "encoded",
+    };
+
+    private const int MaxFieldValuesPerItem = 32;
+    private const int MaxFieldValueLength = 256;
 
     public ParsedFeed Parse(Stream xml, string feedUrl)
     {
@@ -65,7 +77,105 @@ public sealed partial class FeedReader
             Summary: BestSummary(summaryHtml, contentHtml),
             ContentHtml: contentHtml,
             ImageUrl: ExtractImage(item, contentHtml, summaryHtml),
-            PublishedAt: published);
+            PublishedAt: published,
+            Fields: ExtractFields(item));
+    }
+
+    /// <summary>Builds the structured-field map used by the field-filter feature.
+    /// Keys are lower-cased; values are lower-cased and trimmed; the whole map is capped so a
+    /// pathological feed can't bloat the JSONB column.</summary>
+    private static Dictionary<string, List<string>> ExtractFields(SyndicationItem item)
+    {
+        var fields = new Dictionary<string, List<string>>();
+        var total = 0;
+
+        // 1) Standard RSS/Atom categories.
+        foreach (var c in item.Categories)
+            if (!string.IsNullOrWhiteSpace(c.Name))
+                AddField(fields, "category", c.Name, ref total);
+
+        // 2) Authors (names and email-style identifiers feeds commonly use).
+        foreach (var p in item.Authors)
+        {
+            if (!string.IsNullOrWhiteSpace(p.Name)) AddField(fields, "author", p.Name, ref total);
+            if (!string.IsNullOrWhiteSpace(p.Email)) AddField(fields, "author", p.Email, ref total);
+        }
+
+        // 3) Element extensions in known and custom namespaces.
+        foreach (var ext in item.ElementExtensions)
+        {
+            var el = ext.GetObject<XElement>();
+            if (ExcludedFieldNames.Contains(el.Name)) continue;
+
+            if (el.Name == Media + "keywords")
+            {
+                // media:keywords is a single comma-separated string in the spec.
+                foreach (var k in (el.Value ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                    AddField(fields, "media:keywords", k, ref total);
+                continue;
+            }
+
+            if (el.Name == Media + "category")
+            {
+                AddField(fields, "media:category", el.Value, ref total);
+                continue;
+            }
+
+            if (el.Name.Namespace == Dc)
+            {
+                // dc:creator, dc:subject, etc. — leaf text only.
+                if (IsLeafText(el))
+                    AddField(fields, "dc:" + el.Name.LocalName, el.Value, ref total);
+                continue;
+            }
+
+            // Other custom-namespace leaves: store under "{prefix-or-ns-host}:{localname}".
+            if (el.Name.Namespace != XNamespace.None && IsLeafText(el))
+            {
+                var prefix = PrefixFor(el);
+                if (prefix is null) continue;
+                AddField(fields, prefix + ":" + el.Name.LocalName, el.Value, ref total);
+            }
+        }
+
+        return fields;
+    }
+
+    private static void AddField(Dictionary<string, List<string>> fields, string key, string? value, ref int total)
+    {
+        if (total >= MaxFieldValuesPerItem) return;
+        if (string.IsNullOrWhiteSpace(value)) return;
+        var trimmed = value.Trim();
+        if (trimmed.Length > MaxFieldValueLength) trimmed = trimmed[..MaxFieldValueLength];
+        var k = key.ToLowerInvariant();
+        var v = trimmed.ToLowerInvariant();
+        if (!fields.TryGetValue(k, out var list)) fields[k] = list = new List<string>();
+        // De-dupe within a single item so editions don't list "category: guides" three times.
+        if (!list.Contains(v))
+        {
+            list.Add(v);
+            total++;
+        }
+    }
+
+    private static bool IsLeafText(XElement el) =>
+        !el.HasElements && !string.IsNullOrWhiteSpace(el.Value);
+
+    /// <summary>Best-effort prefix for a custom-namespace element so the filter key is
+    /// human-readable in the UI. Prefers the in-document prefix; falls back to the namespace's
+    /// host part. Returns null if neither is usable, so the field is skipped.</summary>
+    private static string? PrefixFor(XElement el)
+    {
+        var ns = el.Name.Namespace;
+        // GetPrefixOfNamespace walks up the ancestor chain to find any xmlns:foo declaration.
+        var prefix = el.GetPrefixOfNamespace(ns);
+        if (!string.IsNullOrWhiteSpace(prefix)) return prefix;
+        if (!Uri.TryCreate(ns.NamespaceName, UriKind.Absolute, out var uri)) return null;
+        var host = uri.Host;
+        if (string.IsNullOrWhiteSpace(host)) return null;
+        // "search.yahoo.com" → "yahoo" is friendlier than the whole host; take the second-level label.
+        var parts = host.Split('.');
+        return parts.Length >= 2 ? parts[^2] : host;
     }
 
     /// <summary>The teaser text. Prefers the description, but some feeds stuff a bare image URL

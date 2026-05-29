@@ -250,6 +250,72 @@ public class FeedReaderTests
     [InlineData("", "?")]
     public void IconText_Derives_Badge(string title, string expected) =>
         Assert.Equal(expected, IconText.From(title));
+
+    // ── Structured field capture (drives the "filter from this article" feature) ──
+
+    [Fact]
+    public void Captures_Standard_Category_Elements()
+    {
+        var item = ParseItem($"""
+            {Head}
+            <category>Guides</category>
+            <category>How-To</category>
+            """);
+
+        Assert.True(item.Fields.TryGetValue("category", out var cats));
+        Assert.Equal(new[] { "guides", "how-to" }, cats);     // stored lower-cased
+    }
+
+    [Fact]
+    public void Captures_Custom_Dublin_Core_Element()
+    {
+        // dc:subject is a free-text topic tag, lower-case-normalised for case-insensitive matching.
+        // (dc:creator is sometimes hoisted into item.Authors by SyndicationFeed, so avoid that
+        // one for this test.)
+        var item = ParseItem($"""
+            {Head}
+            <dc:subject>Privacy</dc:subject>
+            """);
+
+        Assert.Equal("privacy", Assert.Single(item.Fields["dc:subject"]));
+    }
+
+    [Fact]
+    public void Captures_Media_Keywords_Splitting_Csv()
+    {
+        var item = ParseItem($"""
+            {Head}
+            <media:keywords>sponsored, ad, Promo</media:keywords>
+            """);
+
+        Assert.Equal(new[] { "sponsored", "ad", "promo" }, item.Fields["media:keywords"]);
+    }
+
+    [Fact]
+    public void Skips_Elements_Already_Lifted_Into_Normalized_Fields()
+    {
+        // content:encoded is the article body; we already store it as ContentHtml.
+        // It should NOT also appear under Fields (would bloat the JSONB column with full HTML).
+        var item = ParseItem($"""
+            {Head}
+            <content:encoded><![CDATA[<p>Body.</p>]]></content:encoded>
+            """);
+
+        Assert.False(item.Fields.ContainsKey("content:encoded"));
+    }
+
+    [Fact]
+    public void Caps_Field_Value_Length()
+    {
+        var huge = new string('x', 1000);
+        var item = ParseItem($"""
+            {Head}
+            <category>{huge}</category>
+            """);
+
+        // The captured value is truncated, not dropped.
+        Assert.True(item.Fields["category"].Single().Length <= 256);
+    }
 }
 
 public class MastheadTests

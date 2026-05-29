@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using TheDailyRSS.Server.Data;
@@ -40,4 +41,31 @@ public static class ArticleQueries
 
     public static async Task<List<KeywordFilter>> LoadFiltersAsync(AppDbContext db, Guid uid, CancellationToken ct) =>
         await db.KeywordFilters.Where(k => k.UserId == uid).ToListAsync(ct);
+
+    public static async Task<List<FieldFilter>> LoadFieldFiltersAsync(AppDbContext db, Guid uid, CancellationToken ct) =>
+        await db.FieldFilters.Where(f => f.UserId == uid).ToListAsync(ct);
+
+    /// <summary>Drops articles whose JSONB <c>Fields</c> column contains any of the user's
+    /// (field, value) mute rules. Translates each rule to the Postgres <c>@&gt;</c> operator via
+    /// Npgsql's <see cref="NpgsqlDbFunctionsExtensions.JsonContains"/>; rules can be optionally
+    /// scoped to a single feed source.</summary>
+    public static IQueryable<Article> ApplyFieldFilters(IQueryable<Article> q, List<FieldFilter> filters)
+    {
+        foreach (var f in filters)
+        {
+            if (f.Operator != FieldFilterOperator.Equals) continue;     // future operators land here
+            if (string.IsNullOrEmpty(f.FieldKey) || string.IsNullOrEmpty(f.Value)) continue;
+
+            // { "<key>": ["<value>"] } — JSON containment matches when the array on the LHS
+            // contains the value as an element, which is what we want for a single-value rule.
+            var json = JsonSerializer.Serialize(
+                new Dictionary<string, string[]> { [f.FieldKey] = new[] { f.Value } });
+
+            if (f.SourceId is { } sid)
+                q = q.Where(a => a.SourceId != sid || !EF.Functions.JsonContains(a.Fields, json));
+            else
+                q = q.Where(a => !EF.Functions.JsonContains(a.Fields, json));
+        }
+        return q;
+    }
 }
