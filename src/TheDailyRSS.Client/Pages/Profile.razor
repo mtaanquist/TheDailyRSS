@@ -9,8 +9,8 @@
 <SettingsShell Current="profile" Crumb="Account & preferences">
         @if (_user is { } user)
         {
-            <h1 style="font-weight:900; font-size:26px">Your account</h1>
-            <div style="font-style:italic; font-size:13px; color:var(--ink-2); margin-bottom:18px">
+            <h1>Your account</h1>
+            <div class="tdr-settings-intro">
                 member since @user.CreatedAt.ToString("MMMM yyyy")
             </div>
 
