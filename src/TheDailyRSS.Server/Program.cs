@@ -33,6 +33,13 @@ if (string.IsNullOrWhiteSpace(jwtOptions.Key))
     jwtOptions.Key = JwtKeyBootstrap.LoadOrCreate(dataDir);
     builder.Services.PostConfigure<JwtOptions>(o => o.Key = jwtOptions.Key);
 }
+else if (Encoding.UTF8.GetByteCount(jwtOptions.Key) < 32)
+{
+    // HMAC-SHA256 needs a 256-bit key. A short configured key yields a weak signature (or throws
+    // at sign time), so fail fast rather than start with insecure tokens.
+    throw new InvalidOperationException(
+        "Jwt:Key must be at least 32 bytes. Remove it from configuration to auto-generate a strong key.");
+}
 
 // ── Database ────────────────────────────────────────────────────────
 var connectionString = builder.Configuration.GetConnectionString("Default")

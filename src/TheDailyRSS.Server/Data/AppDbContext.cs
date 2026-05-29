@@ -49,6 +49,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(x => x.FeedUrl).HasMaxLength(2000);
             e.Property(x => x.SiteUrl).HasMaxLength(2000);
             e.Property(x => x.IconText).HasMaxLength(4);
+            // Bound the HTTP-header echo-backs so a hostile feed server can't store unbounded blobs.
+            e.Property(x => x.ETag).HasMaxLength(500);
+            e.Property(x => x.LastModified).HasMaxLength(100);
             e.HasMany(x => x.Articles)
                 .WithOne(a => a.Source!)
                 .HasForeignKey(a => a.SourceId)
@@ -177,8 +180,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
 
         b.Entity<AppUser>(e =>
         {
+            e.Property(x => x.DisplayName).HasMaxLength(120);
             e.Property(x => x.AiBaseUrl).HasMaxLength(2000);
             e.Property(x => x.AiModel).HasMaxLength(200);
+            e.Property(x => x.AiSystemPrompt).HasMaxLength(4000);
         });
     }
 
