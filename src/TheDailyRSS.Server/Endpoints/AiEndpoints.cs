@@ -39,11 +39,11 @@ public static class AiEndpoints
 
         var baseUrl = Clean(req.BaseUrl);
         if (baseUrl is not null && !IsHttpUrl(baseUrl))
-            return Results.BadRequest(new { error = "The AI base URL must be an http(s) address." });
+            return ApiResults.Fail("The AI base URL must be an http(s) address.");
 
         var systemPrompt = Clean(req.SystemPrompt);
         if (systemPrompt is { Length: > 4000 })
-            return Results.BadRequest(new { error = "The interests description is too long (4000 characters max)." });
+            return ApiResults.Fail("The interests description is too long (4000 characters max).");
 
         user.AiEnabled = req.Enabled;
         user.AiBaseUrl = baseUrl;
@@ -64,7 +64,7 @@ public static class AiEndpoints
     private static async Task<IResult> GetSummary(
         string date, AiSummaryKind kind, ClaimsPrincipal principal, AppDbContext db, AiSummaryService ai, CancellationToken ct)
     {
-        if (!DateOnly.TryParse(date, out var d)) return Results.BadRequest(new { error = "Invalid date." });
+        if (!DateOnly.TryParse(date, out var d)) return ApiResults.Fail("Invalid date.");
         var (start, end) = Period(kind, d);
         var cached = await ai.GetCachedAsync(principal.GetUserId(), kind, start, end, ct);
         return cached is null ? Results.NotFound() : Results.Ok(cached);
@@ -73,7 +73,7 @@ public static class AiEndpoints
     private static async Task<IResult> GenerateSummary(
         string date, AiSummaryKind kind, ClaimsPrincipal principal, AppDbContext db, AiSummaryService ai, CancellationToken ct)
     {
-        if (!DateOnly.TryParse(date, out var d)) return Results.BadRequest(new { error = "Invalid date." });
+        if (!DateOnly.TryParse(date, out var d)) return ApiResults.Fail("Invalid date.");
         var user = await db.Users.FindAsync([principal.GetUserId()], ct);
         if (user is null) return Results.Unauthorized();
 
@@ -85,7 +85,7 @@ public static class AiEndpoints
         }
         catch (AiException ex)
         {
-            return Results.BadRequest(new { error = ex.Message });
+            return ApiResults.Fail(ex.Message);
         }
     }
 

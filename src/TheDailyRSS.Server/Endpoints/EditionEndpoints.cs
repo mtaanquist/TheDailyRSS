@@ -95,7 +95,7 @@ public static class EditionEndpoints
         Guid? categoryId, Guid? sourceId, bool? saved, bool? hidden, bool? unreadOnly, CancellationToken ct)
     {
         if (!DateOnly.TryParse(date, out var d))
-            return Results.BadRequest(new { error = "Invalid date." });
+            return ApiResults.Fail("Invalid date.");
         return await BuildEdition(principal.GetUserId(), d, categoryId, sourceId, saved ?? false, hidden ?? false, unreadOnly ?? false, db, opts.Value, ct);
     }
 
@@ -332,7 +332,7 @@ public static class EditionEndpoints
         string date, ClaimsPrincipal principal, AppDbContext db, Guid? categoryId, CancellationToken ct)
     {
         if (!DateOnly.TryParse(date, out var d))
-            return Results.BadRequest(new { error = "Invalid date." });
+            return ApiResults.Fail("Invalid date.");
 
         var uid = principal.GetUserId();
         var visible = await VisibleAsync(db, uid, ct);

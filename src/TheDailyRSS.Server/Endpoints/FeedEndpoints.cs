@@ -61,19 +61,19 @@ public static class FeedEndpoints
     {
         var uid = principal.GetUserId();
         if (!await db.Categories.AnyAsync(c => c.Id == req.CategoryId, ct))
-            return Results.BadRequest(new { error = "Unknown category." });
+            return ApiResults.Fail("Unknown category.");
 
         var (feedUrl, parsed) = await discovery.ResolveAsync(req.Url, ct, discover: !req.Exact);
         if (parsed is null)
-            return Results.BadRequest(new { error = req.Exact
+            return ApiResults.Fail(req.Exact
                 ? "That URL isn't a valid RSS or Atom feed."
-                : "Couldn't find an RSS or Atom feed at that address." });
+                : "Couldn't find an RSS or Atom feed at that address.");
 
         // De-dupe: reuse the shared source if it already exists, else create + fetch it once.
         var (source, created) = await sources.GetOrCreateAsync(feedUrl, parsed.Title, parsed.SiteUrl, ct);
 
         if (await db.Subscriptions.AnyAsync(s => s.UserId == uid && s.SourceId == source.Id, ct))
-            return Results.Conflict(new { error = "You're already subscribed to that feed." });
+            return ApiResults.Conflict("You're already subscribed to that feed.");
 
         var customTitle = string.IsNullOrWhiteSpace(req.Title) ? null : req.Title!.Trim();
         var nextOrder = await db.Subscriptions.Where(s => s.UserId == uid && s.CategoryId == req.CategoryId)
@@ -107,7 +107,7 @@ public static class FeedEndpoints
         var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == id && s.UserId == uid);
         if (sub is null) return Results.NotFound();
         if (!await db.Categories.AnyAsync(c => c.Id == req.CategoryId))
-            return Results.BadRequest(new { error = "Unknown category." });
+            return ApiResults.Fail("Unknown category.");
         sub.CustomTitle = req.Title.Trim();
         sub.CategoryId = req.CategoryId;
         await db.SaveChangesAsync();
@@ -128,7 +128,7 @@ public static class FeedEndpoints
         var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == id && s.UserId == uid);
         if (sub is null) return Results.NotFound();
         if (!await db.Categories.AnyAsync(c => c.Id == req.CategoryId))
-            return Results.BadRequest(new { error = "Unknown category." });
+            return ApiResults.Fail("Unknown category.");
         sub.CategoryId = req.CategoryId;
         await db.SaveChangesAsync();
         return Results.NoContent();
@@ -172,15 +172,15 @@ public static class FeedEndpoints
     {
         var maxBytes = opts.Value.MaxResponseBytes;
         if (request.ContentLength is { } len && len > maxBytes)
-            return Results.BadRequest(new { error = "OPML file is too large." });
+            return ApiResults.Fail("OPML file is too large.");
 
         // Bound the read even when Content-Length is absent (chunked upload).
         using var limited = new StreamReader(request.Body);
         var content = await limited.ReadToEndAsync(ct);
         if (content.Length > maxBytes)
-            return Results.BadRequest(new { error = "OPML file is too large." });
+            return ApiResults.Fail("OPML file is too large.");
         if (string.IsNullOrWhiteSpace(content))
-            return Results.BadRequest(new { error = "Empty OPML." });
+            return ApiResults.Fail("Empty OPML.");
         try
         {
             var result = await opml.ImportAsync(principal.GetUserId(), content, ct);
@@ -188,7 +188,7 @@ public static class FeedEndpoints
         }
         catch (Exception ex)
         {
-            return Results.BadRequest(new { error = "Invalid OPML: " + ex.Message });
+            return ApiResults.Fail("Invalid OPML: " + ex.Message);
         }
     }
 }

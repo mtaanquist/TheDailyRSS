@@ -149,14 +149,16 @@ public sealed class ApiClient(HttpClient http)
         };
         try
         {
+            // The server returns RFC7807 ProblemDetails (detail/title); older responses used { error }.
             var payload = await resp.Content.ReadFromJsonAsync<ErrorPayload>();
-            if (!string.IsNullOrWhiteSpace(payload?.Error)) message = payload!.Error;
+            var detail = payload?.Detail ?? payload?.Error ?? payload?.Title;
+            if (!string.IsNullOrWhiteSpace(detail)) message = detail;
         }
         catch { /* keep default */ }
         throw new ApiException(message, resp.StatusCode);
     }
 
-    private sealed record ErrorPayload(string? Error);
+    private sealed record ErrorPayload(string? Detail, string? Title, string? Error);
     private sealed record SetBool(bool Value);
     private sealed record SetPosition(int Percent);
 }
