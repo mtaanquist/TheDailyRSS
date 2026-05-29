@@ -110,6 +110,7 @@ public sealed class FeedFetchService(
                 PublishedAt = item.PublishedAt.ToUniversalTime(),
                 FetchedAt = DateTimeOffset.UtcNow,
                 EditionDate = DateOnly.FromDateTime(local.DateTime),
+                Fields = item.Fields,
             });
             added++;
         }

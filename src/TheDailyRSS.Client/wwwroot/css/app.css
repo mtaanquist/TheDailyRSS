@@ -453,6 +453,18 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
 .tdr-modal hr { border: none; border-top: 1px solid var(--ink); margin: 12px 0; }
 .tdr-modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 18px; }
 
+/* "Mute by field" list inside the article-detail filter modal. */
+.tdr-field-list { display: flex; flex-direction: column; gap: 6px; }
+.tdr-field-row { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; border-bottom: 1px dotted var(--ink-3); }
+.tdr-field-row:last-child { border-bottom: none; }
+.tdr-field-row .kv { display: flex; gap: 8px; align-items: baseline; flex: 1 1 auto; min-width: 0; }
+.tdr-field-row .kv .k {
+    font-family: var(--typer); text-transform: uppercase; letter-spacing: 1px;
+    font-size: 10px; color: var(--ink-3);
+}
+.tdr-field-row .kv .v { font-family: var(--serif); font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
+.tdr-field-row .spacer { flex: 1; }
+
 /* feed preview card in add dialog */
 .tdr-preview { border: 1px dashed var(--ink-2); padding: 12px; background: var(--card); margin-top: 12px; }
 .tdr-preview .row { display: flex; align-items: center; gap: 8px; }

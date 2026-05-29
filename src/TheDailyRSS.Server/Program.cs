@@ -140,6 +140,7 @@ app.MapCategoryEndpoints();
 app.MapFeedEndpoints();
 app.MapEditionEndpoints();
 app.MapKeywordEndpoints();
+app.MapFieldFilterEndpoints();
 app.MapAdminEndpoints();
 app.MapAiEndpoints();
 

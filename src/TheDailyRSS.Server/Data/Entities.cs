@@ -39,6 +39,7 @@ public sealed class AppUser : IdentityUser<Guid>
     public List<Subscription> Subscriptions { get; set; } = new();
     public List<UserArticleState> ArticleStates { get; set; } = new();
     public List<KeywordFilter> KeywordFilters { get; set; } = new();
+    public List<FieldFilter> FieldFilters { get; set; } = new();
     public List<UserSession> Sessions { get; set; } = new();
     public List<AiSummary> AiSummaries { get; set; } = new();
 }
@@ -151,6 +152,11 @@ public sealed class Article
     /// <summary>Calendar day this article belongs to (configured timezone). Drives editions.</summary>
     public DateOnly EditionDate { get; set; }
 
+    /// <summary>Structured fields captured from the original feed item (category, dc:creator,
+    /// media:keywords, custom-namespace leaves). Stored as JSONB; keys and values are kept
+    /// lower-cased so field filters can match via case-sensitive JSON containment.</summary>
+    public Dictionary<string, List<string>> Fields { get; set; } = new();
+
     public List<UserArticleState> States { get; set; } = new();
 }
 
@@ -185,6 +191,30 @@ public sealed class KeywordFilter
     /// <summary>Stored lower-cased for case-insensitive matching.</summary>
     public string Term { get; set; } = "";
     public KeywordScope Scope { get; set; } = KeywordScope.Everywhere;
+}
+
+/// <summary>A per-user mute rule that targets a single captured feed-item field/value pair
+/// (e.g. <c>category = "guides"</c>). Optionally scoped to a single <see cref="FeedSource"/>
+/// so muting "category=guides" on one tech feed doesn't drop history articles tagged
+/// the same way on another.</summary>
+public sealed class FieldFilter
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid UserId { get; set; }
+    public AppUser? User { get; set; }
+
+    /// <summary>Stored lower-cased; matches the keys we put on <see cref="Article.Fields"/>.</summary>
+    public string FieldKey { get; set; } = "";
+
+    public FieldFilterOperator Operator { get; set; } = FieldFilterOperator.Equals;
+
+    /// <summary>Stored lower-cased to match <see cref="Article.Fields"/> values via JSON containment.</summary>
+    public string Value { get; set; } = "";
+
+    /// <summary>When set, the rule only mutes articles from this feed; null means every feed.</summary>
+    public Guid? SourceId { get; set; }
+    public FeedSource? Source { get; set; }
 }
 
 /// <summary>A signed-in device/session. Powers the Sync &amp; devices screen + remote sign-out.</summary>

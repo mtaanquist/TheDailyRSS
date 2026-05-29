@@ -2,10 +2,10 @@
 @attribute [Authorize]
 @inject ApiClient Api
 
-<PageTitle>Muted words · The Daily RSS</PageTitle>
+<PageTitle>Filters · The Daily RSS</PageTitle>
 
 <div class="tdr-breadcrumb" style="padding:12px 24px; border-bottom:1px solid var(--rule); margin:0">
-    <a href="/">Home</a> › Settings › <b>Muted words</b>
+    <a href="/">Home</a> › Settings › <b>Filters</b>
 </div>
 
 <div class="tdr-settings">
@@ -63,11 +63,42 @@
                 }
             </div>
         }
+
+        <h1 style="font-weight:900; font-size:26px; margin-top:32px">Muted fields</h1>
+        <div style="font-style:italic; font-size:13px; color:var(--ink-2); margin-bottom:18px">
+            More precise than keywords: these mute by the structured tags the feed itself attaches
+            (e.g. <code>category=guides</code> or <code>media:keywords=sponsored</code>). Add a rule
+            from the article view by clicking <b>filter…</b> in the byline.
+        </div>
+
+        @if (_fields.Count == 0)
+        {
+            <div class="tdr-note">No field filters yet.</div>
+        }
+        else
+        {
+            <div class="tdr-folder" style="max-width:520px">
+                @foreach (var f in _fields)
+                {
+                    <div class="tdr-feedrow">
+                        <div class="ttl">
+                            <div><b>@f.FieldKey</b> = @f.Value</div>
+                            <div class="err" style="color:var(--ink-3); font-style:italic">
+                                @(f.SourceId is null ? "any feed" : $"only on {f.SourceTitle ?? "this feed"}")
+                            </div>
+                        </div>
+                        <span class="spacer"></span>
+                        <button class="tdr-link" @onclick="() => RemoveField(f)">✕</button>
+                    </div>
+                }
+            </div>
+        }
     </div>
 </div>
 
 @code {
     private List<KeywordFilterDto> _items = [];
+    private List<FieldFilterDto> _fields = [];
     private string _term = "";
     private KeywordScope _scope = KeywordScope.Everywhere;
     private bool _busy;
@@ -77,7 +108,11 @@
 
     private async Task Load()
     {
-        try { _items = await Api.GetKeywordsAsync(); }
+        try
+        {
+            _items = await Api.GetKeywordsAsync();
+            _fields = await Api.GetFieldFiltersAsync();
+        }
         catch (ApiException ex) { _error = ex.Message; }
     }
 
@@ -106,6 +141,16 @@
         try
         {
             await Api.DeleteKeywordAsync(k.Id);
+            await Load();
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+    }
+
+    private async Task RemoveField(FieldFilterDto f)
+    {
+        try
+        {
+            await Api.DeleteFieldFilterAsync(f.Id);
             await Load();
         }
         catch (ApiException ex) { _error = ex.Message; }

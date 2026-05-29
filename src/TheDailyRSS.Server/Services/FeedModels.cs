@@ -14,4 +14,8 @@ public sealed record ParsedItem(
     string? Summary,
     string? ContentHtml,
     string? ImageUrl,
-    DateTimeOffset PublishedAt);
+    DateTimeOffset PublishedAt,
+    /// <summary>Structured fields lifted from the feed XML (category/dc:creator/media:keywords/
+    /// custom-namespace leaves). Keys and values are normalised to lower-case so they round-trip
+    /// safely through the case-sensitive JSONB containment operator at filter time.</summary>
+    Dictionary<string, List<string>> Fields);

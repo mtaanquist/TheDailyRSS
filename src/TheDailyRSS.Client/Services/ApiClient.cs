@@ -44,6 +44,11 @@ public sealed class ApiClient(HttpClient http)
     public Task<KeywordFilterDto> AddKeywordAsync(CreateKeywordRequest req) => PostAsync<KeywordFilterDto>("api/keywords", req);
     public Task DeleteKeywordAsync(Guid id) => SendAsync(HttpMethod.Delete, $"api/keywords/{id}");
 
+    // ── Field filters (mute by structured feed-item field) ────────
+    public Task<List<FieldFilterDto>> GetFieldFiltersAsync() => GetAsync<List<FieldFilterDto>>("api/field-filters");
+    public Task<FieldFilterDto> AddFieldFilterAsync(CreateFieldFilterRequest req) => PostAsync<FieldFilterDto>("api/field-filters", req);
+    public Task DeleteFieldFilterAsync(Guid id) => SendAsync(HttpMethod.Delete, $"api/field-filters/{id}");
+
     // ── Feeds ─────────────────────────────────────────────────────
     public Task<List<FeedDto>> GetFeedsAsync(Guid? categoryId = null) =>
         GetAsync<List<FeedDto>>("api/feeds" + (categoryId is { } c ? $"?categoryId={c}" : ""));
