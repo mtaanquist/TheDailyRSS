@@ -277,46 +277,48 @@ public static class EditionEndpoints
         return state;
     }
 
-    private static async Task<IResult> SetRead(Guid id, SetBoolRequest req, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
-    {
-        var state = await GetOrCreateStateAsync(db, principal.GetUserId(), id, ct);
-        if (state is null) return Results.NotFound();
-        state.IsRead = req.Value;
-        state.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(ct);
-        return Results.NoContent();
-    }
+    private static Task<IResult> SetRead(Guid id, SetBoolRequest req, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct) =>
+        MutateStateAsync(db, principal.GetUserId(), id, s => s.IsRead = req.Value, ct);
 
-    private static async Task<IResult> SetSaved(Guid id, SetBoolRequest req, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
-    {
-        var state = await GetOrCreateStateAsync(db, principal.GetUserId(), id, ct);
-        if (state is null) return Results.NotFound();
-        state.IsSaved = req.Value;
-        state.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(ct);
-        return Results.NoContent();
-    }
+    private static Task<IResult> SetSaved(Guid id, SetBoolRequest req, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct) =>
+        MutateStateAsync(db, principal.GetUserId(), id, s => s.IsSaved = req.Value, ct);
 
-    private static async Task<IResult> SetHidden(Guid id, SetBoolRequest req, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
-    {
-        var state = await GetOrCreateStateAsync(db, principal.GetUserId(), id, ct);
-        if (state is null) return Results.NotFound();
-        state.IsHidden = req.Value;
-        state.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(ct);
-        return Results.NoContent();
-    }
+    private static Task<IResult> SetHidden(Guid id, SetBoolRequest req, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct) =>
+        MutateStateAsync(db, principal.GetUserId(), id, s => s.IsHidden = req.Value, ct);
 
-    private static async Task<IResult> SetPosition(Guid id, SetPositionRequest req, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
+    private static Task<IResult> SetPosition(Guid id, SetPositionRequest req, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct) =>
+        MutateStateAsync(db, principal.GetUserId(), id, s =>
+        {
+            var pct = Math.Clamp(req.Percent, 0, 100);
+            s.ReadingPositionPercent = pct;
+            if (pct >= 90) s.IsRead = true;
+        }, ct);
+
+    /// <summary>Applies a single-article state change, retrying on a lost race with another device.
+    /// Two failure modes are possible now that <see cref="UserArticleState"/> carries an xmin token:
+    /// a concurrent INSERT of the (UserId, ArticleId) row (<see cref="DbUpdateException"/>) and a
+    /// concurrent UPDATE (<see cref="DbUpdateConcurrencyException"/>). On either we discard our tracked
+    /// changes and reapply against the now-current row, so no field is silently clobbered.</summary>
+    private static async Task<IResult> MutateStateAsync(
+        AppDbContext db, Guid uid, Guid articleId, Action<UserArticleState> apply, CancellationToken ct)
     {
-        var state = await GetOrCreateStateAsync(db, principal.GetUserId(), id, ct);
-        if (state is null) return Results.NotFound();
-        var pct = Math.Clamp(req.Percent, 0, 100);
-        state.ReadingPositionPercent = pct;
-        if (pct >= 90) state.IsRead = true;
-        state.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(ct);
-        return Results.NoContent();
+        const int maxAttempts = 4;
+        for (var attempt = 1; ; attempt++)
+        {
+            var state = await GetOrCreateStateAsync(db, uid, articleId, ct);
+            if (state is null) return Results.NotFound();
+            apply(state);
+            state.UpdatedAt = DateTimeOffset.UtcNow;
+            try
+            {
+                await db.SaveChangesAsync(ct);
+                return Results.NoContent();
+            }
+            catch (Exception ex) when (ex is DbUpdateConcurrencyException or DbUpdateException && attempt < maxAttempts)
+            {
+                db.ChangeTracker.Clear();
+            }
+        }
     }
 
     private static async Task<IResult> MarkEditionRead(
@@ -337,18 +339,30 @@ public static class EditionEndpoints
         var articleIds = await query.Select(a => a.Id).ToListAsync(ct);
         if (articleIds.Count == 0) return Results.Ok(new { marked = 0 });
 
-        // Bulk upsert: flip existing state rows, create rows for never-touched articles.
-        var existing = await db.UserArticleStates
-            .Where(s => s.UserId == uid && articleIds.Contains(s.ArticleId))
-            .ToListAsync(ct);
-        var existingIds = existing.Select(s => s.ArticleId).ToHashSet();
-        var now = DateTimeOffset.UtcNow;
-        foreach (var s in existing) { s.IsRead = true; s.UpdatedAt = now; }
-        foreach (var aid in articleIds.Where(i => !existingIds.Contains(i)))
-            db.UserArticleStates.Add(new UserArticleState { UserId = uid, ArticleId = aid, IsRead = true, UpdatedAt = now });
+        // Bulk upsert: flip existing state rows, create rows for never-touched articles. Retry on a
+        // concurrent write from another device (xmin conflict or a racing insert of the same row).
+        const int maxAttempts = 4;
+        for (var attempt = 1; ; attempt++)
+        {
+            var existing = await db.UserArticleStates
+                .Where(s => s.UserId == uid && articleIds.Contains(s.ArticleId))
+                .ToListAsync(ct);
+            var existingIds = existing.Select(s => s.ArticleId).ToHashSet();
+            var now = DateTimeOffset.UtcNow;
+            foreach (var s in existing) { s.IsRead = true; s.UpdatedAt = now; }
+            foreach (var aid in articleIds.Where(i => !existingIds.Contains(i)))
+                db.UserArticleStates.Add(new UserArticleState { UserId = uid, ArticleId = aid, IsRead = true, UpdatedAt = now });
 
-        await db.SaveChangesAsync(ct);
-        return Results.Ok(new { marked = articleIds.Count });
+            try
+            {
+                await db.SaveChangesAsync(ct);
+                return Results.Ok(new { marked = articleIds.Count });
+            }
+            catch (Exception ex) when (ex is DbUpdateConcurrencyException or DbUpdateException && attempt < maxAttempts)
+            {
+                db.ChangeTracker.Clear();
+            }
+        }
     }
 
     private static DateOnly Today(FeedOptions opts)
