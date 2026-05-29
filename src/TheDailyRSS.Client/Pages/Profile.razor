@@ -162,7 +162,8 @@
 
     private async Task SavePref(Action<PreferencesDto> mutate)
     {
-        var pref = new PreferencesDto { Theme = Pref.Theme, HeadlineFont = Pref.HeadlineFont, Density = Pref.Density, ShowUnread = Pref.ShowUnread };
+        // Clone via `with` so a newly-added preference can't be silently dropped here.
+        var pref = Pref with { };
         mutate(pref);
         _error = null;
         try
