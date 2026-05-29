@@ -38,20 +38,20 @@ public static class FieldFilterEndpoints
         var key = (req.FieldKey ?? "").Trim().ToLowerInvariant();
         var value = (req.Value ?? "").Trim().ToLowerInvariant();
         if (key.Length == 0 || value.Length == 0)
-            return Results.BadRequest(new { error = "Field and value are both required." });
+            return ApiResults.Fail("Field and value are both required.");
         if (req.Operator != FieldFilterOperator.Equals)
-            return Results.BadRequest(new { error = "That operator isn't supported yet." });
+            return ApiResults.Fail("That operator isn't supported yet.");
 
         // If the rule is feed-scoped, make sure the user actually subscribes to the feed —
         // otherwise the rule would silently apply to nothing.
         if (req.SourceId is { } sid &&
             !await db.Subscriptions.AnyAsync(s => s.UserId == uid && s.SourceId == sid))
-            return Results.BadRequest(new { error = "You don't subscribe to that feed." });
+            return ApiResults.Fail("You don't subscribe to that feed.");
 
         var existing = await db.FieldFilters.AnyAsync(f =>
             f.UserId == uid && f.FieldKey == key && f.Operator == req.Operator
             && f.Value == value && f.SourceId == req.SourceId);
-        if (existing) return Results.Conflict(new { error = "You've already muted that field." });
+        if (existing) return ApiResults.Conflict("You've already muted that field.");
 
         var filter = new FieldFilter
         {

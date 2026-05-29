@@ -33,7 +33,7 @@ public static class AuthEndpoints
         JwtTokenService tokens, HttpContext http)
     {
         if (await users.FindByEmailAsync(req.Email) is not null)
-            return Results.Conflict(new { error = "An account with that email already exists." });
+            return ApiResults.Conflict("An account with that email already exists.");
 
         var user = new AppUser
         {
@@ -43,7 +43,7 @@ public static class AuthEndpoints
         };
         var result = await users.CreateAsync(user, req.Password);
         if (!result.Succeeded)
-            return Results.BadRequest(new { error = string.Join(" ", result.Errors.Select(e => e.Description)) });
+            return ApiResults.Fail(string.Join(" ", result.Errors.Select(e => e.Description)));
 
         // The very first account to register becomes the instance admin.
         if (await db.Users.CountAsync() == 1)
@@ -128,7 +128,7 @@ public static class AuthEndpoints
         if (user is null) return Results.Unauthorized();
         var result = await users.ChangePasswordAsync(user, req.CurrentPassword, req.NewPassword);
         if (!result.Succeeded)
-            return Results.BadRequest(new { error = string.Join(" ", result.Errors.Select(e => e.Description)) });
+            return ApiResults.Fail(string.Join(" ", result.Errors.Select(e => e.Description)));
 
         // A password change should boot every other device (the common "I think I'm compromised" flow).
         // The current session is kept so the user isn't logged out of the device they just used.

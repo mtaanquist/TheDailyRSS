@@ -34,19 +34,19 @@ public static class KeywordFilterEndpoints
     {
         var uid = principal.GetUserId();
         var term = req.Term.Trim().ToLowerInvariant();
-        if (term.Length == 0) return Results.BadRequest(new { error = "Term can't be empty." });
+        if (term.Length == 0) return ApiResults.Fail("Term can't be empty.");
         if (KeywordMatching.BuildPattern(term) is null)
-            return Results.BadRequest(new { error = "Add at least one letter or number to match on." });
+            return ApiResults.Fail("Add at least one letter or number to match on.");
 
         // Feed-scoped rule: make sure the user actually subscribes — otherwise the rule
         // would silently apply to nothing.
         if (req.SourceId is { } sid &&
             !await db.Subscriptions.AnyAsync(s => s.UserId == uid && s.SourceId == sid))
-            return Results.BadRequest(new { error = "You don't subscribe to that feed." });
+            return ApiResults.Fail("You don't subscribe to that feed.");
 
         if (await db.KeywordFilters.AnyAsync(k =>
                 k.UserId == uid && k.Term == term && k.SourceId == req.SourceId))
-            return Results.Conflict(new { error = "You've already muted that term." });
+            return ApiResults.Conflict("You've already muted that term.");
 
         var filter = new KeywordFilter
         {

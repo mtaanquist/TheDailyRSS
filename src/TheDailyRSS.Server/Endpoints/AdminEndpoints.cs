@@ -31,9 +31,9 @@ public static class AdminEndpoints
     private static async Task<IResult> Create(CreateCategoryRequest req, AppDbContext db)
     {
         var slug = req.Slug.Trim().ToLowerInvariant();
-        if (slug.Length == 0) return Results.BadRequest(new { error = "Slug is required." });
+        if (slug.Length == 0) return ApiResults.Fail("Slug is required.");
         if (await db.Categories.AnyAsync(c => c.Slug == slug))
-            return Results.Conflict(new { error = "A category with that slug already exists." });
+            return ApiResults.Conflict("A category with that slug already exists.");
 
         var nextOrder = await db.Categories.MaxAsync(c => (int?)c.SortOrder) ?? -1;
         var category = new Category
@@ -62,7 +62,7 @@ public static class AdminEndpoints
     {
         // The FK is Restrict: refuse to delete a category that still has subscriptions filed under it.
         if (await db.Subscriptions.AnyAsync(s => s.CategoryId == id))
-            return Results.Conflict(new { error = "Category is in use by subscriptions. Reassign them first." });
+            return ApiResults.Conflict("Category is in use by subscriptions. Reassign them first.");
         var deleted = await db.Categories.Where(c => c.Id == id).ExecuteDeleteAsync();
         return deleted > 0 ? Results.NoContent() : Results.NotFound();
     }
