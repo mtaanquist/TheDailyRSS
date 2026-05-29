@@ -6,14 +6,7 @@
 
 <PageTitle>Categories · The Daily RSS</PageTitle>
 
-<div class="tdr-breadcrumb" style="padding:12px 24px; border-bottom:1px solid var(--rule); margin:0">
-    <a href="/">Home</a> › Settings › <b>Categories (admin)</b>
-</div>
-
-<div class="tdr-settings">
-    <SettingsNav Current="categories" />
-
-    <div class="tdr-settings-main">
+<SettingsShell Current="categories" Crumb="Categories (admin)">
         <h1 style="font-weight:900; font-size:26px">Category taxonomy</h1>
         <div style="font-style:italic; font-size:13px; color:var(--ink-2); margin-bottom:18px">
             The newspaper sections everyone files their feeds into. Changes affect all readers.
@@ -63,8 +56,7 @@
                 </div>
             }
         </div>
-    </div>
-</div>
+</SettingsShell>
 
 @code {
     private List<CategoryDto> _categories = [];
