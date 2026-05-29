@@ -294,32 +294,19 @@ public static class EditionEndpoints
             if (pct >= 90) s.IsRead = true;
         }, ct);
 
-    /// <summary>Applies a single-article state change, retrying on a lost race with another device.
-    /// Two failure modes are possible now that <see cref="UserArticleState"/> carries an xmin token:
-    /// a concurrent INSERT of the (UserId, ArticleId) row (<see cref="DbUpdateException"/>) and a
-    /// concurrent UPDATE (<see cref="DbUpdateConcurrencyException"/>). On either we discard our tracked
-    /// changes and reapply against the now-current row, so no field is silently clobbered.</summary>
-    private static async Task<IResult> MutateStateAsync(
-        AppDbContext db, Guid uid, Guid articleId, Action<UserArticleState> apply, CancellationToken ct)
-    {
-        const int maxAttempts = 4;
-        for (var attempt = 1; ; attempt++)
+    /// <summary>Applies a single-article state change, retrying on a lost race with another device
+    /// (see <see cref="ConcurrencyRetryExtensions.ExecuteWithRetryAsync"/>).</summary>
+    private static Task<IResult> MutateStateAsync(
+        AppDbContext db, Guid uid, Guid articleId, Action<UserArticleState> apply, CancellationToken ct) =>
+        db.ExecuteWithRetryAsync<IResult>(async () =>
         {
             var state = await GetOrCreateStateAsync(db, uid, articleId, ct);
             if (state is null) return Results.NotFound();
             apply(state);
             state.UpdatedAt = DateTimeOffset.UtcNow;
-            try
-            {
-                await db.SaveChangesAsync(ct);
-                return Results.NoContent();
-            }
-            catch (Exception ex) when (ex is DbUpdateConcurrencyException or DbUpdateException && attempt < maxAttempts)
-            {
-                db.ChangeTracker.Clear();
-            }
-        }
-    }
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        });
 
     private static async Task<IResult> MarkEditionRead(
         string date, ClaimsPrincipal principal, AppDbContext db, Guid? categoryId, CancellationToken ct)
@@ -341,8 +328,7 @@ public static class EditionEndpoints
 
         // Bulk upsert: flip existing state rows, create rows for never-touched articles. Retry on a
         // concurrent write from another device (xmin conflict or a racing insert of the same row).
-        const int maxAttempts = 4;
-        for (var attempt = 1; ; attempt++)
+        return await db.ExecuteWithRetryAsync<IResult>(async () =>
         {
             var existing = await db.UserArticleStates
                 .Where(s => s.UserId == uid && articleIds.Contains(s.ArticleId))
@@ -353,16 +339,9 @@ public static class EditionEndpoints
             foreach (var aid in articleIds.Where(i => !existingIds.Contains(i)))
                 db.UserArticleStates.Add(new UserArticleState { UserId = uid, ArticleId = aid, IsRead = true, UpdatedAt = now });
 
-            try
-            {
-                await db.SaveChangesAsync(ct);
-                return Results.Ok(new { marked = articleIds.Count });
-            }
-            catch (Exception ex) when (ex is DbUpdateConcurrencyException or DbUpdateException && attempt < maxAttempts)
-            {
-                db.ChangeTracker.Clear();
-            }
-        }
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new { marked = articleIds.Count });
+        });
     }
 
 }
