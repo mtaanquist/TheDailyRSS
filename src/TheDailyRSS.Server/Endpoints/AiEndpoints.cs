@@ -37,10 +37,18 @@ public static class AiEndpoints
         var user = await db.Users.FindAsync([principal.GetUserId()], ct);
         if (user is null) return Results.Unauthorized();
 
+        var baseUrl = Clean(req.BaseUrl);
+        if (baseUrl is not null && !IsHttpUrl(baseUrl))
+            return Results.BadRequest(new { error = "The AI base URL must be an http(s) address." });
+
+        var systemPrompt = Clean(req.SystemPrompt);
+        if (systemPrompt is { Length: > 4000 })
+            return Results.BadRequest(new { error = "The interests description is too long (4000 characters max)." });
+
         user.AiEnabled = req.Enabled;
-        user.AiBaseUrl = Clean(req.BaseUrl);
+        user.AiBaseUrl = baseUrl;
         user.AiModel = Clean(req.Model);
-        user.AiSystemPrompt = Clean(req.SystemPrompt);
+        user.AiSystemPrompt = systemPrompt;
         user.AiAutoDaily = req.AutoDaily;
         user.AiAutoWeekly = req.AutoWeekly;
 
@@ -89,4 +97,10 @@ public static class AiEndpoints
         !string.IsNullOrEmpty(u.AiApiKeyEncrypted));
 
     private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    /// <summary>True for an absolute http/https URL. The SSRF connect-guard still blocks private
+    /// targets at connect time; this just rejects obviously wrong input (file:, gopher:, …) early.</summary>
+    private static bool IsHttpUrl(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u) &&
+        (u.Scheme == Uri.UriSchemeHttp || u.Scheme == Uri.UriSchemeHttps);
 }

@@ -57,7 +57,7 @@ else
         </div>
 
         <div class="actions">
-            <a class="tdr-btn" href="@a.Url" target="_blank" rel="noopener noreferrer">read at source ↗</a>
+            <a class="tdr-btn" href="@SafeLink(a.Url)" target="_blank" rel="noopener noreferrer">read at source ↗</a>
             <button class="tdr-link muted" @onclick="ToggleRead">@(a.IsRead ? "mark unread" : "mark read")</button>
         </div>
 
@@ -243,6 +243,13 @@ else
 
         return html;
     }
+
+    /// <summary>Only let http(s) links through to an href; a feed-supplied <c>javascript:</c> URL
+    /// would otherwise execute on click. Falls back to a no-op anchor.</summary>
+    private static string SafeLink(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u) && (u.Scheme == "http" || u.Scheme == "https")
+            ? url!
+            : "#";
 
     /// <summary>Normalizes an image URL to its path (dropping the query) for duplicate comparison.</summary>
     private static string ImageKey(string url)
