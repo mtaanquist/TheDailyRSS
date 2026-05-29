@@ -453,17 +453,39 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
 .tdr-modal hr { border: none; border-top: 1px solid var(--ink); margin: 12px 0; }
 .tdr-modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 18px; }
 
-/* "Mute by field" list inside the article-detail filter modal. */
-.tdr-field-list { display: flex; flex-direction: column; gap: 6px; }
-.tdr-field-row { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; border-bottom: 1px dotted var(--ink-3); }
-.tdr-field-row:last-child { border-bottom: none; }
-.tdr-field-row .kv { display: flex; gap: 8px; align-items: baseline; flex: 1 1 auto; min-width: 0; }
-.tdr-field-row .kv .k {
-    font-family: var(--typer); text-transform: uppercase; letter-spacing: 1px;
-    font-size: 10px; color: var(--ink-3);
+/* "Mute by field" — sits in the article byline next to save/hide. */
+.tdr-filter { background: none; border: none; cursor: pointer; padding: 0; line-height: 0; color: var(--ink-3); opacity: .7; }
+.tdr-filter:hover { opacity: 1; color: var(--ink); }
+.tdr-filter svg { display: block; }
+
+/* "Mute by field" modal — three-column rows so key / value / actions stay in lanes. */
+.tdr-filter-modal { width: 520px; }
+.tdr-filter-intro { font-family: var(--serif); font-style: italic; font-size: 13px;
+    color: var(--ink-2); margin: 8px 0 14px; }
+.tdr-filter-list { display: flex; flex-direction: column; }
+.tdr-filter-row {
+    display: grid; grid-template-columns: 110px 1fr auto; column-gap: 12px;
+    align-items: center; padding: 8px 0; border-bottom: 1px dotted var(--ink-3);
 }
-.tdr-field-row .kv .v { font-family: var(--serif); font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
-.tdr-field-row .spacer { flex: 1; }
+.tdr-filter-row:last-child { border-bottom: none; }
+.tdr-filter-row .k {
+    font-family: var(--typer); text-transform: uppercase; letter-spacing: 1px;
+    font-size: 10px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tdr-filter-row .v {
+    font-family: var(--serif); font-size: 14px; color: var(--ink);
+    overflow-wrap: anywhere; min-width: 0;
+}
+.tdr-filter-row .actions { display: flex; gap: 6px; flex-wrap: nowrap; }
+
+/* Compact pill button used by the filter modal (and reusable). */
+.tdr-chip {
+    font-family: var(--typer); font-size: 11px; letter-spacing: .5px;
+    padding: 4px 10px; background: var(--paper); color: var(--ink);
+    border: 1px solid var(--ink-2); cursor: pointer; white-space: nowrap;
+}
+.tdr-chip:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.tdr-chip[disabled] { opacity: .5; cursor: not-allowed; }
 
 /* feed preview card in add dialog */
 .tdr-preview { border: 1px dashed var(--ink-2); padding: 12px; background: var(--card); margin-top: 12px; }
