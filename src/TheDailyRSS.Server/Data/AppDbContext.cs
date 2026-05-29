@@ -124,10 +124,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                 .WithMany(u => u.KeywordFilters)
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+            // SourceId is nullable (null = global rule). The source is shared across all users, so
+            // deleting it must NOT delete other users' mute rules — revert the rule to global instead.
             e.HasOne(x => x.Source)
                 .WithMany()
                 .HasForeignKey(x => x.SourceId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<FieldFilter>(e =>
@@ -140,12 +142,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                 .WithMany(u => u.FieldFilters)
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
-            // A user-scoped source rule should follow the source if it's removed,
-            // rather than orphan a dangling SourceId.
+            // SourceId is nullable (null = applies to every feed). The source is shared across all
+            // users, so deleting it must NOT delete other users' rules — revert the rule to global.
             e.HasOne(x => x.Source)
                 .WithMany()
                 .HasForeignKey(x => x.SourceId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<UserSession>(e =>
