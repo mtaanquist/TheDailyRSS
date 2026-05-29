@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TheDailyRSS.Server.Auth;
 using TheDailyRSS.Server.Data;
+using TheDailyRSS.Server.Services;
 using TheDailyRSS.Shared;
 
 namespace TheDailyRSS.Server.Endpoints;
@@ -70,7 +71,7 @@ public static class AuthEndpoints
         var session = new UserSession
         {
             UserId = user.Id,
-            UserAgent = ua.Length > 1000 ? ua[..1000] : ua,
+            UserAgent = ua.Truncate(1000),
             DeviceLabel = DeviceLabel.From(ua),
             IpAddress = http.Connection.RemoteIpAddress?.ToString(),
         };

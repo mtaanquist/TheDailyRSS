@@ -167,7 +167,7 @@ public sealed class AiSummaryService(
         if (!resp.IsSuccessStatusCode)
         {
             var body = await resp.Content.ReadAsStringAsync(ct);
-            log.LogWarning("AI endpoint returned {Status} for user {UserId}: {Body}", resp.StatusCode, user.Id, Truncate(body, 500));
+            log.LogWarning("AI endpoint returned {Status} for user {UserId}: {Body}", resp.StatusCode, user.Id, body.Truncate(500));
             var hint = resp.StatusCode == System.Net.HttpStatusCode.Unauthorized ? " Check your API key."
                 : resp.StatusCode == System.Net.HttpStatusCode.NotFound ? " Check the base URL and model."
                 : "";
@@ -199,8 +199,6 @@ public sealed class AiSummaryService(
 
     private static string CombineUrl(string baseUrl, string path) =>
         $"{baseUrl.TrimEnd('/')}/{path.TrimStart('/')}";
-
-    private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max];
 
     /// <summary>Crude HTML/whitespace strip so feed summaries read cleanly in the prompt.</summary>
     private static string Strip(string? html)

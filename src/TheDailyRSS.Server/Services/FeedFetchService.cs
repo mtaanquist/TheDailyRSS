@@ -96,13 +96,13 @@ public sealed class FeedFetchService(
             db.Articles.Add(new Article
             {
                 SourceId = source.Id,
-                ExternalId = Trim(item.ExternalId, 1000),
-                Title = Trim(item.Title, 1000),
-                Author = Trim(item.Author, 300),
+                ExternalId = item.ExternalId.Truncate(1000),
+                Title = item.Title.Truncate(1000),
+                Author = item.Author.Truncate(300),
                 Summary = item.Summary,
                 ContentHtml = item.ContentHtml,
-                Url = Trim(item.Url, 2000),
-                ImageUrl = Trim(item.ImageUrl, 2000),
+                Url = item.Url.Truncate(2000),
+                ImageUrl = item.ImageUrl.Truncate(2000),
                 // Npgsql's timestamptz only accepts UTC offsets; feeds may publish in local time.
                 PublishedAt = item.PublishedAt.ToUniversalTime(),
                 FetchedAt = DateTimeOffset.UtcNow,
@@ -152,8 +152,4 @@ public sealed class FeedFetchService(
         }
         return buffer;
     }
-
-    [return: System.Diagnostics.CodeAnalysis.NotNullIfNotNull(nameof(value))]
-    private static string? Trim(string? value, int max) =>
-        value is null ? null : value.Length <= max ? value : value[..max];
 }
