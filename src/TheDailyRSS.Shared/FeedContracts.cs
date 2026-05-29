@@ -48,7 +48,12 @@ public sealed record FeedDto(
     DateTimeOffset? LastFetchedAt,
     string? LastFetchError);
 
-public sealed record KeywordFilterDto(Guid Id, string Term, KeywordScope Scope);
+public sealed record KeywordFilterDto(
+    Guid Id,
+    string Term,
+    KeywordScope Scope,
+    Guid? SourceId,
+    string? SourceTitle);
 
 public sealed class CreateKeywordRequest
 {
@@ -56,6 +61,9 @@ public sealed class CreateKeywordRequest
     public string Term { get; set; } = "";
 
     public KeywordScope Scope { get; set; } = KeywordScope.Everywhere;
+
+    /// <summary>Limit the rule to a single feed source. Null = applies across every subscription.</summary>
+    public Guid? SourceId { get; set; }
 }
 
 /// <summary>A structured field-value mute rule. Captures came from the original feed XML

@@ -96,6 +96,28 @@ public sealed class ApiTests(AppFixture fx)
     }
 
     [Fact]
+    public async Task Keyword_filter_scoped_to_one_source_leaves_other_sources_alone()
+    {
+        var (client, u) = await fx.RegisterAsync(U());
+        var urlA = "https://feed.test/" + Guid.NewGuid().ToString("N");
+        var urlB = "https://feed.test/" + Guid.NewGuid().ToString("N");
+        var date = new DateOnly(2026, 5, 20);
+        var (srcA, _) = await fx.SeedSourceAsync(u.Id, News, urlA, date, "Big giveaway from A");
+        await fx.SeedSourceAsync(u.Id, News, urlB, date, "Big giveaway from B");
+
+        // Mute "giveaway" but ONLY on source A.
+        await client.PostAsJsonAsync("/api/keywords", new CreateKeywordRequest
+        {
+            Term = "giveaway", Scope = KeywordScope.Everywhere, SourceId = srcA,
+        });
+
+        var ed = await client.GetFromJsonAsync<EditionDto>($"/api/editions/{date:yyyy-MM-dd}");
+        var titles = Titles(ed!);
+        Assert.DoesNotContain("Big giveaway from A", titles);
+        Assert.Contains("Big giveaway from B", titles);
+    }
+
+    [Fact]
     public async Task Keyword_filter_matches_body_text_not_just_title()
     {
         var (client, u) = await fx.RegisterAsync(U());

@@ -23,7 +23,9 @@ public static class KeywordFilterEndpoints
         var items = await db.KeywordFilters
             .Where(k => k.UserId == uid)
             .OrderBy(k => k.Term)
-            .Select(k => new KeywordFilterDto(k.Id, k.Term, k.Scope))
+            .Select(k => new KeywordFilterDto(
+                k.Id, k.Term, k.Scope, k.SourceId,
+                k.Source != null ? k.Source.Title : null))
             .ToListAsync();
         return Results.Ok(items);
     }
@@ -36,13 +38,30 @@ public static class KeywordFilterEndpoints
         if (KeywordMatching.BuildPattern(term) is null)
             return Results.BadRequest(new { error = "Add at least one letter or number to match on." });
 
-        if (await db.KeywordFilters.AnyAsync(k => k.UserId == uid && k.Term == term))
+        // Feed-scoped rule: make sure the user actually subscribes — otherwise the rule
+        // would silently apply to nothing.
+        if (req.SourceId is { } sid &&
+            !await db.Subscriptions.AnyAsync(s => s.UserId == uid && s.SourceId == sid))
+            return Results.BadRequest(new { error = "You don't subscribe to that feed." });
+
+        if (await db.KeywordFilters.AnyAsync(k =>
+                k.UserId == uid && k.Term == term && k.SourceId == req.SourceId))
             return Results.Conflict(new { error = "You've already muted that term." });
 
-        var filter = new KeywordFilter { UserId = uid, Term = term, Scope = req.Scope };
+        var filter = new KeywordFilter
+        {
+            UserId = uid,
+            Term = term,
+            Scope = req.Scope,
+            SourceId = req.SourceId,
+        };
         db.KeywordFilters.Add(filter);
         await db.SaveChangesAsync();
-        return Results.Ok(new KeywordFilterDto(filter.Id, filter.Term, filter.Scope));
+
+        string? sourceTitle = null;
+        if (filter.SourceId is { } s)
+            sourceTitle = await db.FeedSources.Where(x => x.Id == s).Select(x => x.Title).FirstOrDefaultAsync();
+        return Results.Ok(new KeywordFilterDto(filter.Id, filter.Term, filter.Scope, filter.SourceId, sourceTitle));
     }
 
     private static async Task<IResult> Delete(Guid id, ClaimsPrincipal principal, AppDbContext db)

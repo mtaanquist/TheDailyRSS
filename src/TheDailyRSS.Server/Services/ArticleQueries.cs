@@ -22,19 +22,23 @@ public static class ArticleQueries
 
     /// <summary>Drops articles matching any of the user's mute terms. Bare terms match whole words;
     /// a <c>*</c> wildcard matches partials (see <see cref="KeywordMatching"/>). Postgres runs the
-    /// regex server-side via the case-insensitive <c>~*</c> operator.</summary>
+    /// regex server-side via the case-insensitive <c>~*</c> operator. A filter with
+    /// <see cref="KeywordFilter.SourceId"/> set only matches articles from that feed.</summary>
     public static IQueryable<Article> ApplyKeywords(IQueryable<Article> q, List<KeywordFilter> filters)
     {
         foreach (var f in filters)
         {
             var pattern = KeywordMatching.BuildPattern(f.Term);
             if (pattern is null) continue;
+            var sid = f.SourceId;
             if (f.Scope == KeywordScope.TitleOnly)
-                q = q.Where(a => !Regex.IsMatch(a.Title, pattern, RegexOptions.IgnoreCase));
+                q = q.Where(a => (sid.HasValue && a.SourceId != sid.Value)
+                    || !Regex.IsMatch(a.Title, pattern, RegexOptions.IgnoreCase));
             else
-                q = q.Where(a => !Regex.IsMatch(a.Title, pattern, RegexOptions.IgnoreCase)
-                    && !(a.Summary != null && Regex.IsMatch(a.Summary, pattern, RegexOptions.IgnoreCase))
-                    && !(a.ContentHtml != null && Regex.IsMatch(a.ContentHtml, pattern, RegexOptions.IgnoreCase)));
+                q = q.Where(a => (sid.HasValue && a.SourceId != sid.Value)
+                    || (!Regex.IsMatch(a.Title, pattern, RegexOptions.IgnoreCase)
+                        && !(a.Summary != null && Regex.IsMatch(a.Summary, pattern, RegexOptions.IgnoreCase))
+                        && !(a.ContentHtml != null && Regex.IsMatch(a.ContentHtml, pattern, RegexOptions.IgnoreCase))));
         }
         return q;
     }
