@@ -52,41 +52,7 @@ else
 
     @if (AiOn && !Saved && !Hidden)
     {
-        <div class="tdr-aibar">
-            <span class="tdr-aibar-label">AI briefings</span>
-            <button class="tdr-navbtn @(_aiMode == AiSummaryKind.Daily ? "active" : "")"
-                    @onclick="@(() => ToggleAi(AiSummaryKind.Daily))">this edition</button>
-            <button class="tdr-navbtn @(_aiMode == AiSummaryKind.Weekly ? "active" : "")"
-                    @onclick="@(() => ToggleAi(AiSummaryKind.Weekly))">The Weekly</button>
-        </div>
-        @if (_aiMode is { } mode)
-        {
-            <div class="tdr-ai-panel">
-                @if (_aiLoading)
-                {
-                    <p class="tdr-ai-status">Composing your @(mode == AiSummaryKind.Weekly ? "weekly" : "daily") briefing… this can take a moment.</p>
-                }
-                else if (_aiError is not null)
-                {
-                    <div class="tdr-error">@_aiError</div>
-                    <button class="tdr-btn" @onclick="GenerateAi">try again</button>
-                }
-                else if (_aiSummary is { } sum)
-                {
-                    <div class="tdr-ai-head">
-                        <span>@(mode == AiSummaryKind.Weekly ? "The Weekly" : "Daily briefing") · @sum.ArticleCount stories · @sum.Model</span>
-                        <button class="tdr-link" @onclick="GenerateAi">regenerate</button>
-                    </div>
-                    <div class="tdr-ai-content">@((MarkupString)MarkdownLite.ToHtml(sum.Content))</div>
-                    <div class="tdr-hint">Generated @sum.GeneratedAt.LocalDateTime.ToString("MMM d, HH:mm") · AI can be wrong — check the originals.</div>
-                }
-                else
-                {
-                    <p class="tdr-ai-status">No @(mode == AiSummaryKind.Weekly ? "weekly" : "daily") briefing yet for this edition.</p>
-                    <button class="tdr-btn" @onclick="GenerateAi">generate briefing</button>
-                }
-            </div>
-        }
+        <AiBriefing Date="ed.Date" />
     }
 
     <div class="tdr-edition-body @(_loading ? "loading" : "")">
@@ -197,11 +163,6 @@ else
     private string _loadedKey = "";
     private Guid? _categoryId;
 
-    private AiSummaryKind? _aiMode;
-    private AiSummaryDto? _aiSummary;
-    private bool _aiLoading;
-    private string? _aiError;
-
     private bool AiOn => Auth.CurrentUser?.Preferences.AiEnabled ?? false;
 
     private bool ShowUnread => Auth.CurrentUser?.Preferences.ShowUnread ?? true;
@@ -261,8 +222,6 @@ else
                 result = await Api.GetLatestEditionAsync(_categoryId, Src, EffectiveUnread);
 
             _edition = result;
-            // The edition changed underneath us — collapse any open AI briefing.
-            _aiMode = null; _aiSummary = null; _aiError = null; _aiLoading = false;
             // Surface the date in the sticky mobile header (compact, e.g. "Mon · May 25").
             State.SetHeaderDate(!Saved && !Hidden && result is { } e ? e.Date.ToString("ddd · MMM d, yyyy") : null);
         }
@@ -355,40 +314,6 @@ else
             .ToList();
 
         _edition = ed with { Lead = lead, Articles = rest, Sections = sections };
-    }
-
-    // ── AI briefings ────────────────────────────────────────────────────
-    private async Task ToggleAi(AiSummaryKind kind)
-    {
-        if (_aiMode == kind) { _aiMode = null; return; }
-        _aiMode = kind;
-        _aiSummary = null; _aiError = null;
-        if (_edition is null) return;
-
-        _aiLoading = true;
-        try
-        {
-            _aiSummary = kind == AiSummaryKind.Weekly
-                ? await Api.GetWeeklySummaryAsync(_edition.Date)
-                : await Api.GetDailySummaryAsync(_edition.Date);
-        }
-        catch (ApiException ex) { _aiError = ex.Message; }
-        finally { _aiLoading = false; }
-    }
-
-    private async Task GenerateAi()
-    {
-        if (_edition is null || _aiMode is not { } kind) return;
-        _aiLoading = true; _aiError = null;
-        StateHasChanged();
-        try
-        {
-            _aiSummary = kind == AiSummaryKind.Weekly
-                ? await Api.GenerateWeeklySummaryAsync(_edition.Date)
-                : await Api.GenerateDailySummaryAsync(_edition.Date);
-        }
-        catch (ApiException ex) { _aiError = ex.Message; }
-        finally { _aiLoading = false; }
     }
 
     private async Task MarkAllRead()
