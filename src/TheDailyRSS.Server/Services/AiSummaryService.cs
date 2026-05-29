@@ -81,9 +81,7 @@ public sealed class AiSummaryService(
     private async Task<(int ArticleCount, string Text)> BuildCorpusAsync(
         Guid uid, DateOnly start, DateOnly end, CancellationToken ct)
     {
-        var filters = await LoadFiltersAsync(db, uid, ct);
-        var fieldFilters = await LoadFieldFiltersAsync(db, uid, ct);
-        var visible = NotHidden(ApplyFieldFilters(ApplyKeywords(Subscribed(db, uid), filters), fieldFilters), uid)
+        var visible = (await VisibleAsync(db, uid, ct))
             .Where(a => a.EditionDate >= start && a.EditionDate <= end);
 
         var items = await (
