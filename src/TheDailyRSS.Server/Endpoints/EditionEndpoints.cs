@@ -21,6 +21,9 @@ public static class EditionEndpoints
         return 5 + (int)(h % 4);
     }
 
+    /// <summary>Upper bound on articles materialised for a single edition view.</summary>
+    private const int MaxEditionArticles = 300;
+
     public static void MapEditionEndpoints(this IEndpointRouteBuilder app)
     {
         var editions = app.MapGroup("/api/editions").RequireAuthorization();
@@ -105,22 +108,17 @@ public static class EditionEndpoints
         // Load the mute filters once; the muted set is reused for the listing, the unread total and
         // the prev/next probing below.
         var muted = ApplyMutes(db, uid, keywords, fieldFilters);
-        var query = muted;
 
         // "Saved" and "Hidden" are cross-date pseudo-sections; everything else is bound to the day.
         // Hidden articles are dropped from every view except the Hidden list itself.
-        if (hidden) query = query.Where(a => a.States.Any(s => s.UserId == uid && s.IsHidden));
-        else if (saved) query = NotHidden(query, uid).Where(a => a.States.Any(s => s.UserId == uid && s.IsSaved));
-        else query = NotHidden(query, uid).Where(a => a.EditionDate == date);
-
-        if (categoryId is { } cid)
-            query = query.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid && s.CategoryId == cid));
-        if (sourceId is { } src)
-            query = query.Where(a => a.SourceId == src);
+        var query = hidden ? muted.Where(a => a.States.Any(s => s.UserId == uid && s.IsHidden))
+            : saved ? NotHidden(muted, uid).Where(a => a.States.Any(s => s.UserId == uid && s.IsSaved))
+            : NotHidden(muted, uid).Where(a => a.EditionDate == date);
+        query = Narrow(query, uid, categoryId, sourceId);
         if (unreadOnly)
             query = query.Where(a => !a.States.Any(s => s.UserId == uid && s.IsRead));
 
-        var top = query.OrderByDescending(a => a.PublishedAt).Take(300);
+        var top = query.OrderByDescending(a => a.PublishedAt).Take(MaxEditionArticles);
         var summaries = (await ToSummaries(top, db, uid).ToListAsync(ct))
             .OrderByDescending(s => s.PublishedAt)
             .ToList();
@@ -129,50 +127,17 @@ public static class EditionEndpoints
         var lead = summaries.FirstOrDefault(s => s.ImageUrl is not null) ?? summaries.FirstOrDefault();
         var rest = summaries.Where(s => lead is null || s.Id != lead.Id).ToList();
 
-        // Front page (no drill-down): a curated slice of every category, in taxonomy order.
-        // A single-category view keeps the full flat list.
-        List<EditionSectionDto> sections;
-        if (categoryId is null && sourceId is null && !saved && !hidden)
-        {
-            var order = await db.Categories.ToDictionaryAsync(c => c.Id, c => c.SortOrder, ct);
-            sections = rest
-                .GroupBy(s => (s.CategoryId, s.CategoryName, s.CategoryColor))
-                .Select(g => new EditionSectionDto(
-                    g.Key.CategoryId, g.Key.CategoryName, g.Key.CategoryColor,
-                    g.Count(), g.Take(FrontPageSectionSize(date, g.Key.CategoryId)).ToList()))
-                .OrderBy(s => order.TryGetValue(s.CategoryId, out var o) ? o : int.MaxValue)
-                .ToList();
-        }
-        else
-        {
-            sections = summaries
-                .GroupBy(s => (s.CategoryId, s.CategoryName, s.CategoryColor))
-                .Select(g => new EditionSectionDto(
-                    g.Key.CategoryId, g.Key.CategoryName, g.Key.CategoryColor, g.Count(), g.ToList()))
-                .ToList();
-        }
+        var isFrontPage = categoryId is null && sourceId is null && !saved && !hidden;
+        var sections = await BuildSectionsAsync(db, date, isFrontPage, rest, summaries, ct);
 
         var unreadTotal = await NotHidden(muted, uid)
             .CountAsync(a => !a.States.Any(s => s.UserId == uid && s.IsRead), ct);
 
         DateOnly? prev = null, next = null;
         if (!saved && !hidden)
-        {
-            var dateQuery = NotHidden(muted, uid);
-            if (categoryId is { } c2)
-                dateQuery = dateQuery.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid && s.CategoryId == c2));
-            if (sourceId is { } src2)
-                dateQuery = dateQuery.Where(a => a.SourceId == src2);
-            prev = await dateQuery.Where(a => a.EditionDate < date).MaxAsync(a => (DateOnly?)a.EditionDate, ct);
-            next = await dateQuery.Where(a => a.EditionDate > date).MinAsync(a => (DateOnly?)a.EditionDate, ct);
-        }
+            (prev, next) = await ResolveAdjacentDatesAsync(NotHidden(muted, uid), uid, date, categoryId, sourceId, ct);
 
-        // The heading is the source's name when reading one source, else the category name.
-        var heading = sourceId is { } src3
-            ? await db.Subscriptions.Where(s => s.UserId == uid && s.SourceId == src3)
-                .Select(s => s.CustomTitle ?? s.Source!.Title).FirstOrDefaultAsync(ct)
-            : categoryId is null ? null
-                : await db.Categories.Where(c => c.Id == categoryId).Select(c => c.Name).FirstOrDefaultAsync(ct);
+        var heading = await ResolveHeadingAsync(db, uid, categoryId, sourceId, ct);
 
         var dto = new EditionDto(
             Date: date,
@@ -191,6 +156,61 @@ public static class EditionEndpoints
 
         return Results.Ok(dto);
     }
+
+    /// <summary>Applies the optional category and source narrowing shared by the listing query and
+    /// the prev/next date probe.</summary>
+    private static IQueryable<Article> Narrow(IQueryable<Article> q, Guid uid, Guid? categoryId, Guid? sourceId)
+    {
+        if (categoryId is { } cid)
+            q = q.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid && s.CategoryId == cid));
+        if (sourceId is { } src)
+            q = q.Where(a => a.SourceId == src);
+        return q;
+    }
+
+    /// <summary>Groups summaries into category sections. The curated front page caps each section to
+    /// a per-day slice (over <paramref name="rest"/>, i.e. excluding the lead) and orders by taxonomy;
+    /// a drill-down keeps the full flat list.</summary>
+    private static async Task<List<EditionSectionDto>> BuildSectionsAsync(
+        AppDbContext db, DateOnly date, bool isFrontPage,
+        List<ArticleSummaryDto> rest, List<ArticleSummaryDto> summaries, CancellationToken ct)
+    {
+        if (!isFrontPage)
+            return summaries
+                .GroupBy(s => (s.CategoryId, s.CategoryName, s.CategoryColor))
+                .Select(g => new EditionSectionDto(
+                    g.Key.CategoryId, g.Key.CategoryName, g.Key.CategoryColor, g.Count(), g.ToList()))
+                .ToList();
+
+        var order = await db.Categories.ToDictionaryAsync(c => c.Id, c => c.SortOrder, ct);
+        return rest
+            .GroupBy(s => (s.CategoryId, s.CategoryName, s.CategoryColor))
+            .Select(g => new EditionSectionDto(
+                g.Key.CategoryId, g.Key.CategoryName, g.Key.CategoryColor,
+                g.Count(), g.Take(FrontPageSectionSize(date, g.Key.CategoryId)).ToList()))
+            .OrderBy(s => order.TryGetValue(s.CategoryId, out var o) ? o : int.MaxValue)
+            .ToList();
+    }
+
+    /// <summary>The previous/next edition dates that have content, honouring the active category/source.</summary>
+    private static async Task<(DateOnly? Prev, DateOnly? Next)> ResolveAdjacentDatesAsync(
+        IQueryable<Article> visible, Guid uid, DateOnly date, Guid? categoryId, Guid? sourceId, CancellationToken ct)
+    {
+        var q = Narrow(visible, uid, categoryId, sourceId);
+        var prev = await q.Where(a => a.EditionDate < date).MaxAsync(a => (DateOnly?)a.EditionDate, ct);
+        var next = await q.Where(a => a.EditionDate > date).MinAsync(a => (DateOnly?)a.EditionDate, ct);
+        return (prev, next);
+    }
+
+    /// <summary>The masthead heading: the source's title when reading one source, else the category
+    /// name (null on the all-category front page).</summary>
+    private static async Task<string?> ResolveHeadingAsync(
+        AppDbContext db, Guid uid, Guid? categoryId, Guid? sourceId, CancellationToken ct) =>
+        sourceId is { } src
+            ? await db.Subscriptions.Where(s => s.UserId == uid && s.SourceId == src)
+                .Select(s => s.CustomTitle ?? s.Source!.Title).FirstOrDefaultAsync(ct)
+            : categoryId is null ? null
+                : await db.Categories.Where(c => c.Id == categoryId).Select(c => c.Name).FirstOrDefaultAsync(ct);
 
     private static async Task<IResult> GetArticle(
         Guid id, ClaimsPrincipal principal, AppDbContext db, HtmlSanitizationService sanitizer, CancellationToken ct)
