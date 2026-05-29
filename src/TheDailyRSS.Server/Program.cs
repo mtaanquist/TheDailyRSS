@@ -15,6 +15,13 @@ var builder = WebApplication.CreateBuilder(args);
 var dataDir = builder.Configuration["DataDir"]
     ?? Path.Combine(builder.Environment.ContentRootPath, "data");
 
+// ── Cross-cutting: request validation + uniform error responses ─────
+// AddValidation enables the minimal-API endpoint filter that enforces the DataAnnotations on
+// request DTOs (e.g. [Required]/[EmailAddress]/[MinLength]) — returning 400 ProblemDetails instead
+// of letting a null/short field reach the handler and throw a 500.
+builder.Services.AddValidation();
+builder.Services.AddProblemDetails();
+
 // ── Options ─────────────────────────────────────────────────────────
 builder.Services.Configure<FeedOptions>(builder.Configuration.GetSection(FeedOptions.SectionName));
 
@@ -136,6 +143,9 @@ await using (var scope = app.Services.CreateAsyncScope())
 
 if (app.Environment.IsDevelopment())
     app.UseWebAssemblyDebugging();
+
+// Convert unhandled exceptions into RFC7807 ProblemDetails (500) rather than leaking a bare stack.
+app.UseExceptionHandler();
 
 // ── Security headers ────────────────────────────────────────────────
 // Defence-in-depth behind the server-side HTML sanitizer: even if some markup slips through,
