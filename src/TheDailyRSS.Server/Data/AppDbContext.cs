@@ -98,6 +98,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
         b.Entity<UserArticleState>(e =>
         {
             e.HasKey(x => new { x.UserId, x.ArticleId });
+            // Optimistic concurrency for the multi-device sync overlay: without it, two devices
+            // writing different flags on the same article (read on one, saved on another) race and
+            // silently lose one update — the whole row is overwritten by the last writer. Postgres'
+            // system xmin column gives a free row-version; the write endpoints retry on conflict.
+            // Mapped as a shadow property over the system column (no physical column is added).
+            e.Property<uint>("xmin").IsRowVersion();
             e.HasIndex(x => new { x.UserId, x.IsSaved });
             e.HasIndex(x => new { x.UserId, x.IsRead });
             e.HasIndex(x => new { x.UserId, x.IsHidden });
