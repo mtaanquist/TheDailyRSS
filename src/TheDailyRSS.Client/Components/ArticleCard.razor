@@ -2,7 +2,7 @@
 
 <div class="tdr-story @(Article.IsRead ? "read" : "")" @onclick="Open">
     <div class="tdr-kicker">
-        <span>@Article.FeedTitle · @Relative(Article.PublishedAt)</span>
+        <span>@Article.FeedTitle · @RelativeTime.Terse(Article.PublishedAt)</span>
         <span style="margin-left:auto; display:inline-flex; align-items:center; gap:2px">
             <StarButton Saved="Article.IsSaved" Size="13" SavedChanged="ToggleSave" />
             <HideButton Hidden="Article.IsHidden" Size="13" HiddenChanged="ToggleHide" />
@@ -30,15 +30,4 @@
     private Task ToggleSave(bool saved) => OnSaveToggled.InvokeAsync((Article.Id, saved));
 
     private Task ToggleHide(bool hidden) => OnHideToggled.InvokeAsync((Article.Id, hidden));
-
-    public static string Relative(DateTimeOffset when)
-    {
-        var delta = DateTimeOffset.Now - when;
-        if (delta < TimeSpan.Zero) delta = TimeSpan.Zero;
-        if (delta.TotalMinutes < 1) return "just now";
-        if (delta.TotalMinutes < 60) return $"{(int)delta.TotalMinutes}m";
-        if (delta.TotalHours < 24) return $"{(int)delta.TotalHours}h";
-        if (delta.TotalDays < 7) return $"{(int)delta.TotalDays}d";
-        return when.ToString("MMM d");
-    }
 }

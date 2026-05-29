@@ -51,7 +51,7 @@
                     </div>
                     <div class="seen">
                         <div>LAST SEEN</div>
-                        <div style="font-size:12px; color:var(--ink-2)">@Relative(d.LastSeenAt)</div>
+                        <div style="font-size:12px; color:var(--ink-2)">@RelativeTime.Ago(d.LastSeenAt)</div>
                     </div>
                     @if (!d.IsCurrent)
                     {
@@ -92,7 +92,7 @@
     private static readonly string[] SyncItems =
         ["Feeds", "Read / unread", "Read later", "Reading position", "Preferences", "Past editions"];
 
-    private string LastSync => _status?.LastSyncAt is { } t ? $"last refresh {Relative(t)}" : "no refresh yet";
+    private string LastSync => _status?.LastSyncAt is { } t ? $"last refresh {RelativeTime.Ago(t)}" : "no refresh yet";
 
     protected override Task OnInitializedAsync() => Load();
 
@@ -110,12 +110,4 @@
         label.Contains("Mac") ? "💻" : label.Contains("Windows") ? "🖥" :
         label.Contains("Android") ? "📱" : "🖥";
 
-    private static string Relative(DateTimeOffset when)
-    {
-        var d = DateTimeOffset.Now - when;
-        if (d.TotalMinutes < 1) return "now";
-        if (d.TotalMinutes < 60) return $"{(int)d.TotalMinutes} min ago";
-        if (d.TotalHours < 24) return $"{(int)d.TotalHours}h ago";
-        return $"{(int)d.TotalDays}d ago";
-    }
 }
