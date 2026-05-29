@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TheDailyRSS.Server.Data;
@@ -11,9 +12,11 @@ using TheDailyRSS.Server.Data;
 namespace TheDailyRSS.Server.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260529181737_FilterSourceSetNull")]
+    partial class FilterSourceSetNull
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -190,7 +193,7 @@ namespace TheDailyRSS.Server.Data.Migrations
                     b.HasIndex("UserId", "Kind", "PeriodStart", "PeriodEnd")
                         .IsUnique();
 
-                    b.ToTable("AiSummaries", (string)null);
+                    b.ToTable("AiSummaries");
                 });
 
             modelBuilder.Entity("TheDailyRSS.Server.Data.AppUser", b =>
@@ -360,7 +363,7 @@ namespace TheDailyRSS.Server.Data.Migrations
                     b.HasIndex("SourceId", "ExternalId")
                         .IsUnique();
 
-                    b.ToTable("Articles", (string)null);
+                    b.ToTable("Articles");
                 });
 
             modelBuilder.Entity("TheDailyRSS.Server.Data.Category", b =>
@@ -394,7 +397,7 @@ namespace TheDailyRSS.Server.Data.Migrations
 
                     b.HasIndex("SortOrder");
 
-                    b.ToTable("Categories", (string)null);
+                    b.ToTable("Categories");
 
                     b.HasData(
                         new
@@ -529,7 +532,7 @@ namespace TheDailyRSS.Server.Data.Migrations
                     b.HasIndex("FeedUrl")
                         .IsUnique();
 
-                    b.ToTable("FeedSources", (string)null);
+                    b.ToTable("FeedSources");
                 });
 
             modelBuilder.Entity("TheDailyRSS.Server.Data.FieldFilter", b =>
@@ -564,7 +567,7 @@ namespace TheDailyRSS.Server.Data.Migrations
                     b.HasIndex("UserId", "FieldKey", "Operator", "Value", "SourceId")
                         .IsUnique();
 
-                    b.ToTable("FieldFilters", (string)null);
+                    b.ToTable("FieldFilters");
                 });
 
             modelBuilder.Entity("TheDailyRSS.Server.Data.KeywordFilter", b =>
@@ -594,7 +597,7 @@ namespace TheDailyRSS.Server.Data.Migrations
                     b.HasIndex("UserId", "Term", "SourceId")
                         .IsUnique();
 
-                    b.ToTable("KeywordFilters", (string)null);
+                    b.ToTable("KeywordFilters");
                 });
 
             modelBuilder.Entity("TheDailyRSS.Server.Data.Subscription", b =>
@@ -630,7 +633,7 @@ namespace TheDailyRSS.Server.Data.Migrations
 
                     b.HasIndex("UserId", "CategoryId", "SortOrder");
 
-                    b.ToTable("Subscriptions", (string)null);
+                    b.ToTable("Subscriptions");
                 });
 
             modelBuilder.Entity("TheDailyRSS.Server.Data.UserArticleState", b =>
@@ -666,7 +669,7 @@ namespace TheDailyRSS.Server.Data.Migrations
 
                     b.HasIndex("UserId", "IsSaved");
 
-                    b.ToTable("UserArticleStates", (string)null);
+                    b.ToTable("UserArticleStates");
                 });
 
             modelBuilder.Entity("TheDailyRSS.Server.Data.UserSession", b =>
@@ -705,7 +708,7 @@ namespace TheDailyRSS.Server.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Sessions", (string)null);
+                    b.ToTable("Sessions");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
