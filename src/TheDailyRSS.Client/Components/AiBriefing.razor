@@ -1,0 +1,91 @@
+@inject ApiClient Api
+
+<div class="tdr-aibar">
+    <span class="tdr-aibar-label">AI briefings</span>
+    <button class="tdr-navbtn @(_mode == AiSummaryKind.Daily ? "active" : "")"
+            @onclick="@(() => Toggle(AiSummaryKind.Daily))">this edition</button>
+    <button class="tdr-navbtn @(_mode == AiSummaryKind.Weekly ? "active" : "")"
+            @onclick="@(() => Toggle(AiSummaryKind.Weekly))">The Weekly</button>
+</div>
+@if (_mode is { } mode)
+{
+    <div class="tdr-ai-panel">
+        @if (_loading)
+        {
+            <p class="tdr-ai-status">Composing your @(mode == AiSummaryKind.Weekly ? "weekly" : "daily") briefing… this can take a moment.</p>
+        }
+        else if (_error is not null)
+        {
+            <div class="tdr-error">@_error</div>
+            <button class="tdr-btn" @onclick="Generate">try again</button>
+        }
+        else if (_summary is { } sum)
+        {
+            <div class="tdr-ai-head">
+                <span>@(mode == AiSummaryKind.Weekly ? "The Weekly" : "Daily briefing") · @sum.ArticleCount stories · @sum.Model</span>
+                <button class="tdr-link" @onclick="Generate">regenerate</button>
+            </div>
+            <div class="tdr-ai-content">@((MarkupString)MarkdownLite.ToHtml(sum.Content))</div>
+            <div class="tdr-hint">Generated @sum.GeneratedAt.LocalDateTime.ToString("MMM d, HH:mm") · AI can be wrong — check the originals.</div>
+        }
+        else
+        {
+            <p class="tdr-ai-status">No @(mode == AiSummaryKind.Weekly ? "weekly" : "daily") briefing yet for this edition.</p>
+            <button class="tdr-btn" @onclick="Generate">generate briefing</button>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>The edition date to summarise. Changing it collapses any open briefing.</summary>
+    [Parameter, EditorRequired] public DateOnly Date { get; set; }
+
+    private AiSummaryKind? _mode;
+    private AiSummaryDto? _summary;
+    private bool _loading;
+    private string? _error;
+    private DateOnly _shownFor;
+
+    protected override void OnParametersSet()
+    {
+        // The edition changed underneath us — collapse any open briefing so it isn't shown
+        // against the wrong day.
+        if (Date != _shownFor)
+        {
+            _shownFor = Date;
+            _mode = null; _summary = null; _error = null; _loading = false;
+        }
+    }
+
+    private async Task Toggle(AiSummaryKind kind)
+    {
+        if (_mode == kind) { _mode = null; return; }
+        _mode = kind;
+        _summary = null; _error = null;
+
+        _loading = true;
+        try
+        {
+            _summary = kind == AiSummaryKind.Weekly
+                ? await Api.GetWeeklySummaryAsync(Date)
+                : await Api.GetDailySummaryAsync(Date);
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private async Task Generate()
+    {
+        if (_mode is not { } kind) return;
+        _loading = true; _error = null;
+        StateHasChanged();
+        try
+        {
+            _summary = kind == AiSummaryKind.Weekly
+                ? await Api.GenerateWeeklySummaryAsync(Date)
+                : await Api.GenerateDailySummaryAsync(Date);
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+}
