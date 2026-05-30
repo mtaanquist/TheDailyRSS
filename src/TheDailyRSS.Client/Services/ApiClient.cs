@@ -103,9 +103,12 @@ public sealed class ApiClient(HttpClient http)
     public Task<AiSummaryDto?> GetDailySummaryAsync(DateOnly date) => GetOrNullAsync<AiSummaryDto>($"api/ai/summary/daily/{D(date)}");
     public Task<AiSummaryDto> GenerateDailySummaryAsync(DateOnly date) => PostAsync<AiSummaryDto>($"api/ai/summary/daily/{D(date)}", new { });
 
-    /// <summary>"The Weekly" — the current curated edition. GET returns null until it's been generated.</summary>
-    public Task<WeeklyEditionDto?> GetWeeklyEditionAsync() => GetOrNullAsync<WeeklyEditionDto>("api/ai/weekly");
-    public Task<WeeklyEditionDto> GenerateWeeklyEditionAsync() => PostAsync<WeeklyEditionDto>("api/ai/weekly", new { });
+    /// <summary>"The Weekly" — a curated edition for the week containing <paramref name="anchor"/>
+    /// (null = the current week). GET returns null until that week has been curated.</summary>
+    public Task<WeeklyEditionDto?> GetWeeklyEditionAsync(DateOnly? anchor = null) =>
+        GetOrNullAsync<WeeklyEditionDto>(anchor is { } a ? $"api/ai/weekly/{D(a)}" : "api/ai/weekly");
+    public Task<WeeklyEditionDto> GenerateWeeklyEditionAsync(DateOnly? anchor = null) =>
+        PostAsync<WeeklyEditionDto>(anchor is { } a ? $"api/ai/weekly/{D(a)}" : "api/ai/weekly", new { });
 
     private static string Query(Guid? categoryId, Guid? sourceId, bool? saved, bool unreadOnly, bool hidden = false)
     {
