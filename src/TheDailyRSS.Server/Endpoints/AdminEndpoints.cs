@@ -31,7 +31,7 @@ public static class AdminEndpoints
             .FirstOrDefaultAsync(ct);
         var isDefault = string.IsNullOrWhiteSpace(stored);
         var value = isDefault ? AiSummaryService.DefaultHouseStyle : stored!;
-        return Results.Ok(new AiHouseStyleDto(value, isDefault, AiSummaryService.DefaultHouseStyle));
+        return Results.Ok(HouseStyleDto(value, isDefault));
     }
 
     private static async Task<IResult> SetHouseStyle(UpdateAiHouseStyleRequest req, AppDbContext db, CancellationToken ct)
@@ -44,7 +44,7 @@ public static class AdminEndpoints
         {
             if (row is not null) db.AppSettings.Remove(row);
             await db.SaveChangesAsync(ct);
-            return Results.Ok(new AiHouseStyleDto(AiSummaryService.DefaultHouseStyle, true, AiSummaryService.DefaultHouseStyle));
+            return Results.Ok(HouseStyleDto(AiSummaryService.DefaultHouseStyle, true));
         }
 
         if (value.Length > 8000) return ApiResults.Fail("The house style is too long (8000 characters max).");
@@ -54,8 +54,12 @@ public static class AdminEndpoints
         else
             row.Value = value;
         await db.SaveChangesAsync(ct);
-        return Results.Ok(new AiHouseStyleDto(value, false, AiSummaryService.DefaultHouseStyle));
+        return Results.Ok(HouseStyleDto(value, false));
     }
+
+    private static AiHouseStyleDto HouseStyleDto(string value, bool isDefault) => new(
+        value, isDefault, AiSummaryService.DefaultHouseStyle,
+        AiSummaryService.DailyBriefingRules, AiSummaryService.WeeklyCurationRules);
 
     private static async Task<IResult> List(AppDbContext db)
     {
