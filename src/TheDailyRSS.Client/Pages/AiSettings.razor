@@ -71,6 +71,14 @@
             </label>
             <div class="tdr-hint">Otherwise digests are generated on demand when you open them.</div>
 
+            <h2 style="font-weight:800; font-size:14px; margin:18px 0 6px">Article summaries</h2>
+            <label class="tdr-toggle-row" @onclick="() => { _s.AutoArticle = !_s.AutoArticle; }">
+                <span class="tdr-toggle @(_s.AutoArticle ? "on" : "")"><span class="knob"></span></span>
+                <span>Pre-summarise new articles from full-text feeds</span>
+            </label>
+            <div class="tdr-hint">A short TL;DR is pinned at the top of each article. Only applies to feeds with
+                full-article fetching turned on. You can always summarise any article on demand from the article itself.</div>
+
             <div style="margin-top:18px; display:flex; gap:10px; align-items:center">
                 <button class="tdr-btn" @onclick="Save" disabled="@Busy">save settings</button>
                 @if (_saved) { <span class="tdr-hint">↳ saved &amp; synced.</span> }
@@ -97,6 +105,7 @@
         public string? SystemPrompt { get; set; }
         public bool AutoDaily { get; set; }
         public bool AutoWeekly { get; set; }
+        public bool AutoArticle { get; set; }
     }
 
     protected override async Task OnInitializedAsync()
@@ -112,6 +121,7 @@
                 SystemPrompt = _orig.SystemPrompt,
                 AutoDaily = _orig.AutoDaily,
                 AutoWeekly = _orig.AutoWeekly,
+                AutoArticle = _orig.AutoArticle,
             };
             _hasKey = _orig.HasApiKey;
         });
@@ -147,6 +157,7 @@
             SystemPrompt = _s.SystemPrompt,
             AutoDaily = _s.AutoDaily,
             AutoWeekly = _s.AutoWeekly,
+            AutoArticle = _s.AutoArticle,
             ApiKey = string.IsNullOrWhiteSpace(_apiKey) ? null : _apiKey,
             ClearApiKey = clearKey,
         });

@@ -40,7 +40,10 @@ public sealed record ArticleDto(
     /// <summary>Structured fields lifted from the source feed item — drives the "filter
     /// from this article" affordance. Keys like <c>category</c>, <c>dc:creator</c>,
     /// <c>media:keywords</c>; each maps to one or more captured values.</summary>
-    IReadOnlyDictionary<string, IReadOnlyList<string>> Fields);
+    IReadOnlyDictionary<string, IReadOnlyList<string>> Fields,
+    /// <summary>The reader's cached AI TL;DR for this article, shown pinned at the top. Null when
+    /// none has been generated yet.</summary>
+    string? AiSummary);
 
 /// <summary>One day that has at least one article — used by the archive picker.</summary>
 public sealed record EditionDateDto(DateOnly Date, int ArticleCount, int UnreadCount);

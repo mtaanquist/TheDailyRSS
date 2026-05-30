@@ -9,6 +9,7 @@ public sealed record AiSettingsDto(
     string? SystemPrompt,
     bool AutoDaily,
     bool AutoWeekly,
+    bool AutoArticle,
     bool HasApiKey);
 
 /// <summary>Updates the BYOK config. <see cref="ApiKey"/> is write-only: a non-empty value sets
@@ -22,6 +23,9 @@ public sealed class UpdateAiSettingsRequest
     public string? SystemPrompt { get; set; }
     public bool AutoDaily { get; set; }
     public bool AutoWeekly { get; set; }
+
+    /// <summary>Pre-generate a per-article TL;DR for articles from full-text feeds in the background.</summary>
+    public bool AutoArticle { get; set; }
 
     /// <summary>New key to store; null/empty leaves the existing key untouched.</summary>
     public string? ApiKey { get; set; }
@@ -47,6 +51,13 @@ public sealed class UpdateAiHouseStyleRequest
 {
     public string? Value { get; set; }
 }
+
+/// <summary>A per-user AI TL;DR of a single article (distinct from <see cref="ArticleSummaryDto"/>,
+/// which is an article card in an edition). Returned when one is generated on demand.</summary>
+public sealed record ArticleAiSummaryDto(
+    string Content,
+    string Model,
+    DateTimeOffset GeneratedAt);
 
 /// <summary>A generated AI digest over a date range.</summary>
 public sealed record AiSummaryDto(
