@@ -6,7 +6,9 @@ using TheDailyRSS.Shared;
 namespace TheDailyRSS.Server.Services;
 
 /// <summary>Pre-generates daily/weekly digests for users who opted in, so they're ready to read
-/// without a manual click. Resilient: one user's LLM failure never aborts the sweep.</summary>
+/// without a manual click. Runs once a day at 23:55 edition-local time: the daily briefing for the day
+/// just ending, and — on Saturdays — The Weekly for the week ending that day (ready to read Sunday).
+/// Resilient: one user's LLM failure never aborts the run.</summary>
 public sealed class AiSummaryBackgroundService(
     IServiceScopeFactory scopeFactory,
     IOptions<FeedOptions> options,
@@ -14,28 +16,42 @@ public sealed class AiSummaryBackgroundService(
 {
     private readonly FeedOptions _options = options.Value;
 
+    /// <summary>When the nightly run fires, in the configured edition timezone — late enough that the
+    /// day's stories are essentially all in.</summary>
+    private static readonly TimeOnly RunAt = new(23, 55);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
-
-        // Sweep a few times a day so freshly-completed days/weeks get picked up promptly.
-        using var timer = new PeriodicTimer(TimeSpan.FromHours(6));
-        do
+        while (!stoppingToken.IsCancellationRequested)
         {
+            try { await Task.Delay(DelayUntilNextRun(), stoppingToken); }
+            catch (OperationCanceledException) { return; }
+
             try
             {
-                await SweepAsync(stoppingToken);
+                await RunAsync(stoppingToken);
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
-                log.LogError(ex, "AI summary sweep failed");
+                log.LogError(ex, "AI nightly run failed");
             }
         }
-        while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    private async Task SweepAsync(CancellationToken ct)
+    /// <summary>Time until the next <see cref="RunAt"/> in the edition timezone.</summary>
+    private TimeSpan DelayUntilNextRun()
+    {
+        var tz = EditionClock.ResolveTimeZone(_options.EditionTimeZone);
+        var nowLocal = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, tz);
+        var todayRun = new DateTimeOffset(
+            nowLocal.Year, nowLocal.Month, nowLocal.Day, RunAt.Hour, RunAt.Minute, 0, nowLocal.Offset);
+        var next = nowLocal < todayRun ? todayRun : todayRun.AddDays(1);
+        var delay = next - nowLocal;
+        return delay > TimeSpan.Zero ? delay : TimeSpan.FromMinutes(1);
+    }
+
+    private async Task RunAsync(CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -48,17 +64,16 @@ public sealed class AiSummaryBackgroundService(
         if (users.Count == 0) return;
 
         var today = EditionClock.Today(_options);
-        var yesterday = today.AddDays(-1);
-        // "The Weekly" covers the week ending on the most recent Sunday; ensuring it each sweep means
-        // the new edition is curated on the first sweep on/after Sunday morning and then stands all week.
+        var isSaturday = today.DayOfWeek == DayOfWeek.Saturday;
+        // On Saturday night the Sunday–Saturday week is complete; curate it so it's ready Sunday morning.
         var (weekStart, weekEnd) = AiSummaryService.WeeklyWindow(today);
 
         foreach (var user in users)
         {
             ct.ThrowIfCancellationRequested();
             if (user.AiAutoDaily)
-                await EnsureDailyAsync(ai, user, yesterday, ct);
-            if (user.AiAutoWeekly)
+                await EnsureDailyAsync(ai, user, today, ct);
+            if (isSaturday && user.AiAutoWeekly)
                 await EnsureWeeklyAsync(ai, user, weekStart, weekEnd, ct);
         }
     }

@@ -63,11 +63,11 @@
             <h2 style="font-weight:800; font-size:14px; margin:18px 0 6px">Automatic digests</h2>
             <label class="tdr-toggle-row" @onclick="() => { _s.AutoDaily = !_s.AutoDaily; }">
                 <span class="tdr-toggle @(_s.AutoDaily ? "on" : "")"><span class="knob"></span></span>
-                <span>Pre-generate yesterday's daily digest</span>
+                <span>Generate the day's briefing each night (23:55)</span>
             </label>
             <label class="tdr-toggle-row" @onclick="() => { _s.AutoWeekly = !_s.AutoWeekly; }">
                 <span class="tdr-toggle @(_s.AutoWeekly ? "on" : "")"><span class="knob"></span></span>
-                <span>Curate "The Weekly" every Sunday morning</span>
+                <span>Curate "The Weekly" on Saturday night, ready for Sunday</span>
             </label>
             <div class="tdr-hint">Otherwise digests are generated on demand when you open them.</div>
 
