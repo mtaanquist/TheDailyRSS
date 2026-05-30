@@ -126,12 +126,16 @@ builder.Services.AddDataProtection()
 
 builder.Services.AddSingleton<FeedReader>();
 builder.Services.AddSingleton<HtmlSanitizationService>();
+// Stateless (only IHttpClientFactory/IOptions/ILogger), so a singleton is safe — and lets the
+// singleton backfill hosted service inject it without a captive-dependency on a scoped service.
+builder.Services.AddSingleton<ArticleContentExtractor>();
 builder.Services.AddScoped<FeedDiscoveryService>();
 builder.Services.AddScoped<FeedFetchService>();
 builder.Services.AddScoped<FeedSourceService>();
 builder.Services.AddScoped<OpmlService>();
 builder.Services.AddScoped<AiSummaryService>();
 builder.Services.AddHostedService<FeedRefreshBackgroundService>();
+builder.Services.AddHostedService<FullContentBackfillService>();
 builder.Services.AddHostedService<AiSummaryBackgroundService>();
 
 var app = builder.Build();

@@ -16,4 +16,22 @@ public sealed class FeedOptions
     /// <summary>Hard cap on a single fetched feed/page response body. Guards against a hostile or
     /// runaway endpoint exhausting memory. Applies to feed fetches, discovery scrapes and OPML import.</summary>
     public int MaxResponseBytes { get; set; } = 16 * 1024 * 1024;
+
+    // ── Full-article (reader-mode) extraction ────────────────────────────
+    // When a source has FetchFullContent on, the fetcher steps into each article's page. These
+    // bound how aggressively we scrape so we stay a polite citizen and don't get blocked.
+
+    /// <summary>Delay between successive article-page fetches to the same host (reader-mode
+    /// extraction). Kept conservative so we aren't rate-limited/blocked; slow is acceptable.</summary>
+    public int FullContentDelaySeconds { get; set; } = 5;
+
+    /// <summary>How many already-stored articles the backfill worker extracts per source per tick.</summary>
+    public int FullContentBackfillBatchSize { get; set; } = 20;
+
+    /// <summary>How often the backfill worker scans for articles still missing full content.</summary>
+    public int FullContentBackfillIntervalMinutes { get; set; } = 2;
+
+    /// <summary>Cap on how many newly-fetched articles get reader-mode extraction inline during a
+    /// refresh (the rest are left to the backfill worker, keeping the synchronous Add fast).</summary>
+    public int FullContentInlineLimit { get; set; } = 5;
 }

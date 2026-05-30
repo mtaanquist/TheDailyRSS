@@ -58,6 +58,15 @@
                 </div>
 
                 <div class="tdr-field" style="margin-top:14px">
+                    <label>Full article</label>
+                    <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-2); cursor:pointer">
+                        <input type="checkbox" checked="@_fetchFull" @onchange="@(e => _fetchFull = e.Value is true)" />
+                        fetch the full article (reader mode) when the feed only gives a summary
+                    </label>
+                    <div class="tdr-hint">↳ we step into each article and pull the readable text — applies to everyone subscribed to this feed</div>
+                </div>
+
+                <div class="tdr-field" style="margin-top:14px">
                     <label>Add to folder</label>
                     <div class="tdr-folder-chips">
                         @foreach (var c in Categories)
@@ -89,6 +98,7 @@
 
     private string _url = "";
     private string _title = "";
+    private bool _fetchFull;
     private FeedDetectResult? _result;
     private Guid? _categoryId;
     private string? _error;
@@ -150,6 +160,7 @@
                 // An override only when it differs from the feed's own title — otherwise leave it null
                 // so the source's title continues to apply.
                 Title = string.IsNullOrWhiteSpace(_title) || _title.Trim() == _result.Title?.Trim() ? null : _title.Trim(),
+                FetchFullContent = _fetchFull,
             });
             await OnAdded.InvokeAsync();
             Reset();
@@ -169,6 +180,7 @@
     {
         _url = "";
         _title = "";
+        _fetchFull = false;
         _result = null;
         _error = null;
         _detecting = false;

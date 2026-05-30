@@ -66,6 +66,7 @@
                             <option value="@c.Id" selected="@(c.Id == f.CategoryId)">@c.Name</option>
                         }
                     </select>
+                    <button class="tdr-link muted" @onclick="() => OpenEdit(f)">edit</button>
                     <button class="tdr-link muted" @onclick="() => RefreshFeed(f)">refresh</button>
                     <button class="tdr-link" @onclick="() => DeleteFeed(f)">✕</button>
                 </div>
@@ -95,11 +96,14 @@
 </div>
 
 <AddFeedDialog @bind-Visible="_showAdd" Categories="_categories" OnAdded="ReloadAll" />
+<EditFeedDialog @bind-Visible="_showEdit" Feed="_editFeed" Categories="_categories" OnSaved="ReloadAll" />
 
 @code {
     private List<CategoryDto> _categories = [];
     private List<FeedDto> _feeds = [];
     private bool _showAdd;
+    private bool _showEdit;
+    private FeedDto? _editFeed;
     private string? _error;
     private OpmlImportResult? _importResult;
 
@@ -130,6 +134,12 @@
         if (!await Confirm($"Unsubscribe from “{feed.Title}”?")) return;
         await Api.DeleteFeedAsync(feed.Id);
         await ReloadAll();
+    }
+
+    private void OpenEdit(FeedDto feed)
+    {
+        _editFeed = feed;
+        _showEdit = true;
     }
 
     private async Task MoveFeed(FeedDto feed, Guid newCat)

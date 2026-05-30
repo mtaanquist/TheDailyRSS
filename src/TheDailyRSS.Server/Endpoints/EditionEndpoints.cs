@@ -213,7 +213,9 @@ public static class EditionEndpoints
             from st in db.UserArticleStates.Where(s => s.UserId == uid && s.ArticleId == a.Id).DefaultIfEmpty()
             select new
             {
-                a.Id, a.Title, a.Summary, a.ContentHtml, a.Author,
+                a.Id, a.Title, a.Summary, a.ContentHtml,
+                a.FullContentHtml, FetchFull = a.Source!.FetchFullContent,
+                a.Author,
                 FeedTitle = sub.CustomTitle ?? a.Source!.Title,
                 a.Source!.IconText,
                 sub.CategoryId,
@@ -232,8 +234,14 @@ public static class EditionEndpoints
         var fields = (IReadOnlyDictionary<string, IReadOnlyList<string>>)row.Fields
             .ToDictionary(kv => kv.Key, kv => (IReadOnlyList<string>)kv.Value);
 
+        // Prefer the reader-mode extraction when the source has it on and we have a usable body
+        // ("" means we tried and got nothing); otherwise serve the feed's own content. Sanitized either way.
+        var body = row.FetchFull && !string.IsNullOrEmpty(row.FullContentHtml)
+            ? row.FullContentHtml
+            : row.ContentHtml;
+
         return Results.Ok(new ArticleDto(
-            row.Id, row.Title, row.Summary, sanitizer.Sanitize(row.ContentHtml), row.Author,
+            row.Id, row.Title, row.Summary, sanitizer.Sanitize(body), row.Author,
             row.FeedTitle, row.IconText,
             row.CategoryId, row.CategoryName, row.CategoryColor,
             row.ImageUrl, row.PublishedAt,
