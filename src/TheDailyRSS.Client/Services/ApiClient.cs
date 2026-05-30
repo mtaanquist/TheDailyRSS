@@ -97,8 +97,10 @@ public sealed class ApiClient(HttpClient http)
 
     public Task<AiSummaryDto?> GetDailySummaryAsync(DateOnly date) => GetOrNullAsync<AiSummaryDto>($"api/ai/summary/daily/{D(date)}");
     public Task<AiSummaryDto> GenerateDailySummaryAsync(DateOnly date) => PostAsync<AiSummaryDto>($"api/ai/summary/daily/{D(date)}", new { });
-    public Task<AiSummaryDto?> GetWeeklySummaryAsync(DateOnly date) => GetOrNullAsync<AiSummaryDto>($"api/ai/summary/weekly/{D(date)}");
-    public Task<AiSummaryDto> GenerateWeeklySummaryAsync(DateOnly date) => PostAsync<AiSummaryDto>($"api/ai/summary/weekly/{D(date)}", new { });
+
+    /// <summary>"The Weekly" — the current curated edition. GET returns null until it's been generated.</summary>
+    public Task<WeeklyEditionDto?> GetWeeklyEditionAsync() => GetOrNullAsync<WeeklyEditionDto>("api/ai/weekly");
+    public Task<WeeklyEditionDto> GenerateWeeklyEditionAsync() => PostAsync<WeeklyEditionDto>("api/ai/weekly", new { });
 
     private static string Query(Guid? categoryId, Guid? sourceId, bool? saved, bool unreadOnly, bool hidden = false)
     {

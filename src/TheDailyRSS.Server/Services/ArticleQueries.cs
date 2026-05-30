@@ -16,6 +16,20 @@ public static class ArticleQueries
     public static IQueryable<Article> Subscribed(AppDbContext db, Guid uid) =>
         db.Articles.Where(a => a.Source!.Subscriptions.Any(s => s.UserId == uid));
 
+    /// <summary>Projects subscribed articles to per-user summaries, resolving the per-user category and
+    /// read/saved/hidden state. Shared by the edition endpoints and the Weekly curation so both views
+    /// see identical headlines.</summary>
+    public static IQueryable<ArticleSummaryDto> ToSummaries(IQueryable<Article> articles, AppDbContext db, Guid uid) =>
+        from a in articles
+        from sub in db.Subscriptions.Where(s => s.UserId == uid && s.SourceId == a.SourceId)
+        from st in db.UserArticleStates.Where(s => s.UserId == uid && s.ArticleId == a.Id).DefaultIfEmpty()
+        select new ArticleSummaryDto(
+            a.Id, a.Title, a.Summary,
+            sub.CustomTitle ?? a.Source!.Title, a.Source!.IconText,
+            sub.CategoryId, sub.Category!.Name, sub.Category.Color,
+            a.ImageUrl, a.PublishedAt,
+            st != null && st.IsRead, st != null && st.IsSaved, st != null && st.IsHidden, a.Url);
+
     /// <summary>The reader's visible article set — subscribed sources with keyword and field mutes
     /// applied (and, unless <paramref name="includeHidden"/>, hidden articles dropped). Loads both
     /// filter lists and composes them in the one correct order, so call sites don't re-assemble the

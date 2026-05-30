@@ -9,12 +9,16 @@ window.tdrDownload = (filename, text, mime) => {
 };
 
 // Forward wheel scrolls over the empty side gutters into the centre column,
-// so a scroll started outside the 1100px shell still moves the news.
+// so a scroll started outside the 1100px shell still moves the news. The left
+// menu does the same — unless it's tall enough to have its own scrollbar, in
+// which case we leave it to scroll itself.
 window.addEventListener('wheel', (e) => {
     if (e.ctrlKey) return; // leave pinch-zoom alone
     const main = document.querySelector('.tdr-main');
     if (!main) return;
-    if (e.target.closest('.tdr-main, .tdr-sidebar')) return; // real scroll regions handle themselves
+    if (e.target.closest('.tdr-main')) return; // real scroll region handles itself
+    const sidebar = e.target.closest('.tdr-sidebar');
+    if (sidebar && sidebar.scrollHeight > sidebar.clientHeight) return; // sidebar has its own scrollbar
     main.scrollTop += e.deltaY;
     e.preventDefault();
 }, { passive: false });

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using TheDailyRSS.Server.Auth;
 using TheDailyRSS.Server.Data;
 using TheDailyRSS.Server.Services;
@@ -18,10 +19,9 @@ public static class AiEndpoints
             GetSummary(date, AiSummaryKind.Daily, p, db, ai, ct));
         group.MapPost("/summary/daily/{date}", (string date, ClaimsPrincipal p, AppDbContext db, AiSummaryService ai, CancellationToken ct) =>
             GenerateSummary(date, AiSummaryKind.Daily, p, db, ai, ct));
-        group.MapGet("/summary/weekly/{date}", (string date, ClaimsPrincipal p, AppDbContext db, AiSummaryService ai, CancellationToken ct) =>
-            GetSummary(date, AiSummaryKind.Weekly, p, db, ai, ct));
-        group.MapPost("/summary/weekly/{date}", (string date, ClaimsPrincipal p, AppDbContext db, AiSummaryService ai, CancellationToken ct) =>
-            GenerateSummary(date, AiSummaryKind.Weekly, p, db, ai, ct));
+        // "The Weekly" is a single, current curated edition (no archive) anchored to the most recent Sunday.
+        group.MapGet("/weekly", GetWeekly);
+        group.MapPost("/weekly", GenerateWeekly);
     }
 
     private static async Task<IResult> GetSettings(ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
@@ -82,6 +82,31 @@ public static class AiEndpoints
         {
             var dto = await ai.GenerateAsync(user, kind, start, end, ct);
             return Results.Ok(dto);
+        }
+        catch (AiException ex)
+        {
+            return ApiResults.Fail(ex.Message);
+        }
+    }
+
+    private static async Task<IResult> GetWeekly(
+        ClaimsPrincipal principal, AiSummaryService ai, IOptions<FeedOptions> opts, CancellationToken ct)
+    {
+        var (start, end) = AiSummaryService.WeeklyWindow(EditionClock.Today(opts.Value));
+        var dto = await ai.GetWeeklyEditionAsync(principal.GetUserId(), start, end, ct);
+        return dto is null ? Results.NotFound() : Results.Ok(dto);
+    }
+
+    private static async Task<IResult> GenerateWeekly(
+        ClaimsPrincipal principal, AppDbContext db, AiSummaryService ai, IOptions<FeedOptions> opts, CancellationToken ct)
+    {
+        var user = await db.Users.FindAsync([principal.GetUserId()], ct);
+        if (user is null) return Results.Unauthorized();
+
+        var (start, end) = AiSummaryService.WeeklyWindow(EditionClock.Today(opts.Value));
+        try
+        {
+            return Results.Ok(await ai.GenerateWeeklyEditionAsync(user, start, end, ct));
         }
         catch (AiException ex)
         {

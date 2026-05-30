@@ -25,6 +25,15 @@ public sealed class AiSummaryService(
 {
     private const int MaxArticles = 150;
     private const int MaxSummaryChars = 400;
+
+    // ── The Weekly: how much the curator sees and how much it may pick ──
+    /// <summary>Hard cap on articles fed to the weekly curator, so a busy week stays within the prompt budget.</summary>
+    private const int WeeklyGlobalCap = 400;
+    /// <summary>Per-category cap on what's shown to the curator (most recent first), so quiet sections aren't starved.</summary>
+    private const int WeeklyPerCategory = 30;
+    /// <summary>How many stories the curator may keep per category on the finished front page.</summary>
+    private const int WeeklyPicksPerCategory = 5;
+
     private IDataProtector Protector => dpProvider.CreateProtector("AiApiKey");
 
     /// <summary>The Monday-anchored 7-day window containing <paramref name="date"/>.</summary>
@@ -33,6 +42,14 @@ public sealed class AiSummaryService(
         var offset = ((int)date.DayOfWeek + 6) % 7; // Monday = 0
         var monday = date.AddDays(-offset);
         return (monday, monday.AddDays(6));
+    }
+
+    /// <summary>The Monday–Sunday week "The Weekly" currently covers, given today's date: the week ending
+    /// on the most recent (or today's) Sunday. It's generated Sunday morning and stands until the next.</summary>
+    public static (DateOnly Start, DateOnly End) WeeklyWindow(DateOnly today)
+    {
+        var sunday = today.AddDays(-(int)today.DayOfWeek); // Sunday = 0 → today; otherwise the previous Sunday
+        return WeekRange(sunday);
     }
 
     public string Encrypt(string apiKey) => Protector.Protect(apiKey);
@@ -50,11 +67,7 @@ public sealed class AiSummaryService(
     public async Task<AiSummaryDto> GenerateAsync(
         AppUser user, AiSummaryKind kind, DateOnly start, DateOnly end, CancellationToken ct)
     {
-        if (!user.AiEnabled)
-            throw new AiException("AI summaries are turned off. Enable them in settings.");
-        if (string.IsNullOrWhiteSpace(user.AiBaseUrl) || string.IsNullOrWhiteSpace(user.AiModel)
-            || string.IsNullOrWhiteSpace(user.AiApiKeyEncrypted))
-            throw new AiException("AI summaries aren't fully configured. Add an endpoint, model and API key in settings.");
+        EnsureConfigured(user);
 
         var corpus = await BuildCorpusAsync(user.Id, start, end, ct);
         if (corpus.ArticleCount == 0)
@@ -77,6 +90,214 @@ public sealed class AiSummaryService(
 
         return ToDto(existing);
     }
+
+    // ── The Weekly ──────────────────────────────────────────────────────
+
+    /// <summary>The cached Weekly edition for a window, re-projected to live article summaries, or null
+    /// if it hasn't been curated yet (or the stored row predates the curated format).</summary>
+    public async Task<WeeklyEditionDto?> GetWeeklyEditionAsync(
+        Guid uid, DateOnly start, DateOnly end, CancellationToken ct)
+    {
+        var row = await db.AiSummaries.FirstOrDefaultAsync(
+            s => s.UserId == uid && s.Kind == AiSummaryKind.Weekly && s.PeriodStart == start && s.PeriodEnd == end, ct);
+        if (row is null) return null;
+
+        var curation = TryParseCuration(row.Content);
+        if (curation is null) return null; // legacy markdown weekly, or corrupt — invite a regenerate
+
+        return await BuildWeeklyDtoAsync(uid, start, end, curation, row.Model, row.ArticleCount, row.GeneratedAt, ct);
+    }
+
+    /// <summary>Curates (or re-curates) "The Weekly" for a window: the agent picks the most important
+    /// stories per category and writes the masthead, then we cache the selection and return the edition.</summary>
+    public async Task<WeeklyEditionDto> GenerateWeeklyEditionAsync(
+        AppUser user, DateOnly start, DateOnly end, CancellationToken ct)
+    {
+        EnsureConfigured(user);
+
+        var corpus = await BuildWeeklyCorpusAsync(user.Id, start, end, ct);
+        if (corpus.Items.Count == 0)
+            throw new AiException("There are no articles in this week to curate.");
+
+        var raw = await PostChatAsync(user, WeeklyCurationSystem(user), WeeklyCurationUser(start, end, corpus.Text), 0.3, ct);
+        var curation = BuildCurationFromResponse(raw, corpus);
+
+        var existing = await db.AiSummaries.FirstOrDefaultAsync(
+            s => s.UserId == user.Id && s.Kind == AiSummaryKind.Weekly && s.PeriodStart == start && s.PeriodEnd == end, ct);
+        if (existing is null)
+        {
+            existing = new AiSummary { UserId = user.Id, Kind = AiSummaryKind.Weekly, PeriodStart = start, PeriodEnd = end };
+            db.AiSummaries.Add(existing);
+        }
+        existing.Content = JsonSerializer.Serialize(curation);
+        existing.Model = user.AiModel!;
+        existing.ArticleCount = corpus.Items.Count;
+        existing.GeneratedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        return await BuildWeeklyDtoAsync(user.Id, start, end, curation, existing.Model, existing.ArticleCount, existing.GeneratedAt, ct);
+    }
+
+    /// <summary>Pulls the week's visible articles, capped per category (most-recent-first) and overall, and
+    /// builds a numbered, category-grouped corpus the curator selects from by number.</summary>
+    private async Task<WeeklyCorpus> BuildWeeklyCorpusAsync(Guid uid, DateOnly start, DateOnly end, CancellationToken ct)
+    {
+        var visible = (await VisibleAsync(db, uid, ct))
+            .Where(a => a.EditionDate >= start && a.EditionDate <= end);
+
+        var rows = await (
+            from a in visible
+            from sub in db.Subscriptions.Where(s => s.UserId == uid && s.SourceId == a.SourceId)
+            orderby a.PublishedAt descending
+            select new
+            {
+                a.Id,
+                a.Title,
+                a.Summary,
+                Source = sub.CustomTitle ?? a.Source!.Title,
+                CategoryId = sub.CategoryId,
+                Category = sub.Category!.Name,
+                CategoryOrder = sub.Category.SortOrder,
+            })
+            .Take(WeeklyGlobalCap)
+            .ToListAsync(ct);
+
+        // Cap each category to a recent slice so a single loud feed can't crowd the curator's view.
+        var perCategory = rows
+            .GroupBy(r => r.CategoryId)
+            .SelectMany(g => g.Take(WeeklyPerCategory))
+            .ToList();
+
+        var items = new List<WeeklyCorpusItem>();
+        var sb = new StringBuilder();
+        var n = 0;
+        foreach (var group in perCategory
+            .GroupBy(r => (r.CategoryId, r.Category, r.CategoryOrder))
+            .OrderBy(g => g.Key.CategoryOrder))
+        {
+            sb.Append("## ").AppendLine(group.Key.Category);
+            foreach (var r in group)
+            {
+                items.Add(new WeeklyCorpusItem(++n, r.Id, group.Key.CategoryId));
+                sb.Append('[').Append(n).Append("] [").Append(r.Source).Append("] ").Append(r.Title);
+                var summary = Strip(r.Summary);
+                if (!string.IsNullOrWhiteSpace(summary))
+                {
+                    if (summary.Length > MaxSummaryChars) summary = summary[..MaxSummaryChars] + "…";
+                    sb.Append(" — ").Append(summary);
+                }
+                sb.AppendLine();
+            }
+            sb.AppendLine();
+        }
+
+        return new WeeklyCorpus(items, items.ToDictionary(i => i.Index), sb.ToString());
+    }
+
+    private static string WeeklyCurationSystem(AppUser user)
+    {
+        var sb = new StringBuilder();
+        sb.Append("You are the editor of \"The Weekly\", a personal front page of the week's most important news for one reader. ")
+            .Append("You are given the past week's stories, grouped by section and each prefixed with a number in [brackets]. ")
+            .Append("From EACH section, choose up to five of the most important and interesting stories — favour genuinely significant developments over routine items, and skip filler. ")
+            .Append("Also choose ONE overall lead story for the whole edition. ")
+            .Append("Write a short masthead headline (a punchy phrase of at most eight words, no trailing period) capturing the week, and a two-to-four sentence editor's note (Markdown) introducing the edition. ")
+            .Append("Respond with ONLY a JSON object, no code fences, exactly of the form: ")
+            .Append("{\"headline\":\"…\",\"intro\":\"…\",\"lead\":<number>,\"sections\":[{\"picks\":[<number>,<number>]}]}. ")
+            .Append("Use only the numbers shown; never invent stories or numbers.");
+        if (!string.IsNullOrWhiteSpace(user.AiSystemPrompt))
+            sb.Append("\n\nThe reader describes their interests as follows; weight your selection accordingly:\n")
+                .Append(user.AiSystemPrompt!.Trim());
+        return sb.ToString();
+    }
+
+    private static string WeeklyCurationUser(DateOnly start, DateOnly end, string corpus) =>
+        $"Here are the stories from the week of {start:MMMM d} – {end:MMMM d, yyyy}. Curate The Weekly.\n\n{corpus}";
+
+    /// <summary>Maps the model's JSON pick list back to article ids: validates numbers, caps each category
+    /// to five, orders by the section taxonomy, and resolves the lead (falling back to the first pick).</summary>
+    private static WeeklyCuration BuildCurationFromResponse(string raw, WeeklyCorpus corpus)
+    {
+        var json = ExtractJsonObject(raw);
+        if (json is null) throw new AiException("The AI returned an unexpected response.");
+
+        CurationResponse? parsed;
+        try
+        {
+            parsed = JsonSerializer.Deserialize<CurationResponse>(json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (JsonException) { throw new AiException("The AI returned an unexpected response."); }
+        if (parsed is null) throw new AiException("The AI returned an unexpected response.");
+
+        // Flatten every pick, keep those that map to a real article, cap five per category, and order by
+        // the category taxonomy (then by the order the corpus listed them — most recent first).
+        var picks = (parsed.Sections ?? [])
+            .SelectMany(s => s.Picks ?? [])
+            .Where(corpus.ByIndex.ContainsKey)
+            .Distinct()
+            .Select(i => corpus.ByIndex[i])
+            .GroupBy(i => i.CategoryId)
+            .SelectMany(g => g.OrderBy(i => i.Index).Take(WeeklyPicksPerCategory))
+            .OrderBy(i => i.Index)
+            .ToList();
+
+        if (picks.Count == 0)
+            throw new AiException("The AI didn't select any stories for this week.");
+
+        var articleIds = picks.Select(p => p.ArticleId).ToList();
+        Guid? leadId = parsed.Lead is { } li && corpus.ByIndex.TryGetValue(li, out var lead)
+            && articleIds.Contains(lead.ArticleId)
+            ? lead.ArticleId
+            : articleIds[0];
+
+        var headline = Clean(parsed.Headline) ?? "The week in review";
+        var intro = Clean(parsed.Intro) ?? "";
+        return new WeeklyCuration(headline, intro, leadId, articleIds);
+    }
+
+    /// <summary>Re-projects a stored curation to a live edition (current read/saved state, hidden/muted
+    /// stories dropped), grouping the kept stories into category sections ordered by the taxonomy.</summary>
+    private async Task<WeeklyEditionDto> BuildWeeklyDtoAsync(
+        Guid uid, DateOnly start, DateOnly end, WeeklyCuration curation,
+        string model, int articleCount, DateTimeOffset generatedAt, CancellationToken ct)
+    {
+        var ids = curation.ArticleIds;
+        var visible = (await VisibleAsync(db, uid, ct)).Where(a => ids.Contains(a.Id));
+        var byId = (await ToSummaries(visible, db, uid).ToListAsync(ct)).ToDictionary(s => s.Id);
+
+        // Keep the curator's order (category taxonomy, recent-first within each).
+        var ordered = ids.Where(byId.ContainsKey).Select(id => byId[id]).ToList();
+        var lead = curation.LeadId is { } lid && byId.TryGetValue(lid, out var l) ? l : null;
+        var rest = ordered.Where(s => lead is null || s.Id != lead.Id).ToList();
+
+        var order = await db.Categories.ToDictionaryAsync(c => c.Id, c => c.SortOrder, ct);
+        var sections = rest
+            .GroupBy(s => (s.CategoryId, s.CategoryName, s.CategoryColor))
+            .Select(g => new EditionSectionDto(
+                g.Key.CategoryId, g.Key.CategoryName, g.Key.CategoryColor, g.Count(), g.ToList()))
+            .OrderBy(s => order.TryGetValue(s.CategoryId, out var o) ? o : int.MaxValue)
+            .ToList();
+
+        return new WeeklyEditionDto(start, end, curation.Headline, curation.Intro, model, articleCount, generatedAt, lead, sections);
+    }
+
+    /// <summary>Extracts the first JSON object from a model reply, tolerating ```json fences or stray prose.</summary>
+    private static string? ExtractJsonObject(string text)
+    {
+        var open = text.IndexOf('{');
+        var close = text.LastIndexOf('}');
+        return open >= 0 && close > open ? text[open..(close + 1)] : null;
+    }
+
+    private static WeeklyCuration? TryParseCuration(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content) || content.TrimStart()[0] != '{') return null;
+        try { return JsonSerializer.Deserialize<WeeklyCuration>(content); }
+        catch (JsonException) { return null; }
+    }
+
+    private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
     private async Task<(int ArticleCount, string Text)> BuildCorpusAsync(
         Guid uid, DateOnly start, DateOnly end, CancellationToken ct)
@@ -124,9 +345,6 @@ public sealed class AiSummaryService(
     private async Task<string> CallLlmAsync(
         AppUser user, AiSummaryKind kind, DateOnly start, DateOnly end, string corpus, CancellationToken ct)
     {
-        var apiKey = DecryptKey(user.AiApiKeyEncrypted!);
-        var http = httpFactory.CreateClient("ai");
-
         var period = kind == AiSummaryKind.Weekly
             ? $"the week of {start:MMMM d} – {end:MMMM d, yyyy}"
             : $"{start:dddd, MMMM d, yyyy}";
@@ -142,10 +360,31 @@ public sealed class AiSummaryService(
 
         var userMsg = $"Here are the articles from {period}. Write the briefing.\n\n{corpus}";
 
+        return await PostChatAsync(user, system.ToString(), userMsg, 0.4, ct);
+    }
+
+    /// <summary>Throws an <see cref="AiException"/> unless the user's BYOK config is complete.</summary>
+    private static void EnsureConfigured(AppUser user)
+    {
+        if (!user.AiEnabled)
+            throw new AiException("AI summaries are turned off. Enable them in settings.");
+        if (string.IsNullOrWhiteSpace(user.AiBaseUrl) || string.IsNullOrWhiteSpace(user.AiModel)
+            || string.IsNullOrWhiteSpace(user.AiApiKeyEncrypted))
+            throw new AiException("AI summaries aren't fully configured. Add an endpoint, model and API key in settings.");
+    }
+
+    /// <summary>Sends one chat-completion against the user's BYOK endpoint and returns the message text.
+    /// Translates transport/HTTP/parse failures into reader-friendly <see cref="AiException"/>s.</summary>
+    private async Task<string> PostChatAsync(
+        AppUser user, string system, string userMsg, double temperature, CancellationToken ct)
+    {
+        var apiKey = DecryptKey(user.AiApiKeyEncrypted!);
+        var http = httpFactory.CreateClient("ai");
+
         var payload = new ChatRequest(
             user.AiModel!,
-            [new ChatMessage("system", system.ToString()), new ChatMessage("user", userMsg)],
-            0.4);
+            [new ChatMessage("system", system), new ChatMessage("user", userMsg)],
+            temperature);
 
         using var req = new HttpRequestMessage(HttpMethod.Post, CombineUrl(user.AiBaseUrl!, "chat/completions"))
         {
@@ -224,4 +463,20 @@ public sealed class AiSummaryService(
 
     private sealed record ChatChoice(
         [property: JsonPropertyName("message")] ChatMessage? Message);
+
+    // ── The Weekly: corpus, the model's reply shape, and the cached selection ──
+    private sealed record WeeklyCorpusItem(int Index, Guid ArticleId, Guid CategoryId);
+
+    private sealed record WeeklyCorpus(
+        IReadOnlyList<WeeklyCorpusItem> Items,
+        IReadOnlyDictionary<int, WeeklyCorpusItem> ByIndex,
+        string Text);
+
+    /// <summary>The model's curation reply (lenient: extra fields ignored, missing ones default).</summary>
+    private sealed record CurationResponse(string? Headline, string? Intro, int? Lead, List<CurationSection>? Sections);
+    private sealed record CurationSection(List<int>? Picks);
+
+    /// <summary>What we persist as the weekly <see cref="AiSummary.Content"/>: the masthead text and the
+    /// chosen article ids (ordered by the section taxonomy), re-projected to live summaries on read.</summary>
+    private sealed record WeeklyCuration(string Headline, string Intro, Guid? LeadId, List<Guid> ArticleIds);
 }

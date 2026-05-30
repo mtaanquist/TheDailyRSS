@@ -1,0 +1,179 @@
+@page "/weekly"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<PageTitle>The Weekly · The Daily RSS</PageTitle>
+
+<header class="tdr-masthead">
+    <div class="tdr-masthead-meta">
+        <span>The Weekly</span>
+        @if (_edition is { } e)
+        {
+            <span>@RangeLabel(e.PeriodStart, e.PeriodEnd)</span>
+        }
+    </div>
+    <h1 class="tdr-masthead-title">The Weekly</h1>
+    <div class="tdr-masthead-rule">
+        <span>— @(_edition?.Headline ?? "the week's most important stories") —</span>
+    </div>
+</header>
+
+<div class="tdr-edition-body @(_loading ? "loading" : "")">
+    @if (!AiOn)
+    {
+        <div class="tdr-empty">
+            <div class="tdr-empty-mark">∅</div>
+            <h1 class="tdr-empty-title">AI briefings are off</h1>
+            <p class="tdr-empty-sub">Turn them on, then add your endpoint &amp; key — The Weekly is curated for you each Sunday.</p>
+            <a class="tdr-btn" href="/settings/ai">open AI settings</a>
+        </div>
+    }
+    else if (_error is not null)
+    {
+        <div class="tdr-error">@_error</div>
+        <button class="tdr-btn" @onclick="Generate" disabled="@_loading">try again</button>
+    }
+    else if (_edition is null)
+    {
+        @if (_loading)
+        {
+            <p class="tdr-ai-status">Curating The Weekly… the editor is reading the whole week, this can take a moment.</p>
+        }
+        else
+        {
+            <div class="tdr-empty">
+                <div class="tdr-empty-mark">∅</div>
+                <h1 class="tdr-empty-title">This week isn't out yet</h1>
+                <p class="tdr-empty-sub">The Weekly is curated automatically on Sunday mornings — or compose it now.</p>
+                <button class="tdr-btn" @onclick="Generate">curate The Weekly</button>
+            </div>
+        }
+    }
+    else
+    {
+        var ed = _edition;
+        <div class="tdr-toolbar">
+            <span class="title">The Weekly</span>
+            <span class="spacer"></span>
+            <span class="tdr-hint" style="margin:0">@ed.ArticleCount stories considered · @ed.Model</span>
+            <button class="tdr-link muted" @onclick="Generate" disabled="@_loading">regenerate</button>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(ed.Intro))
+        {
+            <div class="tdr-ai-content" style="margin-bottom:18px">@((MarkupString)MarkdownLite.ToHtml(ed.Intro))</div>
+        }
+
+        @if (ed.Lead is { } lead)
+        {
+            <article class="tdr-lead">
+                <div class="tdr-kicker">
+                    <span class="tdr-lead-flag">Story of the Week</span>
+                    <span>@lead.FeedTitle</span>
+                    <span>@RelativeTime.Terse(lead.PublishedAt)</span>
+                    <span style="margin-left:auto; display:inline-flex; align-items:center; gap:4px">
+                        <StarButton Saved="lead.IsSaved" SavedChanged="@(s => OnSave((lead.Id, s)))" />
+                        <HideButton Hidden="lead.IsHidden" HiddenChanged="@(h => OnHide((lead.Id, h)))" />
+                    </span>
+                </div>
+                <h1 @onclick="@(() => Nav.NavigateTo($"/article/{lead.Id}"))">@lead.Title</h1>
+                <div class="tdr-lead-grid">
+                    <NewsImage Src="@lead.ImageUrl" Height="200" Label="lead photo" />
+                    <div>
+                        @if (!string.IsNullOrWhiteSpace(lead.Summary))
+                        {
+                            <div class="tdr-standfirst">@Truncate(lead.Summary, 360)</div>
+                        }
+                        <a class="tdr-link" href="/article/@lead.Id">read the full story →</a>
+                    </div>
+                </div>
+            </article>
+        }
+
+        @foreach (var sec in ed.Sections)
+        {
+            <section class="tdr-section">
+                <div class="tdr-section-head" style="--cat:@sec.Color">
+                    <h2 class="tdr-section-name">@sec.Name</h2>
+                </div>
+                <div class="tdr-grid">
+                    @foreach (var a in sec.Articles)
+                    {
+                        <div class="tdr-grid-item">
+                            <ArticleCard Article="a" OnSaveToggled="OnSave" OnHideToggled="OnHide" />
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+
+        <div class="tdr-hint">Curated @ed.GeneratedAt.LocalDateTime.ToString("MMM d, HH:mm") · AI can be wrong — check the originals.</div>
+    }
+</div>
+
+@code {
+    private WeeklyEditionDto? _edition;
+    private bool _loading;
+    private string? _error;
+
+    private bool AiOn => Auth.CurrentUser?.Preferences.AiEnabled ?? false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AiOn) return;
+        _loading = true;
+        try { _edition = await Api.GetWeeklyEditionAsync(); }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private async Task Generate()
+    {
+        _loading = true; _error = null;
+        StateHasChanged();
+        try { _edition = await Api.GenerateWeeklyEditionAsync(); }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private async Task OnSave((Guid Id, bool Saved) e)
+    {
+        await Api.SetSavedAsync(e.Id, e.Saved);
+        if (_edition is null) return;
+        _edition = _edition with
+        {
+            Lead = MapLead(l => l.Id == e.Id ? l with { IsSaved = e.Saved } : l),
+            Sections = MapArticles(a => a.Id == e.Id ? a with { IsSaved = e.Saved } : a),
+        };
+    }
+
+    private async Task OnHide((Guid Id, bool Hidden) e)
+    {
+        await Api.SetHiddenAsync(e.Id, e.Hidden);
+        if (_edition is null) return;
+        // A hidden story drops out of the curated edition.
+        var lead = _edition.Lead is { } l && l.Id == e.Id ? null : _edition.Lead;
+        var sections = _edition.Sections
+            .Select(sec => sec with { Articles = sec.Articles.Where(a => a.Id != e.Id).ToList() })
+            .Where(sec => sec.Articles.Count > 0)
+            .ToList();
+        _edition = _edition with { Lead = lead, Sections = sections };
+    }
+
+    private ArticleSummaryDto? MapLead(Func<ArticleSummaryDto, ArticleSummaryDto> map) =>
+        _edition!.Lead is { } l ? map(l) : null;
+
+    private List<EditionSectionDto> MapArticles(Func<ArticleSummaryDto, ArticleSummaryDto> map) =>
+        _edition!.Sections
+            .Select(sec => sec with { Articles = sec.Articles.Select(map).ToList() })
+            .ToList();
+
+    private static string RangeLabel(DateOnly start, DateOnly end) =>
+        (start.Month == end.Month
+            ? $"{start:MMMM d}–{end:d}, {end:yyyy}"
+            : $"{start:MMM d} – {end:MMM d, yyyy}").ToUpperInvariant();
+
+    private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max].TrimEnd() + "…";
+}

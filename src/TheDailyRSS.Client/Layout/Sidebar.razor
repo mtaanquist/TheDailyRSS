@@ -45,6 +45,18 @@
         <span class="name">Hidden</span>
     </button>
 
+    @if (AiOn)
+    {
+        <button class="tdr-feed-item special @(_activeBriefing ? "active" : "")" @onclick="@(() => Go("/briefing"))">
+            <Icon Name="sparkles" Size="14" />
+            <span class="name">Daily briefing</span>
+        </button>
+        <button class="tdr-feed-item special @(_activeWeekly ? "active" : "")" @onclick="@(() => Go("/weekly"))">
+            <Icon Name="calendar" Size="14" />
+            <span class="name">The Weekly</span>
+        </button>
+    }
+
     <div class="tdr-sidebar-divider"></div>
 
     @foreach (var c in State.Categories.Where(c => c.FeedCount > 0))
@@ -114,12 +126,15 @@
     [Parameter] public EventCallback OnNavigate { get; set; }
 
     private bool ShowUnread => Auth.CurrentUser?.Preferences.ShowUnread ?? true;
+    private bool AiOn => Auth.CurrentUser?.Preferences.AiEnabled ?? false;
 
     private bool _showAdd;
     private Guid? _activeCat;
     private Guid? _activeSrc;
     private bool _activeSaved;
     private bool _activeHidden;
+    private bool _activeBriefing;
+    private bool _activeWeekly;
     private readonly HashSet<Guid> _expanded = new();
     private readonly Dictionary<Guid, List<FeedDto>> _feedsByCat = new();
 
@@ -127,9 +142,25 @@
     {
         State.Changed += OnStateChanged;
         Nav.LocationChanged += OnLocationChanged;
+        Auth.AuthChanged += OnAuthChanged;
+        await LoadSelectionAsync();
+    }
+
+    /// <summary>Loads categories + reads the active section. The sidebar's chrome renders inside the
+    /// layout even for not-yet-authenticated visitors (AuthorizeRouteView puts NotAuthorized content in
+    /// the layout); calling protected APIs then would 401 and trip Blazor's error UI, so we wait for sign-in.</summary>
+    private async Task LoadSelectionAsync()
+    {
+        if (Auth.CurrentUser is null) return;
         await State.EnsureLoadedAsync();
         ReadSelection(); // needs categories loaded to map the URL slug → category
         await EnsureActiveExpandedAsync();
+    }
+
+    private async void OnAuthChanged()
+    {
+        await LoadSelectionAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     private void OnStateChanged() => InvokeAsync(StateHasChanged);
@@ -148,6 +179,8 @@
         var first = seg.Length > 0 ? seg[0] : "";
         _activeSaved = first == "saved";
         _activeHidden = first == "hidden";
+        _activeBriefing = first == "briefing";
+        _activeWeekly = first == "weekly";
         _activeCat = EditionRoutes.CategoryIdForSlug(State.Categories, first);
         _activeSrc = Guid.TryParse(EditionRoutes.QueryValue(uri.Query, "src"), out var s) ? s : null;
     }
@@ -182,7 +215,8 @@
         catch { _feedsByCat[catId] = new(); }
     }
 
-    private bool IsActive(Guid? cat, bool saved) => !_activeHidden && _activeSaved == saved && _activeCat == cat;
+    private bool IsActive(Guid? cat, bool saved) =>
+        !_activeHidden && !_activeBriefing && !_activeWeekly && _activeSaved == saved && _activeCat == cat;
 
     private async Task GoHidden()
     {
@@ -190,11 +224,22 @@
         await OnNavigate.InvokeAsync();
     }
 
-    /// <summary>Navigate to a section by slug (null = today's front page), keeping the current date.</summary>
+    /// <summary>Navigate to a fixed pseudo-section route (briefing / weekly) and close the mobile menu.</summary>
+    private async Task Go(string path)
+    {
+        Nav.NavigateTo(path);
+        await OnNavigate.InvokeAsync();
+    }
+
+    /// <summary>Navigate to a section by slug (null = today's front page), keeping the current date.
+    /// Re-clicking "Today's stories" re-pulls the feeds, mirroring a masthead-title click.</summary>
     private async Task GoSection(string? slug, bool saved)
     {
-        Nav.NavigateTo(EditionRoutes.Path(saved ? "saved" : string.IsNullOrEmpty(slug) ? "today" : slug, saved ? null : CurrentDate()));
+        var isToday = !saved && string.IsNullOrEmpty(slug);
+        Nav.NavigateTo(EditionRoutes.Path(saved ? "saved" : isToday ? "today" : slug!, saved ? null : CurrentDate()));
         await OnNavigate.InvokeAsync();
+        if (isToday)
+            await State.RequestReloadAsync();
     }
 
     /// <summary>Read just one source's stories (front page, filtered to that source).</summary>
@@ -224,5 +269,6 @@
     {
         State.Changed -= OnStateChanged;
         Nav.LocationChanged -= OnLocationChanged;
+        Auth.AuthChanged -= OnAuthChanged;
     }
 }

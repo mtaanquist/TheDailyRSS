@@ -50,11 +50,6 @@ else
         </div>
     }
 
-    @if (AiOn && !Saved && !Hidden)
-    {
-        <AiBriefing Date="ed.Date" />
-    }
-
     <div class="tdr-edition-body @(_loading ? "loading" : "")">
         <div class="tdr-toolbar">
             <span class="title">@(Saved ? "Read later" : Hidden ? "Hidden" : ed.CategoryName ?? (ed.IsToday ? "Today's stories" : "All stories"))</span>
@@ -162,8 +157,6 @@ else
     private bool _loading;
     private string _loadedKey = "";
     private Guid? _categoryId;
-
-    private bool AiOn => Auth.CurrentUser?.Preferences.AiEnabled ?? false;
 
     private bool ShowUnread => Auth.CurrentUser?.Preferences.ShowUnread ?? true;
     /// <summary>The unread filter only applies when the reader has unread display turned on.</summary>

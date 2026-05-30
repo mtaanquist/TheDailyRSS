@@ -1,0 +1,21 @@
+.tdr-ai-panel {
+    padding: 16px 0;
+}
+
+.tdr-ai-status {
+    font-style: italic;
+    color: var(--ink-3);
+    margin: 0 0 10px;
+}
+
+.tdr-ai-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    font-family: var(--typer);
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    margin-bottom: 10px;
+}
