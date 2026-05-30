@@ -39,6 +39,11 @@ public sealed class ApiClient(HttpClient http)
     public Task DeleteCategoryAsync(Guid id) => SendAsync(HttpMethod.Delete, $"api/admin/categories/{id}");
     public Task ReorderCategoriesAsync(ReorderRequest req) => SendAsync(HttpMethod.Put, "api/admin/categories/reorder", req);
 
+    // ── Admin: site settings ──────────────────────────────────────
+    public Task<AiHouseStyleDto> GetAiHouseStyleAsync() => GetAsync<AiHouseStyleDto>("api/admin/settings/ai-house-style");
+    public Task<AiHouseStyleDto> UpdateAiHouseStyleAsync(string? value) =>
+        PutAsync<AiHouseStyleDto>("api/admin/settings/ai-house-style", new UpdateAiHouseStyleRequest { Value = value });
+
     // ── Keyword filters (mute words) ──────────────────────────────
     public Task<List<KeywordFilterDto>> GetKeywordsAsync() => GetAsync<List<KeywordFilterDto>>("api/keywords");
     public Task<KeywordFilterDto> AddKeywordAsync(CreateKeywordRequest req) => PostAsync<KeywordFilterDto>("api/keywords", req);

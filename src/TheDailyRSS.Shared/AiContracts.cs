@@ -30,6 +30,17 @@ public sealed class UpdateAiSettingsRequest
     public bool ClearApiKey { get; set; }
 }
 
+/// <summary>The admin-editable AI "house style" preamble (the editor persona + voice shared by the
+/// daily briefing and The Weekly). <see cref="Value"/> is the effective text — the stored override, or
+/// the built-in <see cref="Default"/> when none is set; <see cref="IsDefault"/> is true when unmodified.</summary>
+public sealed record AiHouseStyleDto(string Value, bool IsDefault, string Default);
+
+/// <summary>Sets the AI house style. A null/blank value clears the override and reverts to the default.</summary>
+public sealed class UpdateAiHouseStyleRequest
+{
+    public string? Value { get; set; }
+}
+
 /// <summary>A generated AI digest over a date range.</summary>
 public sealed record AiSummaryDto(
     AiSummaryKind Kind,
