@@ -41,19 +41,7 @@ public static class EditionEndpoints
         articles.MapPost("/{id:guid}/position", SetPosition);
     }
 
-    // ── Visibility & keyword helpers live in ArticleQueries (shared with AI summaries) ──
-
-    /// <summary>Projects subscribed articles to summaries, resolving the per-user category + state.</summary>
-    private static IQueryable<ArticleSummaryDto> ToSummaries(IQueryable<Article> articles, AppDbContext db, Guid uid) =>
-        from a in articles
-        from sub in db.Subscriptions.Where(s => s.UserId == uid && s.SourceId == a.SourceId)
-        from st in db.UserArticleStates.Where(s => s.UserId == uid && s.ArticleId == a.Id).DefaultIfEmpty()
-        select new ArticleSummaryDto(
-            a.Id, a.Title, a.Summary,
-            sub.CustomTitle ?? a.Source!.Title, a.Source!.IconText,
-            sub.CategoryId, sub.Category!.Name, sub.Category.Color,
-            a.ImageUrl, a.PublishedAt,
-            st != null && st.IsRead, st != null && st.IsSaved, st != null && st.IsHidden, a.Url);
+    // ── Visibility, keyword & projection helpers live in ArticleQueries (shared with AI summaries) ──
 
     // ── Reads ───────────────────────────────────────────────────────────
 

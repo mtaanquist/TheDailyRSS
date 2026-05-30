@@ -17,6 +17,8 @@ const CHROME = process.env.CHROME;
 
 const ALL = {
   front: '/',
+  briefing: '/briefing',
+  weekly: '/weekly',
   profile: '/settings/profile',
   ai: '/settings/ai',
   keywords: '/settings/keywords',

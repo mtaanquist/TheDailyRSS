@@ -49,34 +49,42 @@ public sealed class AiSummaryBackgroundService(
 
         var today = EditionClock.Today(_options);
         var yesterday = today.AddDays(-1);
-        var (weekStart, weekEnd) = AiSummaryService.WeekRange(today.AddDays(-7));
+        // "The Weekly" covers the week ending on the most recent Sunday; ensuring it each sweep means
+        // the new edition is curated on the first sweep on/after Sunday morning and then stands all week.
+        var (weekStart, weekEnd) = AiSummaryService.WeeklyWindow(today);
 
         foreach (var user in users)
         {
             ct.ThrowIfCancellationRequested();
             if (user.AiAutoDaily)
-                await EnsureAsync(ai, user, AiSummaryKind.Daily, yesterday, yesterday, ct);
+                await EnsureDailyAsync(ai, user, yesterday, ct);
             if (user.AiAutoWeekly)
-                await EnsureAsync(ai, user, AiSummaryKind.Weekly, weekStart, weekEnd, ct);
+                await EnsureWeeklyAsync(ai, user, weekStart, weekEnd, ct);
         }
     }
 
-    private async Task EnsureAsync(
-        AiSummaryService ai, AppUser user, AiSummaryKind kind, DateOnly start, DateOnly end, CancellationToken ct)
+    private async Task EnsureDailyAsync(AiSummaryService ai, AppUser user, DateOnly day, CancellationToken ct)
     {
         try
         {
-            if (await ai.GetCachedAsync(user.Id, kind, start, end, ct) is not null) return;
-            await ai.GenerateAsync(user, kind, start, end, ct);
-            log.LogInformation("Pre-generated {Kind} summary for user {UserId}", kind, user.Id);
+            if (await ai.GetCachedAsync(user.Id, AiSummaryKind.Daily, day, day, ct) is not null) return;
+            await ai.GenerateAsync(user, AiSummaryKind.Daily, day, day, ct);
+            log.LogInformation("Pre-generated daily summary for user {UserId}", user.Id);
         }
-        catch (AiException ex)
+        catch (AiException ex) { log.LogInformation("Skipped daily summary for user {UserId}: {Reason}", user.Id, ex.Message); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { log.LogWarning(ex, "Failed to pre-generate daily summary for user {UserId}", user.Id); }
+    }
+
+    private async Task EnsureWeeklyAsync(AiSummaryService ai, AppUser user, DateOnly start, DateOnly end, CancellationToken ct)
+    {
+        try
         {
-            log.LogInformation("Skipped {Kind} summary for user {UserId}: {Reason}", kind, user.Id, ex.Message);
+            // A null edition means it's uncurated (or a legacy markdown row) — (re)curate into the new format.
+            if (await ai.GetWeeklyEditionAsync(user.Id, start, end, ct) is not null) return;
+            await ai.GenerateWeeklyEditionAsync(user, start, end, ct);
+            log.LogInformation("Curated The Weekly for user {UserId}", user.Id);
         }
-        catch (Exception ex)
-        {
-            log.LogWarning(ex, "Failed to pre-generate {Kind} summary for user {UserId}", kind, user.Id);
-        }
+        catch (AiException ex) { log.LogInformation("Skipped The Weekly for user {UserId}: {Reason}", user.Id, ex.Message); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { log.LogWarning(ex, "Failed to curate The Weekly for user {UserId}", user.Id); }
     }
 }

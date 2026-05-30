@@ -1,0 +1,45 @@
+@page "/briefing"
+@attribute [Authorize]
+@inject AuthService Auth
+@inject AppState State
+
+<PageTitle>Daily briefing · The Daily RSS</PageTitle>
+
+<header class="tdr-masthead">
+    <div class="tdr-masthead-meta">
+        <span>AI Briefing</span>
+        <span>@_date.ToString("dddd · MMMM d, yyyy").ToUpperInvariant()</span>
+    </div>
+    <h1 class="tdr-masthead-title">The Daily Briefing</h1>
+    <div class="tdr-masthead-rule"><span>— your edition, summarised —</span></div>
+</header>
+
+<div class="tdr-edition-body">
+    @if (AiOn)
+    {
+        <AiBriefing Date="_date" />
+    }
+    else
+    {
+        <div class="tdr-empty">
+            <div class="tdr-empty-mark">∅</div>
+            <h1 class="tdr-empty-title">AI briefings are off</h1>
+            <p class="tdr-empty-sub">Turn them on, then add your endpoint &amp; key to get a digest of the day's stories.</p>
+            <a class="tdr-btn" href="/settings/ai">open AI settings</a>
+        </div>
+    }
+</div>
+
+@code {
+    private DateOnly _date = DateOnly.FromDateTime(DateTime.Today);
+
+    private bool AiOn => Auth.CurrentUser?.Preferences.AiEnabled ?? false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await State.EnsureLoadedAsync();
+        // Brief the latest edition the reader actually has, so it lines up with their front page.
+        if (State.EditionDates.Count > 0)
+            _date = State.EditionDates[0].Date;
+    }
+}
