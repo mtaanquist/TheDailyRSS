@@ -32,8 +32,15 @@ public sealed class UpdateAiSettingsRequest
 
 /// <summary>The admin-editable AI "house style" preamble (the editor persona + voice shared by the
 /// daily briefing and The Weekly). <see cref="Value"/> is the effective text — the stored override, or
-/// the built-in <see cref="Default"/> when none is set; <see cref="IsDefault"/> is true when unmodified.</summary>
-public sealed record AiHouseStyleDto(string Value, bool IsDefault, string Default);
+/// the built-in <see cref="Default"/> when none is set; <see cref="IsDefault"/> is true when unmodified.
+/// <see cref="DailyRules"/> and <see cref="WeeklyRules"/> are the fixed, code-owned instructions appended
+/// after the house style — shown read-only so the admin can see the whole assembled prompt.</summary>
+public sealed record AiHouseStyleDto(
+    string Value,
+    bool IsDefault,
+    string Default,
+    string DailyRules,
+    string WeeklyRules);
 
 /// <summary>Sets the AI house style. A null/blank value clears the override and reverts to the default.</summary>
 public sealed class UpdateAiHouseStyleRequest

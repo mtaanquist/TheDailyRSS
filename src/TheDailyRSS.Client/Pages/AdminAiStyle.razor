@@ -16,7 +16,8 @@
 
         @if (_loaded)
         {
-            <textarea class="tdr-input" rows="6" style="max-width:640px; width:100%"
+            <h2 class="tdr-subhead">House style <span class="tdr-tag">editable</span></h2>
+            <textarea class="tdr-input" rows="6" style="max-width:720px; width:100%"
                       @bind="_value" @bind:event="oninput" placeholder="@_default"></textarea>
             <div class="tdr-hint">
                 @(_isDefault ? "Currently using the built-in default (shown above as placeholder)." : "Currently using a custom house style.")
@@ -29,12 +30,27 @@
             </div>
 
             @if (Error is not null) { <div class="tdr-error">@Error</div> }
+
+            <h2 class="tdr-subhead" style="margin-top:26px">Full prompt <span class="tdr-tag muted">read-only preview</span></h2>
+            <div class="tdr-hint" style="margin-bottom:10px">
+                Exactly what each reader's model receives, assembled as
+                <b>house style</b> → <b>fixed rules</b> → <b>the reader's own interests</b>. Only the house style
+                above is editable; the rest is fixed in code so an edit can't break generation.
+            </div>
+
+            <h3 class="tdr-promptlabel">Daily briefing</h3>
+            <textarea class="tdr-input tdr-prompt-preview" rows="12" readonly>@Assemble(_dailyRules)</textarea>
+
+            <h3 class="tdr-promptlabel">The Weekly</h3>
+            <textarea class="tdr-input tdr-prompt-preview" rows="12" readonly>@Assemble(_weeklyRules)</textarea>
         }
 </SettingsShell>
 
 @code {
     private string _value = "";
     private string _default = "";
+    private string _dailyRules = "";
+    private string _weeklyRules = "";
     private bool _isDefault;
     private bool _loaded;
     private bool _saved;
@@ -45,6 +61,8 @@
         {
             var dto = await Api.GetAiHouseStyleAsync();
             _default = dto.Default;
+            _dailyRules = dto.DailyRules;
+            _weeklyRules = dto.WeeklyRules;
             Apply(dto);
         });
         _loaded = true;
@@ -65,5 +83,13 @@
     {
         _isDefault = dto.IsDefault;
         _value = dto.IsDefault ? "" : dto.Value;
+    }
+
+    // Live preview of the assembled system prompt. The effective house style is what they've typed,
+    // or the default when the box is empty.
+    private string Assemble(string rules)
+    {
+        var houseStyle = string.IsNullOrWhiteSpace(_value) ? _default : _value.Trim();
+        return $"{houseStyle}\n\n{rules}\n\n[Each reader's own interests are appended here.]";
     }
 }

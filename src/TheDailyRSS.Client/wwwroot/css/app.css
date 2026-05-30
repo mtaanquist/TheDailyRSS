@@ -571,6 +571,22 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
 .tdr-breadcrumb { font-family: var(--serif); font-style: italic; font-size: 13px; color: var(--ink-2); margin-bottom: 14px; }
 .tdr-breadcrumb b { color: var(--ink); font-style: normal; }
 
+/* Admin AI house-style page: section subheads, status tags and the read-only prompt previews. */
+.tdr-subhead { font-weight: 800; font-size: 15px; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
+.tdr-tag {
+    font-family: var(--typer); font-size: 9px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--accent-fg); background: var(--accent); padding: 2px 6px; border-radius: 2px; font-weight: 700;
+}
+.tdr-tag.muted { color: var(--ink-2); background: var(--card); border: 1px solid var(--rule); }
+.tdr-promptlabel {
+    font-family: var(--typer); font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--ink-3); margin: 14px 0 4px;
+}
+.tdr-prompt-preview {
+    max-width: 720px; width: 100%; font-family: var(--typer), monospace; font-size: 12px;
+    line-height: 1.5; color: var(--ink-2); background: var(--card); resize: vertical;
+}
+
 .tdr-prefs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
 .tdr-theme-swatch { display: flex; gap: 8px; }
 .tdr-theme-opt { padding: 8px 12px; border: 1px solid var(--ink-2); font-size: 12px; cursor: pointer; }

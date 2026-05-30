@@ -42,6 +42,32 @@ public sealed class AiSummaryService(
         + "authoritative house style of print: precise, neutral, and lightly literate — never breathless, "
         + "chatty, or padded.";
 
+    /// <summary>The machine-critical daily-briefing instructions (format + the [n] citation contract the
+    /// Sources renderer depends on). Not admin-editable; exposed read-only so the admin page can show the
+    /// whole assembled prompt.</summary>
+    public const string DailyBriefingRules =
+        "Write the reader's briefing as Markdown. "
+        + "Group the day's stories into a few themed sections, each under a \"## \" heading (a short, paper-style section title); "
+        + "under each, use bullets that begin with a **bold lead-in:** then one or two tight sentences. "
+        + "Lead with what matters most to this reader; keep it concise and scannable, with no greeting, preamble, or sign-off. "
+        + "Every story below is numbered in [brackets]. When you mention a story, cite it inline with its number, e.g. [3]; combine related ones as [3][7]. "
+        + "Do NOT write your own list of sources or any links — a Sources section is appended automatically. "
+        + "Do not use emoji or decorative symbols. "
+        + "Do not invent facts beyond the provided headlines and blurbs.";
+
+    /// <summary>The machine-critical Weekly curation instructions (selection rules + the JSON contract the
+    /// parser depends on). Not admin-editable; exposed read-only for the admin page.</summary>
+    public const string WeeklyCurationRules =
+        "Assemble \"The Weekly\", a front page of the week's most important news for this reader. "
+        + "You are given the past week's stories, grouped by section and each prefixed with a number in [brackets]. "
+        + "From EACH section, choose up to five of the most important and interesting stories — favour genuinely significant developments over routine items, and skip filler. "
+        + "Also choose ONE overall lead story for the whole edition. "
+        + "Write a short masthead headline (a punchy phrase of at most eight words, no trailing period) capturing the week, and a two-to-four sentence editor's note (Markdown) introducing the edition. "
+        + "Use no emoji or decorative symbols in the headline or note. "
+        + "Respond with ONLY a JSON object, no code fences, exactly of the form: "
+        + "{\"headline\":\"…\",\"intro\":\"…\",\"lead\":<number>,\"sections\":[{\"picks\":[<number>,<number>]}]}. "
+        + "Use only the numbers shown; never invent stories or numbers.";
+
     private IDataProtector Protector => dpProvider.CreateProtector("AiApiKey");
 
     /// <summary>The effective house style: the admin override if set, otherwise the built-in default.</summary>
@@ -222,14 +248,7 @@ public sealed class AiSummaryService(
         // House style (admin-editable) leads; the curation behaviour and JSON contract below are
         // machine-critical (the parser depends on them) and stay in code.
         var sb = new StringBuilder(houseStyle);
-        sb.Append("\n\nAssemble \"The Weekly\", a front page of the week's most important news for this reader. ")
-            .Append("You are given the past week's stories, grouped by section and each prefixed with a number in [brackets]. ")
-            .Append("From EACH section, choose up to five of the most important and interesting stories — favour genuinely significant developments over routine items, and skip filler. ")
-            .Append("Also choose ONE overall lead story for the whole edition. ")
-            .Append("Write a short masthead headline (a punchy phrase of at most eight words, no trailing period) capturing the week, and a two-to-four sentence editor's note (Markdown) introducing the edition. ")
-            .Append("Respond with ONLY a JSON object, no code fences, exactly of the form: ")
-            .Append("{\"headline\":\"…\",\"intro\":\"…\",\"lead\":<number>,\"sections\":[{\"picks\":[<number>,<number>]}]}. ")
-            .Append("Use only the numbers shown; never invent stories or numbers.");
+        sb.Append("\n\n").Append(WeeklyCurationRules);
         if (!string.IsNullOrWhiteSpace(user.AiSystemPrompt))
             sb.Append("\n\nThe reader describes their interests as follows; weight your selection accordingly:\n")
                 .Append(user.AiSystemPrompt!.Trim());
@@ -418,13 +437,7 @@ public sealed class AiSummaryService(
         // House style (admin-editable) sets the persona + voice; the format and citation rules below are
         // machine-critical (the Sources renderer depends on them) and stay in code.
         var system = new StringBuilder(houseStyle);
-        system.Append("\n\nWrite the reader's briefing as Markdown. ")
-            .Append("Group the day's stories into a few themed sections, each under a \"## \" heading (a short, paper-style section title); ")
-            .Append("under each, use bullets that begin with a **bold lead-in:** then one or two tight sentences. ")
-            .Append("Lead with what matters most to this reader; keep it concise and scannable, with no greeting, preamble, or sign-off. ")
-            .Append("Every story below is numbered in [brackets]. When you mention a story, cite it inline with its number, e.g. [3]; combine related ones as [3][7]. ")
-            .Append("Do NOT write your own list of sources or any links — a Sources section is appended automatically. ")
-            .Append("Do not invent facts beyond the provided headlines and blurbs.");
+        system.Append("\n\n").Append(DailyBriefingRules);
         if (!string.IsNullOrWhiteSpace(user.AiSystemPrompt))
             system.Append("\n\nThe reader describes their interests as follows; weight the briefing accordingly:\n")
                 .Append(user.AiSystemPrompt!.Trim());
