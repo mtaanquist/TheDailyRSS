@@ -443,6 +443,9 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
 .tdr-ai-content ul, .tdr-ai-content ol { margin: 0 0 10px; padding-left: 22px; }
 .tdr-ai-content li { margin-bottom: 4px; }
 .tdr-ai-content code { font-family: var(--typer), monospace; font-size: 0.9em; background: var(--rule-soft); padding: 1px 4px; border-radius: 3px; }
+/* The Weekly's editor's note is a single full-width deck under the masthead — drop the reading-measure
+   cap so it spans the page like a standfirst rather than hugging the left. */
+.tdr-ai-content.tdr-deck { max-width: none; font-size: 14.5px; }
 
 /* The daily briefing flows into newspaper columns on wide screens so it fills the edition width
    (as many ~22rem columns as fit — two on the 1100px shell, three when expanded). Scoped to the
