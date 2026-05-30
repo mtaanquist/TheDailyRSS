@@ -24,6 +24,30 @@ warm **Newsprint** theme and an **Evening Edition** dark theme.
 - 🔁 **OPML import/export** to move your subscriptions in and out.
 - 🛰 **Background fetcher** refreshes every feed on a schedule (polite conditional GETs).
 
+## AI features (bring your own key)
+
+AI is opt-in and per-user: each reader configures their own OpenAI-compatible endpoint,
+model and API key under *Settings → AI* (the key is encrypted at rest). There is no shared
+instance key — summaries are generated with, and billed to, each reader's own endpoint.
+Articles are shared across users, but summaries are per-user.
+
+- **Daily briefing** — an AI digest of a day's edition, grouped into themed sections with
+  inline citations back to the source stories. Generate on demand, or auto-generate nightly.
+- **The Weekly** — an AI-curated front page of the week: the editor picks the most important
+  stories per section, names a lead, and writes the masthead and editor's note. The note is
+  composed from the full text of the picked stories, not just their headlines. Auto-curated
+  on Saturday night, ready to read Sunday.
+- **Article summaries** — a short TL;DR pinned at the top of any article. Summarise on demand
+  from the article, or opt in to pre-generate them in the background for articles from
+  full-text feeds.
+- **Full-text article fetching** — an opt-in, per-feed toggle (when adding or editing a feed).
+  When a feed only ships a short summary, the server steps into the article and extracts the
+  readable, reader-mode body, falling back to the feed's own content when it can't. This
+  improves both the reading view and the material the summaries are built from.
+
+The background jobs are bounded and paced (newest-first, capped per sweep) to keep what your
+provider charges in check.
+
 ## Architecture
 
 A standard **hosted Blazor WebAssembly** solution on **.NET 10**, backed by **PostgreSQL**.
@@ -74,6 +98,7 @@ Set via `appsettings.json` or environment variables (double-underscore form):
 | Edition timezone | `Feeds__EditionTimeZone` | `UTC` | IANA zone; defines the daily edition cut-off |
 | Refresh interval | `Feeds__RefreshIntervalMinutes` | `20` | background fetch cadence |
 | Max articles/feed | `Feeds__MaxArticlesPerFeed` | `500` | older non-saved articles are pruned |
+| Full-text fetch delay | `Feeds__FullContentDelaySeconds` | `5` | per-host pause between article-page fetches (full-text feeds) |
 | JWT signing key | `Jwt__Key` | auto-generated | persisted to `<DataDir>/jwt-signing.key` if blank |
 | Token lifetime | `Jwt__ExpiryDays` | `30` | |
 | Data directory | `DataDir` | `<contentroot>/data` | holds the JWT key |
@@ -108,6 +133,11 @@ dotnet ef migrations add <Name> -p src/TheDailyRSS.Server -s src/TheDailyRSS.Ser
 - **Feed HTML** is rendered in the reading view with `<script>/<style>/<iframe>` stripped.
   For a personal, self-hosted reader this is a reasonable trade-off; if you expose the
   instance widely, consider a fuller HTML sanitizer.
+- **Full-text fetching is a scrape.** When enabled for a feed, the server fetches each article
+  page through the same SSRF-guarded client as feeds, paced with a per-host delay so it stays a
+  polite citizen; the extracted HTML is sanitized like feed HTML, and the original feed content
+  is kept as a fallback. Articles already stored when you enable it are backfilled newest-first
+  in the background.
 - **Schema reset.** The multi-user/shared-storage rework replaced the original schema
   with a fresh `InitialCreate` baseline. If you ran an earlier build, reset the dev
   database first: `docker compose down -v`.
