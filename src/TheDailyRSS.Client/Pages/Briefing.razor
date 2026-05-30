@@ -1,7 +1,10 @@
 @page "/briefing"
+@page "/briefing/{Date}"
 @attribute [Authorize]
+@implements IDisposable
 @inject AuthService Auth
 @inject AppState State
+@inject NavigationManager Nav
 
 <PageTitle>Daily briefing · The Daily RSS</PageTitle>
 
@@ -14,32 +17,76 @@
     <div class="tdr-masthead-rule"><span>— your edition, summarised —</span></div>
 </header>
 
-<div class="tdr-edition-body">
-    @if (AiOn)
-    {
+@if (AiOn)
+{
+    <div class="tdr-editionbar">
+        <button class="tdr-navbtn" disabled="@(_prev is null)" @onclick="@(() => Go(_prev))">← <span class="lbl">earlier</span></button>
+        <span class="tdr-edition-date">@(_isLatest ? "LATEST BRIEFING" : _date.ToString("MMM d, yyyy").ToUpperInvariant())</span>
+        <button class="tdr-navbtn" disabled="@(_next is null)" @onclick="@(() => Go(_next))"><span class="lbl">later</span> →</button>
+        @if (!_isLatest)
+        {
+            <button class="tdr-navbtn" @onclick="GoLatest"><span class="lbl">latest</span> »</button>
+        }
+    </div>
+
+    <div class="tdr-edition-body">
         <AiBriefing Date="_date" />
-    }
-    else
-    {
+    </div>
+}
+else
+{
+    <div class="tdr-edition-body">
         <div class="tdr-empty">
             <div class="tdr-empty-mark">∅</div>
             <h1 class="tdr-empty-title">AI briefings are off</h1>
             <p class="tdr-empty-sub">Turn them on, then add your endpoint &amp; key to get a digest of the day's stories.</p>
             <a class="tdr-btn" href="/settings/ai">open AI settings</a>
         </div>
-    }
-</div>
+    </div>
+}
 
 @code {
+    [Parameter] public string? Date { get; set; }
+
     private DateOnly _date = DateOnly.FromDateTime(DateTime.Today);
+    private DateOnly? _prev;   // the next older edition day (← earlier)
+    private DateOnly? _next;   // the next newer edition day (later →)
+    private bool _isLatest;
 
     private bool AiOn => Auth.CurrentUser?.Preferences.AiEnabled ?? false;
 
     protected override async Task OnInitializedAsync()
     {
+        State.Changed += OnStateChanged;
         await State.EnsureLoadedAsync();
-        // Brief the latest edition the reader actually has, so it lines up with their front page.
-        if (State.EditionDates.Count > 0)
-            _date = State.EditionDates[0].Date;
+        Resolve();
     }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    protected override void OnParametersSet() => Resolve();
+
+    /// <summary>Pick the active day (URL date, else the latest edition) and find the neighbouring days
+    /// that actually have articles, so "earlier/later" step through real editions you can brief.</summary>
+    private void Resolve()
+    {
+        var dates = State.EditionDates; // newest-first
+        _date = DateOnly.TryParse(Date, out var d)
+            ? d
+            : dates.Count > 0 ? dates[0].Date : DateOnly.FromDateTime(DateTime.Today);
+
+        // Neighbours by date, tolerant of the active day not itself being an edition day.
+        _prev = dates.FirstOrDefault(x => x.Date < _date)?.Date;   // largest day below (list is desc)
+        _next = dates.LastOrDefault(x => x.Date > _date)?.Date;    // smallest day above
+        _isLatest = _next is null;
+    }
+
+    private void Go(DateOnly? date)
+    {
+        if (date is { } d) Nav.NavigateTo($"/briefing/{d:yyyy-MM-dd}");
+    }
+
+    private void GoLatest() => Nav.NavigateTo("/briefing");
+
+    public void Dispose() => State.Changed -= OnStateChanged;
 }
