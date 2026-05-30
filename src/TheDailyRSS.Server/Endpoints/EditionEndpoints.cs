@@ -39,6 +39,7 @@ public static class EditionEndpoints
         articles.MapPost("/{id:guid}/save", SetSaved);
         articles.MapPost("/{id:guid}/hide", SetHidden);
         articles.MapPost("/{id:guid}/position", SetPosition);
+        articles.MapPost("/{id:guid}/summary", SummarizeArticle);
     }
 
     // ── Visibility, keyword & projection helpers live in ArticleQueries (shared with AI summaries) ──
@@ -227,6 +228,9 @@ public static class EditionEndpoints
                 IsHidden = st != null && st.IsHidden,
                 ReadingPositionPercent = st != null ? st.ReadingPositionPercent : 0,
                 a.Url, a.SourceId, a.Fields,
+                AiSummary = db.ArticleSummaries
+                    .Where(s => s.UserId == uid && s.ArticleId == a.Id)
+                    .Select(s => s.Content).FirstOrDefault(),
             })
             .FirstOrDefaultAsync(ct);
         if (row is null) return Results.NotFound();
@@ -246,7 +250,24 @@ public static class EditionEndpoints
             row.CategoryId, row.CategoryName, row.CategoryColor,
             row.ImageUrl, row.PublishedAt,
             row.IsRead, row.IsSaved, row.IsHidden, row.ReadingPositionPercent,
-            row.Url, row.SourceId, fields));
+            row.Url, row.SourceId, fields, row.AiSummary));
+    }
+
+    /// <summary>Generates (or regenerates) the reader's AI TL;DR for one article, on demand, using their
+    /// own BYOK endpoint. The article must belong to a source they subscribe to.</summary>
+    private static async Task<IResult> SummarizeArticle(
+        Guid id, ClaimsPrincipal principal, AppDbContext db, AiSummaryService ai, CancellationToken ct)
+    {
+        var uid = principal.GetUserId();
+        var user = await db.Users.FindAsync([uid], ct);
+        if (user is null) return Results.Unauthorized();
+
+        var article = await db.Articles
+            .FirstOrDefaultAsync(a => a.Id == id && a.Source!.Subscriptions.Any(s => s.UserId == uid), ct);
+        if (article is null) return Results.NotFound();
+
+        try { return Results.Ok(await ai.SummarizeArticleAsync(user, article, ct)); }
+        catch (AiException ex) { return ApiResults.Fail(ex.Message); }
     }
 
     /// <summary>The previous/next stories in the same edition (day), in the same order the edition grid

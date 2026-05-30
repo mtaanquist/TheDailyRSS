@@ -36,12 +36,16 @@ public sealed class AppUser : IdentityUser<Guid>
     /// <summary>Pre-generate the previous week's digest in the background.</summary>
     public bool AiAutoWeekly { get; set; }
 
+    /// <summary>Pre-generate a per-article TL;DR in the background for articles from full-text feeds.</summary>
+    public bool AiAutoArticle { get; set; }
+
     public List<Subscription> Subscriptions { get; set; } = new();
     public List<UserArticleState> ArticleStates { get; set; } = new();
     public List<KeywordFilter> KeywordFilters { get; set; } = new();
     public List<FieldFilter> FieldFilters { get; set; } = new();
     public List<UserSession> Sessions { get; set; } = new();
     public List<AiSummary> AiSummaries { get; set; } = new();
+    public List<ArticleSummary> ArticleSummaries { get; set; } = new();
 }
 
 /// <summary>A cached AI-generated digest for one user over a date range. Daily summaries set
@@ -186,6 +190,23 @@ public sealed class Article
     public Dictionary<string, List<string>> Fields { get; set; } = new();
 
     public List<UserArticleState> States { get; set; } = new();
+    public List<ArticleSummary> Summaries { get; set; } = new();
+}
+
+/// <summary>A per-user AI TL;DR of a shared <see cref="Article"/>, generated with that user's own
+/// BYOK endpoint. Per-user rather than shared because each reader brings their own model, key and
+/// interests — mirroring how <see cref="UserArticleState"/> overlays a shared article.</summary>
+public sealed class ArticleSummary
+{
+    public Guid UserId { get; set; }
+    public AppUser? User { get; set; }
+
+    public Guid ArticleId { get; set; }
+    public Article? Article { get; set; }
+
+    public string Content { get; set; } = "";
+    public string Model { get; set; } = "";
+    public DateTimeOffset GeneratedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
 /// <summary>Per-user read/saved/position overlay on a shared <see cref="Article"/>.

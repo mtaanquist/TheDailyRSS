@@ -15,6 +15,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<Article> Articles => Set<Article>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<UserArticleState> UserArticleStates => Set<UserArticleState>();
+    public DbSet<ArticleSummary> ArticleSummaries => Set<ArticleSummary>();
     public DbSet<KeywordFilter> KeywordFilters => Set<KeywordFilter>();
     public DbSet<FieldFilter> FieldFilters => Set<FieldFilter>();
     public DbSet<UserSession> Sessions => Set<UserSession>();
@@ -120,6 +121,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
 
             e.HasOne(x => x.Article)
                 .WithMany(a => a.States)
+                .HasForeignKey(x => x.ArticleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<ArticleSummary>(e =>
+        {
+            // One per-user summary per shared article; a per-user overlay like UserArticleState.
+            e.HasKey(x => new { x.UserId, x.ArticleId });
+            e.Property(x => x.Model).HasMaxLength(200);
+            e.HasOne(x => x.User)
+                .WithMany(u => u.ArticleSummaries)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Article)
+                .WithMany(a => a.Summaries)
                 .HasForeignKey(x => x.ArticleId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

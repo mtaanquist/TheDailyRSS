@@ -137,6 +137,7 @@ builder.Services.AddScoped<AiSummaryService>();
 builder.Services.AddHostedService<FeedRefreshBackgroundService>();
 builder.Services.AddHostedService<FullContentBackfillService>();
 builder.Services.AddHostedService<AiSummaryBackgroundService>();
+builder.Services.AddHostedService<ArticleSummaryBackgroundService>();
 
 var app = builder.Build();
 

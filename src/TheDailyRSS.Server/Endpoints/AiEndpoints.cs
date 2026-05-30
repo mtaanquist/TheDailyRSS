@@ -52,6 +52,7 @@ public static class AiEndpoints
         user.AiSystemPrompt = systemPrompt;
         user.AiAutoDaily = req.AutoDaily;
         user.AiAutoWeekly = req.AutoWeekly;
+        user.AiAutoArticle = req.AutoArticle;
 
         if (req.ClearApiKey)
             user.AiApiKeyEncrypted = null;
@@ -123,7 +124,7 @@ public static class AiEndpoints
     }
 
     private static AiSettingsDto ToSettingsDto(AppUser u) => new(
-        u.AiEnabled, u.AiBaseUrl, u.AiModel, u.AiSystemPrompt, u.AiAutoDaily, u.AiAutoWeekly,
+        u.AiEnabled, u.AiBaseUrl, u.AiModel, u.AiSystemPrompt, u.AiAutoDaily, u.AiAutoWeekly, u.AiAutoArticle,
         !string.IsNullOrEmpty(u.AiApiKeyEncrypted));
 
     private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();

@@ -4,6 +4,7 @@
 @inject ApiClient Api
 @inject AppState State
 @inject NavigationManager Nav
+@inject AuthService Auth
 
 <PageTitle>@(_article?.Title ?? "Article") · The Daily RSS</PageTitle>
 
@@ -39,6 +40,36 @@ else
         @if (!string.IsNullOrEmpty(a.ImageUrl))
         {
             <div class="hero"><img src="@a.ImageUrl" alt="" referrerpolicy="no-referrer" /></div>
+        }
+
+        @if (a.AiSummary is not null || AiEnabled)
+        {
+            <div class="tdr-ai-panel" style="margin:14px 0">
+                @if (a.AiSummary is { } summary)
+                {
+                    <div class="tdr-ai-head">
+                        <span>AI summary</span>
+                        @if (AiEnabled)
+                        {
+                            <button class="tdr-link" @onclick="Summarize" disabled="@_summarizing">
+                                @(_summarizing ? "summarising…" : "regenerate")
+                            </button>
+                        }
+                    </div>
+                    <div class="tdr-ai-content">@((MarkupString)MarkdownLite.ToHtml(summary))</div>
+                    <div class="tdr-hint">AI can be wrong — check the full article below.</div>
+                }
+                else
+                {
+                    <button class="tdr-btn" @onclick="Summarize" disabled="@_summarizing">
+                        @(_summarizing ? "summarising…" : "summarise this article")
+                    </button>
+                }
+                @if (_summaryError is not null)
+                {
+                    <div class="tdr-error" style="margin-top:8px">@_summaryError</div>
+                }
+            </div>
         }
 
         <div class="content">
@@ -145,6 +176,10 @@ else
     private bool _showFilter;
     private bool _filterBusy;
     private string? _filterError;
+    private bool _summarizing;
+    private string? _summaryError;
+
+    private bool AiEnabled => Auth.CurrentUser?.Preferences.AiEnabled == true;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -167,6 +202,20 @@ else
     }
 
     private void GoBack() => Nav.NavigateTo("/");
+
+    private async Task Summarize()
+    {
+        if (_article is null) return;
+        _summaryError = null;
+        _summarizing = true;
+        try
+        {
+            var result = await Api.SummarizeArticleAsync(Id);
+            _article = _article with { AiSummary = result.Content };
+        }
+        catch (ApiException ex) { _summaryError = ex.Message; }
+        finally { _summarizing = false; }
+    }
 
     private async Task ToggleSave(bool saved)
     {
