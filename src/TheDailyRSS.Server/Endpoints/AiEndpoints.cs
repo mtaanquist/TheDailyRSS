@@ -17,9 +17,12 @@ public static class AiEndpoints
         group.MapPut("/settings", UpdateSettings);
         group.MapGet("/summary/daily/{date}", GetDailySummary);
         group.MapPost("/summary/daily/{date}", GenerateDailySummary);
-        // "The Weekly" is a single, current curated edition (no archive) anchored to the most recent Saturday.
+        // "The Weekly" is an archive of Monday–Saturday editions. No date = the current week; a date
+        // anchors to whichever week contains it, so the reader can flip back through past Sundays.
         group.MapGet("/weekly", GetWeekly);
+        group.MapGet("/weekly/{date}", GetWeekly);
         group.MapPost("/weekly", GenerateWeekly);
+        group.MapPost("/weekly/{date}", GenerateWeekly);
     }
 
     private static async Task<IResult> GetSettings(ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
@@ -85,20 +88,20 @@ public static class AiEndpoints
     }
 
     private static async Task<IResult> GetWeekly(
-        ClaimsPrincipal principal, AiSummaryService ai, IOptions<FeedOptions> opts, CancellationToken ct)
+        ClaimsPrincipal principal, AiSummaryService ai, IOptions<FeedOptions> opts, CancellationToken ct, string? date = null)
     {
-        var (start, end) = AiSummaryService.WeeklyWindow(EditionClock.Today(opts.Value));
+        if (!TryWeek(date, opts.Value, out var start, out var end)) return ApiResults.Fail("Invalid date.");
         var dto = await ai.GetWeeklyEditionAsync(principal.GetUserId(), start, end, ct);
         return dto is null ? Results.NotFound() : Results.Ok(dto);
     }
 
     private static async Task<IResult> GenerateWeekly(
-        ClaimsPrincipal principal, AppDbContext db, AiSummaryService ai, IOptions<FeedOptions> opts, CancellationToken ct)
+        ClaimsPrincipal principal, AppDbContext db, AiSummaryService ai, IOptions<FeedOptions> opts, CancellationToken ct, string? date = null)
     {
+        if (!TryWeek(date, opts.Value, out var start, out var end)) return ApiResults.Fail("Invalid date.");
         var user = await db.Users.FindAsync([principal.GetUserId()], ct);
         if (user is null) return Results.Unauthorized();
 
-        var (start, end) = AiSummaryService.WeeklyWindow(EditionClock.Today(opts.Value));
         try
         {
             return Results.Ok(await ai.GenerateWeeklyEditionAsync(user, start, end, ct));
@@ -107,6 +110,16 @@ public static class AiEndpoints
         {
             return ApiResults.Fail(ex.Message);
         }
+    }
+
+    /// <summary>Resolves the Monday–Saturday week for an anchor date (null = the current week).</summary>
+    private static bool TryWeek(string? date, FeedOptions opts, out DateOnly start, out DateOnly end)
+    {
+        DateOnly anchor;
+        if (string.IsNullOrEmpty(date)) anchor = EditionClock.Today(opts);
+        else if (!DateOnly.TryParse(date, out anchor)) { start = end = default; return false; }
+        (start, end) = AiSummaryService.WeeklyWindow(anchor);
+        return true;
     }
 
     private static AiSettingsDto ToSettingsDto(AppUser u) => new(

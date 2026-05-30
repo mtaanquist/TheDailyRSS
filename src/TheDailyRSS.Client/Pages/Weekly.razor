@@ -1,7 +1,10 @@
 @page "/weekly"
+@page "/weekly/{Date}"
 @attribute [Authorize]
+@implements IDisposable
 @inject ApiClient Api
 @inject AuthService Auth
+@inject AppState State
 @inject NavigationManager Nav
 
 <PageTitle>The Weekly · The Daily RSS</PageTitle>
@@ -9,10 +12,7 @@
 <header class="tdr-masthead">
     <div class="tdr-masthead-meta">
         <span>The Weekly</span>
-        @if (_edition is { } e)
-        {
-            <span>@RangeLabel(e.PeriodStart, e.PeriodEnd)</span>
-        }
+        <span>@RangeLabel(WeekStart, WeekEnd)</span>
     </div>
     <h1 class="tdr-masthead-title">The Weekly</h1>
     <div class="tdr-masthead-rule">
@@ -20,13 +20,26 @@
     </div>
 </header>
 
+@if (AiOn)
+{
+    <div class="tdr-editionbar">
+        <button class="tdr-navbtn" disabled="@(_prevSunday is null || _loading)" @onclick="@(() => Go(_prevSunday))">← <span class="lbl">earlier</span></button>
+        <span class="tdr-edition-date">@(_isLatest ? "THIS WEEK" : RangeLabel(WeekStart, WeekEnd))</span>
+        <button class="tdr-navbtn" disabled="@(_nextSunday is null || _loading)" @onclick="@(() => Go(_nextSunday))"><span class="lbl">later</span> →</button>
+        @if (!_isLatest)
+        {
+            <button class="tdr-navbtn" @onclick="GoLatest"><span class="lbl">latest</span> »</button>
+        }
+    </div>
+}
+
 <div class="tdr-edition-body @(_loading ? "loading" : "")">
     @if (!AiOn)
     {
         <div class="tdr-empty">
             <div class="tdr-empty-mark">∅</div>
             <h1 class="tdr-empty-title">AI briefings are off</h1>
-            <p class="tdr-empty-sub">Turn them on, then add your endpoint &amp; key — The Weekly is curated for you each Sunday.</p>
+            <p class="tdr-empty-sub">Turn them on, then add your endpoint &amp; key — The Weekly is curated for you each Saturday night.</p>
             <a class="tdr-btn" href="/settings/ai">open AI settings</a>
         </div>
     }
@@ -45,8 +58,12 @@
         {
             <div class="tdr-empty">
                 <div class="tdr-empty-mark">∅</div>
-                <h1 class="tdr-empty-title">This week isn't out yet</h1>
-                <p class="tdr-empty-sub">The Weekly is curated automatically on Saturday night, ready for Sunday — or compose it now.</p>
+                <h1 class="tdr-empty-title">@(_isLatest ? "This week isn't out yet" : "No edition for this week")</h1>
+                <p class="tdr-empty-sub">
+                    @(_isLatest
+                        ? "The Weekly is curated automatically on Saturday night, ready for Sunday — or compose it now."
+                        : "This week wasn't curated. Compose it now from that week's stories.")
+                </p>
                 <button class="tdr-btn" @onclick="Generate">curate The Weekly</button>
             </div>
         }
@@ -63,7 +80,7 @@
 
         @if (!string.IsNullOrWhiteSpace(ed.Intro))
         {
-            <div class="tdr-ai-content" style="margin-bottom:18px">@((MarkupString)MarkdownLite.ToHtml(ed.Intro))</div>
+            <div class="tdr-ai-content tdr-deck" style="margin-bottom:18px">@((MarkupString)MarkdownLite.ToHtml(ed.Intro))</div>
         }
 
         @if (ed.Lead is { } lead)
@@ -114,17 +131,66 @@
 </div>
 
 @code {
+    [Parameter] public string? Date { get; set; }
+
     private WeeklyEditionDto? _edition;
     private bool _loading;
     private string? _error;
+    private string _loadedKey = "";
+
+    // "The Weekly" is delivered on a Sunday and covers the preceding Monday–Saturday. We navigate by
+    // that delivery Sunday: each step is the previous/next Sunday. Seeded to a valid Sunday up front so
+    // WeekStart/WeekEnd (which subtract days) are safe on the first render, before Resolve() runs.
+    private DateOnly _sunday = DeliverySunday(DateOnly.FromDateTime(DateTime.Today)); // the active edition's delivery Sunday
+    private DateOnly _currentSunday;   // the most recent delivery Sunday (the latest edition)
+    private DateOnly? _prevSunday;     // ← earlier (null at the start of the archive)
+    private DateOnly? _nextSunday;     // later → (null when already latest)
+    private bool _isLatest;
+
+    private DateOnly WeekStart => _sunday.AddDays(-6); // Monday
+    private DateOnly WeekEnd => _sunday.AddDays(-1);   // Saturday
 
     private bool AiOn => Auth.CurrentUser?.Preferences.AiEnabled ?? false;
 
     protected override async Task OnInitializedAsync()
     {
+        State.Changed += OnStateChanged;
+        await State.EnsureLoadedAsync();
+    }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Resolve();
         if (!AiOn) return;
+        var key = _sunday.ToString("yyyy-MM-dd");
+        if (key == _loadedKey && _edition is not null) return;
+        _loadedKey = key;
+        await Load();
+    }
+
+    /// <summary>Pick the active week (from the URL date, else the current week) and work out the
+    /// neighbouring Sundays — bounded so "earlier" stops once there are no older stories to curate.</summary>
+    private void Resolve()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        _currentSunday = DeliverySunday(today);
+        _sunday = DateOnly.TryParse(Date, out var d) ? DeliverySunday(d) : _currentSunday;
+        if (_sunday > _currentSunday) _sunday = _currentSunday; // never the future
+        _isLatest = _sunday >= _currentSunday;
+
+        var oldest = State.EditionDates.Count > 0 ? State.EditionDates[^1].Date : (DateOnly?)null;
+        _prevSunday = oldest is { } m && m < WeekStart ? _sunday.AddDays(-7) : null;
+        _nextSunday = _isLatest ? null : _sunday.AddDays(7);
+    }
+
+    private async Task Load()
+    {
+        _error = null;
         _loading = true;
-        try { _edition = await Api.GetWeeklyEditionAsync(); }
+        _edition = null;
+        try { _edition = await Api.GetWeeklyEditionAsync(_isLatest ? null : _sunday); }
         catch (ApiException ex) { _error = ex.Message; }
         finally { _loading = false; }
     }
@@ -133,9 +199,24 @@
     {
         _loading = true; _error = null;
         StateHasChanged();
-        try { _edition = await Api.GenerateWeeklyEditionAsync(); }
+        try { _edition = await Api.GenerateWeeklyEditionAsync(_isLatest ? null : _sunday); }
         catch (ApiException ex) { _error = ex.Message; }
         finally { _loading = false; }
+    }
+
+    private void Go(DateOnly? sunday)
+    {
+        if (sunday is not { } s) return;
+        Nav.NavigateTo(s >= _currentSunday ? "/weekly" : $"/weekly/{s:yyyy-MM-dd}");
+    }
+
+    private void GoLatest() => Nav.NavigateTo("/weekly");
+
+    /// <summary>The Sunday a date's Monday–Saturday week is delivered on (the Sunday after its Saturday).</summary>
+    private static DateOnly DeliverySunday(DateOnly d)
+    {
+        var daysSinceSaturday = ((int)d.DayOfWeek + 1) % 7; // Saturday = 0
+        return d.AddDays(-daysSinceSaturday).AddDays(1);
     }
 
     private async Task OnSave((Guid Id, bool Saved) e)
@@ -170,10 +251,14 @@
             .Select(sec => sec with { Articles = sec.Articles.Select(map).ToList() })
             .ToList();
 
+    // Build from integer day/year parts: a lone "d"/"y" in an interpolated DateOnly is the standard
+    // short-date/year specifier, not day-of-month, which mangles the label.
     private static string RangeLabel(DateOnly start, DateOnly end) =>
         (start.Month == end.Month
-            ? $"{start:MMMM d}–{end:d}, {end:yyyy}"
-            : $"{start:MMM d} – {end:MMM d, yyyy}").ToUpperInvariant();
+            ? $"{start:MMMM} {start.Day}–{end.Day}, {end.Year}"
+            : $"{start:MMM} {start.Day} – {end:MMM} {end.Day}, {end.Year}").ToUpperInvariant();
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max].TrimEnd() + "…";
+
+    public void Dispose() => State.Changed -= OnStateChanged;
 }
