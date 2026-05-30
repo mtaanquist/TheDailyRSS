@@ -52,6 +52,12 @@
                 </div>
 
                 <div class="tdr-field" style="margin-top:14px">
+                    <label>Name</label>
+                    <input class="tdr-input" @bind="_title" @bind:event="oninput" placeholder="@_result.Title" />
+                    <div class="tdr-hint">↳ shown in your sidebar — rename it, or leave it as the feed's own title</div>
+                </div>
+
+                <div class="tdr-field" style="margin-top:14px">
                     <label>Add to folder</label>
                     <div class="tdr-folder-chips">
                         @foreach (var c in Categories)
@@ -82,6 +88,7 @@
     [Parameter] public EventCallback OnAdded { get; set; }
 
     private string _url = "";
+    private string _title = "";
     private FeedDetectResult? _result;
     private Guid? _categoryId;
     private string? _error;
@@ -104,6 +111,7 @@
     {
         _exact = e.Value is true;
         _result = null; // mode changed — previous detection no longer applies
+        _title = "";
         _error = null;
     }
 
@@ -116,6 +124,8 @@
         try
         {
             _result = await Api.DetectFeedAsync(new AddFeedRequest { Url = _url, CategoryId = _categoryId ?? Guid.Empty, Exact = _exact });
+            // Pre-fill the name with the feed's own title; the reader can override it before subscribing.
+            if (_result is { Found: true }) _title = _result.Title ?? "";
             if (_result is { Found: false })
                 _error = _exact
                     ? "That URL isn't a valid RSS or Atom feed."
@@ -132,7 +142,15 @@
         _subscribing = true;
         try
         {
-            await Api.AddFeedAsync(new AddFeedRequest { Url = _result.FeedUrl ?? _url, CategoryId = _categoryId.Value, Exact = _exact });
+            await Api.AddFeedAsync(new AddFeedRequest
+            {
+                Url = _result.FeedUrl ?? _url,
+                CategoryId = _categoryId.Value,
+                Exact = _exact,
+                // An override only when it differs from the feed's own title — otherwise leave it null
+                // so the source's title continues to apply.
+                Title = string.IsNullOrWhiteSpace(_title) || _title.Trim() == _result.Title?.Trim() ? null : _title.Trim(),
+            });
             await OnAdded.InvokeAsync();
             Reset();
             await VisibleChanged.InvokeAsync(false);
@@ -150,6 +168,7 @@
     private void Reset()
     {
         _url = "";
+        _title = "";
         _result = null;
         _error = null;
         _detecting = false;
