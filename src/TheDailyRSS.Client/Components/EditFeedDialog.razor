@@ -1,0 +1,116 @@
+@inject ApiClient Api
+
+@if (Visible && Feed is not null)
+{
+    <div class="tdr-overlay" @onclick="Close">
+        <div class="tdr-modal" @onclick:stopPropagation="true">
+            <div class="tdr-modal-head">
+                <h2>Edit feed</h2>
+                <button class="x" @onclick="Close">✕ CLOSE</button>
+            </div>
+            <hr />
+
+            <div class="tdr-preview">
+                <div class="row">
+                    <div class="glyph">@Feed.IconText</div>
+                    <div style="flex:1">
+                        <div style="font-weight:700">@Feed.Title</div>
+                        <div style="font-family:var(--typer); font-size:10px; color:var(--ink-3)">@Feed.FeedUrl</div>
+                    </div>
+                </div>
+            </div>
+
+            @if (_error is not null)
+            {
+                <div class="tdr-error">@_error</div>
+            }
+
+            <div class="tdr-field" style="margin-top:14px">
+                <label>Name</label>
+                <input class="tdr-input" @bind="_title" @bind:event="oninput" />
+                <div class="tdr-hint">↳ shown in your sidebar</div>
+            </div>
+
+            <div class="tdr-field" style="margin-top:14px">
+                <label>Full article</label>
+                <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-2); cursor:pointer">
+                    <input type="checkbox" checked="@_fetchFull" @onchange="@(e => _fetchFull = e.Value is true)" />
+                    fetch the full article (reader mode) when the feed only gives a summary
+                </label>
+                <div class="tdr-hint">↳ we step into each article and pull the readable text — applies to everyone subscribed to this feed</div>
+            </div>
+
+            <div class="tdr-field" style="margin-top:14px">
+                <label>Folder</label>
+                <div class="tdr-folder-chips">
+                    @foreach (var c in Categories)
+                    {
+                        <button class="tdr-folder-chip @(c.Id == _categoryId ? "active" : "")"
+                                @onclick="() => _categoryId = c.Id">@c.Name</button>
+                    }
+                </div>
+            </div>
+
+            <div class="tdr-modal-actions">
+                <button class="tdr-link muted" @onclick="Close">cancel</button>
+                <button class="tdr-btn" @onclick="Save" disabled="@(_saving || string.IsNullOrWhiteSpace(_title))">
+                    @(_saving ? "saving…" : "save")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback<bool> VisibleChanged { get; set; }
+    [Parameter] public FeedDto? Feed { get; set; }
+    [Parameter] public IReadOnlyList<CategoryDto> Categories { get; set; } = [];
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private string _title = "";
+    private bool _fetchFull;
+    private Guid _categoryId;
+    private string? _error;
+    private bool _saving;
+    private Guid _loadedFor;
+
+    protected override void OnParametersSet()
+    {
+        // Re-seed the form whenever a different feed is opened for editing.
+        if (Feed is not null && Feed.Id != _loadedFor)
+        {
+            _loadedFor = Feed.Id;
+            _title = Feed.Title;
+            _fetchFull = Feed.FetchFullContent;
+            _categoryId = Feed.CategoryId;
+            _error = null;
+        }
+    }
+
+    private async Task Save()
+    {
+        if (Feed is null || string.IsNullOrWhiteSpace(_title)) return;
+        _error = null;
+        _saving = true;
+        try
+        {
+            await Api.UpdateFeedAsync(Feed.Id, new UpdateFeedRequest
+            {
+                Title = _title.Trim(),
+                CategoryId = _categoryId,
+                FetchFullContent = _fetchFull,
+            });
+            await OnSaved.InvokeAsync();
+            await VisibleChanged.InvokeAsync(false);
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private async Task Close()
+    {
+        _loadedFor = Guid.Empty; // force a re-seed next open
+        await VisibleChanged.InvokeAsync(false);
+    }
+}

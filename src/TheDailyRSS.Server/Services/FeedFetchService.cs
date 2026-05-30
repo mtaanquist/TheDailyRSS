@@ -11,6 +11,7 @@ public sealed class FeedFetchService(
     AppDbContext db,
     FeedReader reader,
     IHttpClientFactory httpFactory,
+    ArticleContentExtractor extractor,
     IOptions<FeedOptions> options,
     ILogger<FeedFetchService> log)
 {
@@ -42,7 +43,7 @@ public sealed class FeedFetchService(
             source.LastModified = resp.Content.Headers.LastModified?.ToString("R");
 
             await using var stream = await resp.Content.ReadAsStreamAsync(ct);
-            using var buffered = await ReadCappedAsync(stream, _options.MaxResponseBytes, ct);
+            using var buffered = await HttpStreamUtil.ReadCappedAsync(stream, _options.MaxResponseBytes, ct);
             buffered.Position = 0;
 
             var parsed = reader.Parse(buffered, source.FeedUrl);
@@ -88,12 +89,20 @@ public sealed class FeedFetchService(
 
         var added = 0;
 
-        foreach (var item in parsed.Items)
-        {
-            if (!existing.Add(item.ExternalId))
-                continue;
+        // For full-content sources, extract reader-mode bodies inline only for the newest few new
+        // items (so a synchronous Add stays fast); the backfill worker fills in the remainder.
+        var newItems = parsed.Items.Where(i => existing.Add(i.ExternalId)).ToList();
+        var inlineExtractUntil = source.FetchFullContent
+            ? newItems
+                .OrderByDescending(i => i.PublishedAt)
+                .Take(Math.Max(0, _options.FullContentInlineLimit))
+                .Select(i => i.ExternalId)
+                .ToHashSet()
+            : [];
 
-            db.Articles.Add(new Article
+        foreach (var item in newItems)
+        {
+            var article = new Article
             {
                 SourceId = source.Id,
                 ExternalId = item.ExternalId.Truncate(1000),
@@ -108,7 +117,24 @@ public sealed class FeedFetchService(
                 FetchedAt = DateTimeOffset.UtcNow,
                 EditionDate = EditionClock.EditionDate(item.PublishedAt, _options.EditionTimeZone),
                 Fields = item.Fields,
-            });
+            };
+
+            if (inlineExtractUntil.Contains(item.ExternalId) && !string.IsNullOrWhiteSpace(item.Url))
+            {
+                // Never let an extraction failure bubble out — it would reach RefreshAsync's catch,
+                // which clears the ChangeTracker and discards every pending insert in this sweep.
+                try
+                {
+                    article.FullContentHtml = await extractor.ExtractAsync(item.Url, ct) ?? "";
+                }
+                catch (Exception ex)
+                {
+                    log.LogDebug(ex, "Inline full-content extraction failed for {Url}", item.Url);
+                }
+                await Task.Delay(TimeSpan.FromSeconds(Math.Max(0, _options.FullContentDelaySeconds)), ct);
+            }
+
+            db.Articles.Add(article);
             added++;
         }
         return added;
@@ -131,25 +157,5 @@ public sealed class FeedFetchService(
                 && !keepIds.Contains(a.Id)
                 && !db.UserArticleStates.Any(s => s.ArticleId == a.Id && s.IsSaved))
             .ExecuteDeleteAsync(ct);
-    }
-
-    /// <summary>Copies at most <paramref name="maxBytes"/> from the response stream, throwing if the
-    /// source exceeds the cap. <see cref="HttpClient.MaxResponseContentBufferSize"/> does not apply to
-    /// <c>ReadAsStreamAsync</c>, so the bound is enforced here for the feed-fetch path.</summary>
-    private static async Task<MemoryStream> ReadCappedAsync(Stream source, int maxBytes, CancellationToken ct)
-    {
-        var buffer = new MemoryStream();
-        var chunk = new byte[81920];
-        int read;
-        while ((read = await source.ReadAsync(chunk, ct)) > 0)
-        {
-            if (buffer.Length + read > maxBytes)
-            {
-                await buffer.DisposeAsync();
-                throw new InvalidOperationException($"Feed response exceeded the {maxBytes}-byte limit.");
-            }
-            buffer.Write(chunk, 0, read);
-        }
-        return buffer;
     }
 }

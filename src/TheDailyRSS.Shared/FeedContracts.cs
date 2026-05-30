@@ -46,7 +46,8 @@ public sealed record FeedDto(
     int UnreadCount,
     int TotalCount,
     DateTimeOffset? LastFetchedAt,
-    string? LastFetchError);
+    string? LastFetchError,
+    bool FetchFullContent);
 
 public sealed record KeywordFilterDto(
     Guid Id,
@@ -106,6 +107,10 @@ public sealed class AddFeedRequest
     /// <summary>When true, use <see cref="Url"/> exactly as the feed and skip HTML auto-discovery
     /// (so a specific section feed isn't replaced by the site-wide one the page advertises).</summary>
     public bool Exact { get; set; }
+
+    /// <summary>Opt the (shared) source into reader-mode full-article fetching. Adding can only turn
+    /// this on for an existing source — turning it off is reserved for the edit dialog.</summary>
+    public bool FetchFullContent { get; set; }
 }
 
 public sealed class UpdateFeedRequest
@@ -115,6 +120,10 @@ public sealed class UpdateFeedRequest
 
     [Required]
     public Guid CategoryId { get; set; }
+
+    /// <summary>Reader-mode full-article fetching for the shared source. The edit dialog may turn
+    /// this both on and off (unlike add, which can only turn it on).</summary>
+    public bool FetchFullContent { get; set; }
 }
 
 /// <summary>Preview returned by the add-feed auto-detect step.</summary>

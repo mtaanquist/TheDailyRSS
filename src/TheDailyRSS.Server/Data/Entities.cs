@@ -113,6 +113,11 @@ public sealed class FeedSource
     /// <summary>One/two-letter glyph used for the source badge in the UI.</summary>
     public string IconText { get; set; } = "";
 
+    /// <summary>When true, the fetcher steps into each article's URL and stores a reader-mode
+    /// extraction in <see cref="Article.FullContentHtml"/>. Shared across all subscribers since
+    /// the source (and its article rows) is global.</summary>
+    public bool FetchFullContent { get; set; }
+
     public DateTimeOffset? LastFetchedAt { get; set; }
     public string? LastFetchError { get; set; }
 
@@ -159,6 +164,13 @@ public sealed class Article
     public string? Author { get; set; }
     public string? Summary { get; set; }
     public string? ContentHtml { get; set; }
+
+    /// <summary>Reader-mode extraction of the article page, populated only when the source has
+    /// <see cref="FeedSource.FetchFullContent"/> on. <c>null</c> = not yet attempted;
+    /// <c>""</c> = attempted but nothing usable (so it isn't retried). Served in preference to
+    /// <see cref="ContentHtml"/> when present and non-empty.</summary>
+    public string? FullContentHtml { get; set; }
+
     public string Url { get; set; } = "";
     public string? ImageUrl { get; set; }
 

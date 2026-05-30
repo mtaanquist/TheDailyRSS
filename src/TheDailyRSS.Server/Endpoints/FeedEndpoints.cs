@@ -44,7 +44,7 @@ public static class FeedEndpoints
                 s.CustomTitle ?? s.Source!.Title, s.Source!.FeedUrl, s.Source.SiteUrl, s.Source.IconText, s.SortOrder,
                 db.Articles.Count(a => a.SourceId == s.SourceId && !a.States.Any(st => st.UserId == uid && st.IsRead)),
                 db.Articles.Count(a => a.SourceId == s.SourceId),
-                s.Source.LastFetchedAt, s.Source.LastFetchError))
+                s.Source.LastFetchedAt, s.Source.LastFetchError, s.Source.FetchFullContent))
             .ToListAsync();
         return Results.Ok(feeds);
     }
@@ -75,6 +75,11 @@ public static class FeedEndpoints
         if (await db.Subscriptions.AnyAsync(s => s.UserId == uid && s.SourceId == source.Id, ct))
             return ApiResults.Conflict("You're already subscribed to that feed.");
 
+        // The flag is per-(shared)-source. Add may only ever turn it ON, so subscribing to a feed
+        // someone else already enabled can't silently disable it; turning it off is the edit dialog's job.
+        if (req.FetchFullContent && !source.FetchFullContent)
+            source.FetchFullContent = true;
+
         var customTitle = string.IsNullOrWhiteSpace(req.Title) ? null : req.Title!.Trim();
         var nextOrder = await db.Subscriptions.Where(s => s.UserId == uid && s.CategoryId == req.CategoryId)
             .MaxAsync(s => (int?)s.SortOrder, ct) ?? -1;
@@ -98,18 +103,22 @@ public static class FeedEndpoints
             source.FeedUrl, source.SiteUrl, source.IconText, sub.SortOrder,
             await db.Articles.CountAsync(a => a.SourceId == source.Id && !a.States.Any(st => st.UserId == uid && st.IsRead), ct),
             await db.Articles.CountAsync(a => a.SourceId == source.Id, ct),
-            source.LastFetchedAt, source.LastFetchError));
+            source.LastFetchedAt, source.LastFetchError, source.FetchFullContent));
     }
 
     private static async Task<IResult> Update(Guid id, UpdateFeedRequest req, ClaimsPrincipal principal, AppDbContext db)
     {
         var uid = principal.GetUserId();
-        var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == id && s.UserId == uid);
-        if (sub is null) return Results.NotFound();
+        var sub = await db.Subscriptions.Include(s => s.Source)
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == uid);
+        if (sub?.Source is null) return Results.NotFound();
         if (!await db.Categories.AnyAsync(c => c.Id == req.CategoryId))
             return ApiResults.Fail("Unknown category.");
         sub.CustomTitle = req.Title.Trim();
         sub.CategoryId = req.CategoryId;
+        // The flag is shared across subscribers; the edit dialog may flip it either way. When it
+        // turns on, the backfill worker picks up the source on its next sweep (no explicit trigger).
+        sub.Source.FetchFullContent = req.FetchFullContent;
         await db.SaveChangesAsync();
         return Results.NoContent();
     }

@@ -50,6 +50,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(x => x.FeedUrl).HasMaxLength(2000);
             e.Property(x => x.SiteUrl).HasMaxLength(2000);
             e.Property(x => x.IconText).HasMaxLength(4);
+            e.Property(x => x.FetchFullContent).HasDefaultValue(false);
             // Bound the HTTP-header echo-backs so a hostile feed server can't store unbounded blobs.
             e.Property(x => x.ETag).HasMaxLength(500);
             e.Property(x => x.LastModified).HasMaxLength(100);
