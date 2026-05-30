@@ -15,11 +15,9 @@ public static class AiEndpoints
         var group = app.MapGroup("/api/ai").RequireAuthorization();
         group.MapGet("/settings", GetSettings);
         group.MapPut("/settings", UpdateSettings);
-        group.MapGet("/summary/daily/{date}", (string date, ClaimsPrincipal p, AppDbContext db, AiSummaryService ai, CancellationToken ct) =>
-            GetSummary(date, AiSummaryKind.Daily, p, db, ai, ct));
-        group.MapPost("/summary/daily/{date}", (string date, ClaimsPrincipal p, AppDbContext db, AiSummaryService ai, CancellationToken ct) =>
-            GenerateSummary(date, AiSummaryKind.Daily, p, db, ai, ct));
-        // "The Weekly" is a single, current curated edition (no archive) anchored to the most recent Sunday.
+        group.MapGet("/summary/daily/{date}", GetDailySummary);
+        group.MapPost("/summary/daily/{date}", GenerateDailySummary);
+        // "The Weekly" is a single, current curated edition (no archive) anchored to the most recent Saturday.
         group.MapGet("/weekly", GetWeekly);
         group.MapPost("/weekly", GenerateWeekly);
     }
@@ -61,27 +59,24 @@ public static class AiEndpoints
         return Results.Ok(ToSettingsDto(user));
     }
 
-    private static async Task<IResult> GetSummary(
-        string date, AiSummaryKind kind, ClaimsPrincipal principal, AppDbContext db, AiSummaryService ai, CancellationToken ct)
+    private static async Task<IResult> GetDailySummary(
+        string date, ClaimsPrincipal principal, AppDbContext db, AiSummaryService ai, CancellationToken ct)
     {
         if (!DateOnly.TryParse(date, out var d)) return ApiResults.Fail("Invalid date.");
-        var (start, end) = Period(kind, d);
-        var cached = await ai.GetCachedAsync(principal.GetUserId(), kind, start, end, ct);
+        var cached = await ai.GetCachedAsync(principal.GetUserId(), AiSummaryKind.Daily, d, d, ct);
         return cached is null ? Results.NotFound() : Results.Ok(cached);
     }
 
-    private static async Task<IResult> GenerateSummary(
-        string date, AiSummaryKind kind, ClaimsPrincipal principal, AppDbContext db, AiSummaryService ai, CancellationToken ct)
+    private static async Task<IResult> GenerateDailySummary(
+        string date, ClaimsPrincipal principal, AppDbContext db, AiSummaryService ai, CancellationToken ct)
     {
         if (!DateOnly.TryParse(date, out var d)) return ApiResults.Fail("Invalid date.");
         var user = await db.Users.FindAsync([principal.GetUserId()], ct);
         if (user is null) return Results.Unauthorized();
 
-        var (start, end) = Period(kind, d);
         try
         {
-            var dto = await ai.GenerateAsync(user, kind, start, end, ct);
-            return Results.Ok(dto);
+            return Results.Ok(await ai.GenerateAsync(user, AiSummaryKind.Daily, d, d, ct));
         }
         catch (AiException ex)
         {
@@ -113,9 +108,6 @@ public static class AiEndpoints
             return ApiResults.Fail(ex.Message);
         }
     }
-
-    private static (DateOnly Start, DateOnly End) Period(AiSummaryKind kind, DateOnly date) =>
-        kind == AiSummaryKind.Weekly ? AiSummaryService.WeekRange(date) : (date, date);
 
     private static AiSettingsDto ToSettingsDto(AppUser u) => new(
         u.AiEnabled, u.AiBaseUrl, u.AiModel, u.AiSystemPrompt, u.AiAutoDaily, u.AiAutoWeekly,

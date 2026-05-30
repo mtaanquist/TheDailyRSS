@@ -5,10 +5,11 @@ namespace TheDailyRSS.Tests;
 
 public class WeeklyWindowTests
 {
-    /// <summary>For every day across a fortnight, "The Weekly" window must be a Monday–Sunday run
-    /// ending on the most recent (or same-day) Sunday — that's the week it covers, curated Sunday morning.</summary>
+    /// <summary>For every day across a fortnight, "The Weekly" window must be a Monday–Saturday run
+    /// ending on the most recent (or same-day) Saturday — the six days a Sunday paper reports on,
+    /// curated Saturday night.</summary>
     [Fact]
-    public void WeeklyWindow_IsMondayToTheMostRecentSunday()
+    public void WeeklyWindow_IsMondayToTheMostRecentSaturday()
     {
         var start = new DateOnly(2026, 5, 18); // a Monday
         for (var i = 0; i < 14; i++)
@@ -17,32 +18,32 @@ public class WeeklyWindowTests
             var (s, e) = AiSummaryService.WeeklyWindow(today);
 
             Assert.Equal(DayOfWeek.Monday, s.DayOfWeek);
-            Assert.Equal(DayOfWeek.Sunday, e.DayOfWeek);
-            Assert.Equal(6, e.DayNumber - s.DayNumber);          // a 7-day run
+            Assert.Equal(DayOfWeek.Saturday, e.DayOfWeek);
+            Assert.Equal(5, e.DayNumber - s.DayNumber);          // Mon–Sat is a 6-day run
             Assert.True(e <= today);                             // never reaches into the future
-            Assert.True(today.DayNumber - e.DayNumber < 7);      // it's the *most recent* Sunday
+            Assert.True(today.DayNumber - e.DayNumber < 7);      // it's the *most recent* Saturday
         }
     }
 
     [Fact]
-    public void WeeklyWindow_OnSunday_CoversThatSameWeek()
+    public void WeeklyWindow_OnSaturday_CoversThatSameWeek()
+    {
+        var saturday = new DateOnly(2026, 5, 23);
+        Assert.Equal(DayOfWeek.Saturday, saturday.DayOfWeek);
+
+        var (s, e) = AiSummaryService.WeeklyWindow(saturday);
+        Assert.Equal(new DateOnly(2026, 5, 18), s); // Monday
+        Assert.Equal(saturday, e);
+    }
+
+    [Fact]
+    public void WeeklyWindow_OnSunday_CoversTheWeekJustEnded()
     {
         var sunday = new DateOnly(2026, 5, 24);
         Assert.Equal(DayOfWeek.Sunday, sunday.DayOfWeek);
 
         var (s, e) = AiSummaryService.WeeklyWindow(sunday);
-        Assert.Equal(new DateOnly(2026, 5, 18), s);
-        Assert.Equal(sunday, e);
-    }
-
-    [Fact]
-    public void WeeklyWindow_OnMonday_CoversThePreviousWeek()
-    {
-        var monday = new DateOnly(2026, 5, 25);
-        Assert.Equal(DayOfWeek.Monday, monday.DayOfWeek);
-
-        var (s, e) = AiSummaryService.WeeklyWindow(monday);
-        Assert.Equal(new DateOnly(2026, 5, 18), s);
-        Assert.Equal(new DateOnly(2026, 5, 24), e);
+        Assert.Equal(new DateOnly(2026, 5, 18), s); // previous Monday
+        Assert.Equal(new DateOnly(2026, 5, 23), e); // yesterday (Saturday)
     }
 }

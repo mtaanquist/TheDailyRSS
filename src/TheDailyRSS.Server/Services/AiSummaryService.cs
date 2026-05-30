@@ -80,20 +80,15 @@ public sealed class AiSummaryService(
         return string.IsNullOrWhiteSpace(stored) ? DefaultHouseStyle : stored.Trim();
     }
 
-    /// <summary>The Monday-anchored 7-day window containing <paramref name="date"/>.</summary>
-    public static (DateOnly Start, DateOnly End) WeekRange(DateOnly date)
-    {
-        var offset = ((int)date.DayOfWeek + 6) % 7; // Monday = 0
-        var monday = date.AddDays(-offset);
-        return (monday, monday.AddDays(6));
-    }
-
-    /// <summary>The Monday–Sunday week "The Weekly" currently covers, given today's date: the week ending
-    /// on the most recent (or today's) Sunday. It's generated Sunday morning and stands until the next.</summary>
+    /// <summary>The Monday–Saturday week "The Weekly" covers, ending on the most recent Saturday on or
+    /// before <paramref name="today"/> — the six days a Sunday paper reports on. It's generated Saturday
+    /// night (23:55) and read from Sunday on; the display anchors to the same window, so a fresh edition
+    /// appears Sunday and stands all week.</summary>
     public static (DateOnly Start, DateOnly End) WeeklyWindow(DateOnly today)
     {
-        var sunday = today.AddDays(-(int)today.DayOfWeek); // Sunday = 0 → today; otherwise the previous Sunday
-        return WeekRange(sunday);
+        var daysSinceSaturday = ((int)today.DayOfWeek + 1) % 7; // Saturday = 0; Sunday = 1; … Friday = 6
+        var saturday = today.AddDays(-daysSinceSaturday);
+        return (saturday.AddDays(-5), saturday); // Monday–Saturday
     }
 
     public string Encrypt(string apiKey) => Protector.Protect(apiKey);
