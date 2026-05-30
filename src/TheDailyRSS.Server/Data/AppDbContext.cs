@@ -19,6 +19,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<FieldFilter> FieldFilters => Set<FieldFilter>();
     public DbSet<UserSession> Sessions => Set<UserSession>();
     public DbSet<AiSummary> AiSummaries => Set<AiSummary>();
+    public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -176,6 +177,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                 .WithMany(u => u.AiSummaries)
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<AppSetting>(e =>
+        {
+            e.HasKey(x => x.Key);
+            e.Property(x => x.Key).HasMaxLength(100);
+            e.Property(x => x.Value).HasMaxLength(8000);
         });
 
         b.Entity<AppUser>(e =>

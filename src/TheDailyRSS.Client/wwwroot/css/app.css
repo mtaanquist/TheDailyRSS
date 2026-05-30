@@ -444,6 +444,30 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
 .tdr-ai-content li { margin-bottom: 4px; }
 .tdr-ai-content code { font-family: var(--typer), monospace; font-size: 0.9em; background: var(--rule-soft); padding: 1px 4px; border-radius: 3px; }
 
+/* The daily briefing flows into newspaper columns on wide screens so it fills the edition width
+   (as many ~22rem columns as fit — two on the 1100px shell, three when expanded). Scoped to the
+   briefing panel so The Weekly's short editor's note stays a single full-width standfirst. */
+@media (min-width: 900px) {
+    .tdr-ai-panel .tdr-ai-content {
+        max-width: none;
+        column-width: 22rem;
+        column-gap: 36px;
+        column-rule: 1px solid var(--rule);
+    }
+    /* Don't split a bullet, paragraph or heading across the column break, and keep a heading with
+       the text that follows it. */
+    .tdr-ai-panel .tdr-ai-content li,
+    .tdr-ai-panel .tdr-ai-content p,
+    .tdr-ai-panel .tdr-ai-content h2,
+    .tdr-ai-panel .tdr-ai-content h3,
+    .tdr-ai-panel .tdr-ai-content h4 { break-inside: avoid; }
+    .tdr-ai-panel .tdr-ai-content h2,
+    .tdr-ai-panel .tdr-ai-content h3,
+    .tdr-ai-panel .tdr-ai-content h4 { break-after: avoid; }
+    /* The lead "digest" title spans the full width above the columns. */
+    .tdr-ai-panel .tdr-ai-content > h2:first-child { column-span: all; margin-top: 0; }
+}
+
 /* ============================================================
    Modal / dialog
    ============================================================ */
