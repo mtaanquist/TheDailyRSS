@@ -63,6 +63,22 @@ public sealed class AiSummary
     public DateTimeOffset GeneratedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
+/// <summary>A global, admin-editable site setting (one row per key). Used for things like the AI
+/// "house style" preamble. An absent or blank row means "fall back to the built-in default", so
+/// no seed migration is needed.</summary>
+public sealed class AppSetting
+{
+    public string Key { get; set; } = "";
+    public string Value { get; set; } = "";
+}
+
+/// <summary>Well-known <see cref="AppSetting.Key"/> values.</summary>
+public static class SiteSettingKeys
+{
+    /// <summary>The admin-editable AI "house style" preamble shared by the daily briefing and The Weekly.</summary>
+    public const string AiHouseStyle = "ai.house_style";
+}
+
 /// <summary>
 /// A fixed newspaper section. The taxonomy is global and seeded (Guardian-style);
 /// users file their subscriptions into these but cannot create their own.

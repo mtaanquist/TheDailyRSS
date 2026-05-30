@@ -77,10 +77,16 @@ public static class MarkdownLite
         return sb.ToString();
     }
 
-    /// <summary>Inline formatting on already-escaped text: **bold**, *italic*, `code`.</summary>
+    /// <summary>Inline formatting on already-escaped text: [text](url) links, **bold**, *italic*, `code`.</summary>
     private static string Inline(string text)
     {
         var escaped = WebUtility.HtmlEncode(text);
+        // Links first, and only http(s) targets — the URL is matched literally so the bold/italic passes
+        // below can't chew it up, and a `javascript:`/`data:` href can never be produced. (Input is already
+        // HTML-encoded, so an `&` in a query string is already `&amp;`, which is valid inside href.)
+        escaped = System.Text.RegularExpressions.Regex.Replace(
+            escaped, @"\[([^\]]+)\]\((https?://[^\s)]+)\)",
+            m => $"<a href=\"{m.Groups[2].Value}\" target=\"_blank\" rel=\"noopener noreferrer\">{m.Groups[1].Value}</a>");
         escaped = System.Text.RegularExpressions.Regex.Replace(escaped, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
         escaped = System.Text.RegularExpressions.Regex.Replace(escaped, @"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", "<em>$1</em>");
         escaped = System.Text.RegularExpressions.Regex.Replace(escaped, @"`(.+?)`", "<code>$1</code>");
