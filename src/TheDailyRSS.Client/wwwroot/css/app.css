@@ -436,6 +436,44 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
 .tdr-hint { font-family: var(--serif); font-style: italic; font-size: 12.5px; color: var(--ink-2); margin-top: 6px; }
 .tdr-error { font-family: var(--serif); font-size: 13px; color: var(--red); margin: 8px 0; font-style: italic; }
 
+/* ---------- "The editor is writing…" in-flight indicator ---------- */
+.tdr-ai-writing {
+    display: flex; align-items: center; gap: 9px; margin: 6px 0;
+    font-family: var(--serif); font-style: italic; font-size: 13.5px; color: var(--ink-2);
+}
+/* A blinking type cursor — the "editor at the desk" motif. */
+.tdr-ai-quill {
+    width: 2px; height: 15px; background: var(--ink);
+    animation: tdr-caret 1.05s steps(2, start) infinite;
+}
+.tdr-ai-dots i { font-style: normal; opacity: 0.15; animation: tdr-dot 1.4s infinite; }
+.tdr-ai-dots i:nth-child(2) { animation-delay: 0.2s; }
+.tdr-ai-dots i:nth-child(3) { animation-delay: 0.4s; }
+.tdr-ai-elapsed {
+    margin-left: auto; font-family: var(--typer); font-style: normal; font-size: 11px;
+    letter-spacing: 1px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+}
+@keyframes tdr-caret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes tdr-dot { 0%, 100% { opacity: 0.15; } 40% { opacity: 0.9; } }
+@media (prefers-reduced-motion: reduce) {
+    .tdr-ai-quill, .tdr-ai-dots i { animation: none; }
+    .tdr-ai-dots i { opacity: 0.6; }
+}
+
+/* ---------- Admin: running AI jobs ---------- */
+.tdr-jobs { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--rule-soft); }
+.tdr-job {
+    display: flex; align-items: baseline; gap: 12px; padding: 10px 2px;
+    border-bottom: 1px solid var(--rule-soft); font-family: var(--serif);
+}
+.tdr-job .kind { font-family: var(--typer); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink); min-width: 64px; }
+.tdr-job .label { color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tdr-job .who { font-family: var(--typer); font-size: 11px; color: var(--ink-3); }
+.tdr-job .elapsed { font-family: var(--typer); font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.tdr-trigger { font-family: var(--typer); font-size: 9px; letter-spacing: 1px; text-transform: uppercase; padding: 2px 7px; border: 1px solid var(--rule); border-radius: 2px; white-space: nowrap; }
+.tdr-trigger.scheduled { color: var(--ink-2); }
+.tdr-trigger.interactive { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+
 /* ---------- AI-generated Markdown body (daily briefing + The Weekly intro) ---------- */
 .tdr-ai-content { font-family: var(--serif); color: var(--ink); line-height: 1.55; max-width: 70ch; }
 .tdr-ai-content h2, .tdr-ai-content h3, .tdr-ai-content h4 { font-family: var(--serif); font-weight: 800; margin: 14px 0 6px; }

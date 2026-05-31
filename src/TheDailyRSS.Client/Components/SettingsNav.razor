@@ -12,6 +12,7 @@
     {
         <a class="@(Current == "categories" ? "active" : "")" href="/settings/categories">Categories (admin)</a>
         <a class="@(Current == "ai-style" ? "active" : "")" href="/settings/ai-style">AI house style (admin)</a>
+        <a class="@(Current == "ai-jobs" ? "active" : "")" href="/settings/ai-jobs">AI activity (admin)</a>
     }
     <a class="danger" @onclick="SignOut" @onclick:preventDefault="true" href="#">Sign out</a>
 </nav>

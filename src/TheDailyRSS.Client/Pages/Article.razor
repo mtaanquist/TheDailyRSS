@@ -65,6 +65,10 @@ else
                         @(_summarizing ? "summarising…" : "summarise this article")
                     </button>
                 }
+                @if (_summarizing)
+                {
+                    <AiWritingIndicator Message="The editor is summarising this article" />
+                }
                 @if (_summaryError is not null)
                 {
                     <div class="tdr-error" style="margin-top:8px">@_summaryError</div>

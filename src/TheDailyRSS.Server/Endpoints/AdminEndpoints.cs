@@ -21,6 +21,32 @@ public static class AdminEndpoints
         var settings = app.MapGroup("/api/admin/settings").RequireAuthorization(Roles.Admin);
         settings.MapGet("/ai-house-style", GetHouseStyle);
         settings.MapPut("/ai-house-style", SetHouseStyle);
+
+        app.MapGet("/api/admin/ai-jobs", GetAiJobs).RequireAuthorization(Roles.Admin);
+    }
+
+    /// <summary>The AI generations running right now, scheduled and user-initiated, for the admin
+    /// activity view. The tracker holds only user ids; we resolve them to emails here.</summary>
+    private static async Task<IResult> GetAiJobs(AiJobTracker tracker, AppDbContext db, CancellationToken ct)
+    {
+        var snapshot = tracker.Snapshot();
+        if (snapshot.Count == 0) return Results.Ok(Array.Empty<AiJobDto>());
+
+        var ids = snapshot.Select(j => j.UserId).Distinct().ToList();
+        var emails = await db.Users
+            .Where(u => ids.Contains(u.Id))
+            .Select(u => new { u.Id, u.Email })
+            .ToDictionaryAsync(u => u.Id, u => u.Email, ct);
+
+        var now = DateTimeOffset.UtcNow;
+        var dtos = snapshot.Select(j => new AiJobDto(
+            emails.GetValueOrDefault(j.UserId) ?? "(unknown)",
+            j.Kind.ToString(),
+            j.Trigger.ToString(),
+            j.Label,
+            j.StartedAt,
+            (int)Math.Max(0, (now - j.StartedAt).TotalSeconds))).ToList();
+        return Results.Ok(dtos);
     }
 
     private static async Task<IResult> GetHouseStyle(AppDbContext db, CancellationToken ct)

@@ -1,0 +1,77 @@
+@page "/settings/ai-jobs"
+@attribute [Authorize]
+@implements IDisposable
+@inject ApiClient Api
+
+<PageTitle>AI activity · The Daily RSS</PageTitle>
+
+<SettingsShell Current="ai-jobs" Crumb="AI activity (admin)">
+    <h1>AI activity</h1>
+    <div class="tdr-settings-intro">
+        AI generations running right now, across every reader — both the nightly scheduled jobs and ones a
+        reader kicked off by hand. The list refreshes automatically; a job disappears when it finishes.
+        Nothing is stored, so this is empty after a restart.
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="tdr-error">@_error</div>
+    }
+
+    @if (_jobs is null)
+    {
+        <p class="tdr-hint">Loading…</p>
+    }
+    else if (_jobs.Count == 0)
+    {
+        <p class="tdr-hint">No AI jobs running right now.</p>
+    }
+    else
+    {
+        <div class="tdr-jobs">
+            @foreach (var j in _jobs)
+            {
+                <div class="tdr-job">
+                    <span class="kind">@j.Kind</span>
+                    <span class="label">@(string.IsNullOrEmpty(j.Label) ? "—" : j.Label)</span>
+                    <span class="who">@j.User</span>
+                    <span class="tdr-trigger @j.Trigger.ToLowerInvariant()">@j.Trigger</span>
+                    <span class="elapsed">@Format(j.ElapsedSeconds)</span>
+                </div>
+            }
+        </div>
+    }
+
+    <div class="tdr-hint" style="margin-top:12px">
+        @(_jobs is null ? "" : $"{_jobs.Count} running · refreshes every 2s")
+    </div>
+</SettingsShell>
+
+@code {
+    private List<AiJobDto>? _jobs;
+    private string? _error;
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Refresh();
+        // Poll on a timer; the per-job elapsed counters come from the server so they stay accurate.
+        _timer = new Timer(async _ => await Refresh(), null, 2000, 2000);
+    }
+
+    private async Task Refresh()
+    {
+        try
+        {
+            var jobs = await Api.GetAiJobsAsync();
+            _jobs = jobs;
+            _error = null;
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static string Format(int s) => s < 60 ? $"{s}s" : $"{s / 60}m {s % 60:00}s";
+
+    public void Dispose() => _timer?.Dispose();
+}

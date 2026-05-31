@@ -1,0 +1,29 @@
+@implements IDisposable
+
+@* A live "the editor is writing…" indicator for in-flight AI generation. The model is now streamed with
+   only an inactivity timeout, so a long local-model run is expected — this reassures the reader it's
+   working and shows elapsed time, rather than a dead spinner. *@
+<div class="tdr-ai-writing" role="status" aria-live="polite">
+    <span class="tdr-ai-quill" aria-hidden="true"></span>
+    <span class="tdr-ai-writing-text">@Message<span class="tdr-ai-dots"><i>.</i><i>.</i><i>.</i></span></span>
+    <span class="tdr-ai-elapsed">@Format(_elapsed)</span>
+</div>
+@if (Hint is not null)
+{
+    <div class="tdr-hint">@Hint</div>
+}
+
+@code {
+    [Parameter] public string Message { get; set; } = "The editor is writing";
+    [Parameter] public string? Hint { get; set; }
+
+    private int _elapsed;
+    private Timer? _timer;
+
+    protected override void OnInitialized() =>
+        _timer = new Timer(_ => { _elapsed++; InvokeAsync(StateHasChanged); }, null, 1000, 1000);
+
+    private static string Format(int s) => s < 60 ? $"{s}s" : $"{s / 60}m {s % 60:00}s";
+
+    public void Dispose() => _timer?.Dispose();
+}
