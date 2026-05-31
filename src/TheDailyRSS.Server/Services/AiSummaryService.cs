@@ -13,8 +13,12 @@ using static TheDailyRSS.Server.Services.ArticleQueries;
 namespace TheDailyRSS.Server.Services;
 
 /// <summary>Raised when a BYOK summary can't be produced (misconfiguration or upstream LLM error).
-/// The endpoint surfaces <see cref="Exception.Message"/> to the client.</summary>
-public sealed class AiException(string message) : Exception(message);
+/// The endpoint surfaces <see cref="Exception.Message"/> to the client. <see cref="Benign"/> marks the
+/// no-op cases (nothing to summarise) so they're not recorded in the admin error log.</summary>
+public sealed class AiException(string message, bool benign = false) : Exception(message)
+{
+    public bool Benign { get; } = benign;
+}
 
 /// <summary>Generates and caches per-user AI digests of an edition (daily) or week (weekly),
 /// calling the user's own OpenAI-compatible endpoint with their key.</summary>
@@ -142,33 +146,41 @@ public sealed class AiSummaryService(
         AiJobTrigger trigger = AiJobTrigger.Interactive)
     {
         EnsureConfigured(user);
-        using var _ = jobs.Begin(user.Id,
-            kind == AiSummaryKind.Weekly ? AiJobKind.Weekly : AiJobKind.Daily, trigger, $"{start:MMM d}");
-
-        var corpus = await BuildCorpusAsync(user.Id, start, end, ct);
-        if (corpus.ArticleCount == 0)
-            throw new AiException("There are no articles in this period to summarise.");
-
-        var houseStyle = await HouseStyleAsync(ct);
-        var content = await CallLlmAsync(user, houseStyle, kind, start, end, corpus.Text, ct);
-        // The model cites stories by their bracketed number; we render the authoritative source list
-        // ourselves so the links are always correct (a small local model would mangle copied URLs).
-        content = AppendSources(content, corpus.Refs);
-
-        var existing = await db.AiSummaries.FirstOrDefaultAsync(
-            s => s.UserId == user.Id && s.Kind == kind && s.PeriodStart == start && s.PeriodEnd == end, ct);
-        if (existing is null)
+        var jobKind = kind == AiSummaryKind.Weekly ? AiJobKind.Weekly : AiJobKind.Daily;
+        var label = $"{start:MMM d}";
+        using var _ = jobs.Begin(user.Id, jobKind, trigger, label);
+        try
         {
-            existing = new AiSummary { UserId = user.Id, Kind = kind, PeriodStart = start, PeriodEnd = end };
-            db.AiSummaries.Add(existing);
-        }
-        existing.Content = content;
-        existing.Model = user.AiModel!;
-        existing.ArticleCount = corpus.ArticleCount;
-        existing.GeneratedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(ct);
+            var corpus = await BuildCorpusAsync(user.Id, start, end, ct);
+            if (corpus.ArticleCount == 0)
+                throw new AiException("There are no articles in this period to summarise.", benign: true);
 
-        return ToDto(existing);
+            var houseStyle = await HouseStyleAsync(ct);
+            var content = await CallLlmAsync(user, houseStyle, kind, start, end, corpus.Text, ct);
+            // The model cites stories by their bracketed number; we render the authoritative source list
+            // ourselves so the links are always correct (a small local model would mangle copied URLs).
+            content = AppendSources(content, corpus.Refs);
+
+            var existing = await db.AiSummaries.FirstOrDefaultAsync(
+                s => s.UserId == user.Id && s.Kind == kind && s.PeriodStart == start && s.PeriodEnd == end, ct);
+            if (existing is null)
+            {
+                existing = new AiSummary { UserId = user.Id, Kind = kind, PeriodStart = start, PeriodEnd = end };
+                db.AiSummaries.Add(existing);
+            }
+            existing.Content = content;
+            existing.Model = user.AiModel!;
+            existing.ArticleCount = corpus.ArticleCount;
+            existing.GeneratedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            return ToDto(existing);
+        }
+        catch (AiException ex) when (!ex.Benign)
+        {
+            await RecordErrorAsync(user, jobKind, trigger, label, ex.Message);
+            throw;
+        }
     }
 
     // ── Per-article TL;DR ───────────────────────────────────────────────
@@ -187,38 +199,46 @@ public sealed class AiSummaryService(
         AiJobTrigger trigger = AiJobTrigger.Interactive)
     {
         EnsureConfigured(user);
-        using var _ = jobs.Begin(user.Id, AiJobKind.Article, trigger, article.Title.Truncate(80));
-
-        // Same precedence as the read path: reader-mode extraction, then feed content, then the teaser.
-        var raw = !string.IsNullOrEmpty(article.FullContentHtml) ? article.FullContentHtml
-            : !string.IsNullOrWhiteSpace(article.ContentHtml) ? article.ContentHtml
-            : article.Summary;
-        var body = Strip(raw);
-        if (string.IsNullOrWhiteSpace(body))
-            throw new AiException("There's no article text to summarise.");
-        if (body.Length > MaxArticleChars) body = body[..MaxArticleChars] + "…";
-
-        var system = new StringBuilder(await HouseStyleAsync(ct));
-        system.Append("\n\n").Append(ArticleSummaryRules);
-        if (!string.IsNullOrWhiteSpace(user.AiSystemPrompt))
-            system.Append("\n\nThe reader describes their interests as follows; weight the summary accordingly:\n")
-                .Append(user.AiSystemPrompt!.Trim());
-
-        var content = await PostChatAsync(user, system.ToString(), $"# {article.Title}\n\n{body}", 0.3, ct);
-
-        var existing = await db.ArticleSummaries
-            .FirstOrDefaultAsync(s => s.UserId == user.Id && s.ArticleId == article.Id, ct);
-        if (existing is null)
+        var label = article.Title.Truncate(80);
+        using var _ = jobs.Begin(user.Id, AiJobKind.Article, trigger, label);
+        try
         {
-            existing = new ArticleSummary { UserId = user.Id, ArticleId = article.Id };
-            db.ArticleSummaries.Add(existing);
-        }
-        existing.Content = content;
-        existing.Model = user.AiModel!;
-        existing.GeneratedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(ct);
+            // Same precedence as the read path: reader-mode extraction, then feed content, then the teaser.
+            var raw = !string.IsNullOrEmpty(article.FullContentHtml) ? article.FullContentHtml
+                : !string.IsNullOrWhiteSpace(article.ContentHtml) ? article.ContentHtml
+                : article.Summary;
+            var body = Strip(raw);
+            if (string.IsNullOrWhiteSpace(body))
+                throw new AiException("There's no article text to summarise.", benign: true);
+            if (body.Length > MaxArticleChars) body = body[..MaxArticleChars] + "…";
 
-        return new ArticleAiSummaryDto(content, existing.Model, existing.GeneratedAt);
+            var system = new StringBuilder(await HouseStyleAsync(ct));
+            system.Append("\n\n").Append(ArticleSummaryRules);
+            if (!string.IsNullOrWhiteSpace(user.AiSystemPrompt))
+                system.Append("\n\nThe reader describes their interests as follows; weight the summary accordingly:\n")
+                    .Append(user.AiSystemPrompt!.Trim());
+
+            var content = await PostChatAsync(user, system.ToString(), $"# {article.Title}\n\n{body}", 0.3, ct);
+
+            var existing = await db.ArticleSummaries
+                .FirstOrDefaultAsync(s => s.UserId == user.Id && s.ArticleId == article.Id, ct);
+            if (existing is null)
+            {
+                existing = new ArticleSummary { UserId = user.Id, ArticleId = article.Id };
+                db.ArticleSummaries.Add(existing);
+            }
+            existing.Content = content;
+            existing.Model = user.AiModel!;
+            existing.GeneratedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            return new ArticleAiSummaryDto(content, existing.Model, existing.GeneratedAt);
+        }
+        catch (AiException ex) when (!ex.Benign)
+        {
+            await RecordErrorAsync(user, AiJobKind.Article, trigger, label, ex.Message);
+            throw;
+        }
     }
 
     // ── The Weekly ──────────────────────────────────────────────────────
@@ -245,34 +265,42 @@ public sealed class AiSummaryService(
         AiJobTrigger trigger = AiJobTrigger.Interactive)
     {
         EnsureConfigured(user);
-        using var _ = jobs.Begin(user.Id, AiJobKind.Weekly, trigger, $"{start:MMM d} – {end:MMM d}");
-
-        var corpus = await BuildWeeklyCorpusAsync(user.Id, start, end, ct);
-        if (corpus.Items.Count == 0)
-            throw new AiException("There are no articles in this week to curate.");
-
-        var houseStyle = await HouseStyleAsync(ct);
-        var raw = await PostChatAsync(user, WeeklyCurationSystem(houseStyle, user), WeeklyCurationUser(start, end, corpus.Text), 0.3, ct);
-        var curation = BuildCurationFromResponse(raw, corpus);
-
-        // Second pass: rewrite the masthead + editor's note from the full text of the picks, so the
-        // front-page prose is grounded in the actual stories rather than headlines + 400-char blurbs.
-        curation = await RefineWeeklyNoteAsync(user, houseStyle, curation, ct);
-
-        var existing = await db.AiSummaries.FirstOrDefaultAsync(
-            s => s.UserId == user.Id && s.Kind == AiSummaryKind.Weekly && s.PeriodStart == start && s.PeriodEnd == end, ct);
-        if (existing is null)
+        var label = $"{start:MMM d} – {end:MMM d}";
+        using var _ = jobs.Begin(user.Id, AiJobKind.Weekly, trigger, label);
+        try
         {
-            existing = new AiSummary { UserId = user.Id, Kind = AiSummaryKind.Weekly, PeriodStart = start, PeriodEnd = end };
-            db.AiSummaries.Add(existing);
-        }
-        existing.Content = JsonSerializer.Serialize(curation);
-        existing.Model = user.AiModel!;
-        existing.ArticleCount = corpus.Items.Count;
-        existing.GeneratedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(ct);
+            var corpus = await BuildWeeklyCorpusAsync(user.Id, start, end, ct);
+            if (corpus.Items.Count == 0)
+                throw new AiException("There are no articles in this week to curate.", benign: true);
 
-        return await BuildWeeklyDtoAsync(user.Id, start, end, curation, existing.Model, existing.ArticleCount, existing.GeneratedAt, ct);
+            var houseStyle = await HouseStyleAsync(ct);
+            var raw = await PostChatAsync(user, WeeklyCurationSystem(houseStyle, user), WeeklyCurationUser(start, end, corpus.Text), 0.3, ct);
+            var curation = BuildCurationFromResponse(raw, corpus);
+
+            // Second pass: rewrite the masthead + editor's note from the full text of the picks, so the
+            // front-page prose is grounded in the actual stories rather than headlines + 400-char blurbs.
+            curation = await RefineWeeklyNoteAsync(user, houseStyle, curation, ct);
+
+            var existing = await db.AiSummaries.FirstOrDefaultAsync(
+                s => s.UserId == user.Id && s.Kind == AiSummaryKind.Weekly && s.PeriodStart == start && s.PeriodEnd == end, ct);
+            if (existing is null)
+            {
+                existing = new AiSummary { UserId = user.Id, Kind = AiSummaryKind.Weekly, PeriodStart = start, PeriodEnd = end };
+                db.AiSummaries.Add(existing);
+            }
+            existing.Content = JsonSerializer.Serialize(curation);
+            existing.Model = user.AiModel!;
+            existing.ArticleCount = corpus.Items.Count;
+            existing.GeneratedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            return await BuildWeeklyDtoAsync(user.Id, start, end, curation, existing.Model, existing.ArticleCount, existing.GeneratedAt, ct);
+        }
+        catch (AiException ex) when (!ex.Benign)
+        {
+            await RecordErrorAsync(user, AiJobKind.Weekly, trigger, label, ex.Message);
+            throw;
+        }
     }
 
     /// <summary>Pulls the week's visible articles, capped per category (most-recent-first) and overall, and
@@ -659,11 +687,22 @@ public sealed class AiSummaryService(
 
             // We asked for SSE, but be forgiving: a server that ignored stream:true returns a single JSON
             // completion (application/json) — parse that directly rather than treating it as an empty stream.
-            var text = resp.Content.Headers.ContentType?.MediaType is "application/json"
+            var (text, finish) = resp.Content.Headers.ContentType?.MediaType is "application/json"
                 ? await ReadSingleCompletionAsync(resp, linked.Token)
                 : await ReadStreamedContentAsync(resp, idleCts, idle, linked.Token);
             if (string.IsNullOrWhiteSpace(text))
-                throw new AiException("The AI endpoint returned an empty response.");
+            {
+                // Logged at Warning (not just thrown) so it's visible even when Production mutes Information.
+                // finish_reason="length" here means the model hit its output/context budget — typically the
+                // prompt is too big for the model's window (often inflated by the endpoint's own overhead).
+                log.LogWarning(
+                    "AI endpoint returned no content for user {UserId} (finish_reason={Finish}). If 'length', the "
+                    + "prompt likely exceeded the model's context window.", user.Id, finish ?? "(none)");
+                throw new AiException(finish == "length"
+                    ? "The AI endpoint returned no text — the model hit its length limit, so the briefing was "
+                      + "probably too large for its context window. Try a model with a bigger context, or fewer feeds."
+                    : "The AI endpoint returned an empty response.");
+            }
             return text.Trim();
         }
         // idleCts fired (the model went quiet) but the caller didn't cancel — surface a clear, retriable
@@ -685,14 +724,16 @@ public sealed class AiSummaryService(
 
     /// <summary>Reads an OpenAI-style SSE stream, reassembling the assistant message from the
     /// <c>delta.content</c> fragments (reasoning deltas and keep-alive comments are ignored but still
-    /// count as activity, so they hold the idle timer open). Stops on <c>data: [DONE]</c>.</summary>
-    private static async Task<string> ReadStreamedContentAsync(
+    /// count as activity, so they hold the idle timer open). Stops on <c>data: [DONE]</c>. Also returns the
+    /// last <c>finish_reason</c> seen, so an empty completion can report <em>why</em> (e.g. "length").</summary>
+    private static async Task<(string Content, string? FinishReason)> ReadStreamedContentAsync(
         HttpResponseMessage resp, CancellationTokenSource idleCts, TimeSpan idle, CancellationToken ct)
     {
         await using var stream = await resp.Content.ReadAsStreamAsync(ct);
         using var reader = new StreamReader(stream);
 
         var content = new StringBuilder();
+        string? finish = null;
         string? line;
         while ((line = await reader.ReadLineAsync(ct)) is not null)
         {
@@ -707,19 +748,57 @@ public sealed class AiSummaryService(
             try { chunk = JsonSerializer.Deserialize<StreamChunk>(data); }
             catch (JsonException) { continue; } // tolerate a stray non-JSON keep-alive line
 
-            var delta = chunk?.Choices?.FirstOrDefault()?.Delta?.Content;
-            if (!string.IsNullOrEmpty(delta)) content.Append(delta);
+            var choice = chunk?.Choices?.FirstOrDefault();
+            if (choice?.FinishReason is { } fr) finish = fr;
+            if (!string.IsNullOrEmpty(choice?.Delta?.Content)) content.Append(choice.Delta.Content);
         }
-        return content.ToString();
+        return (content.ToString(), finish);
     }
 
     /// <summary>Fallback for a server that ignored stream:true and returned a single JSON completion.</summary>
-    private static async Task<string> ReadSingleCompletionAsync(HttpResponseMessage resp, CancellationToken ct)
+    private static async Task<(string Content, string? FinishReason)> ReadSingleCompletionAsync(
+        HttpResponseMessage resp, CancellationToken ct)
     {
         ChatResponse? parsed;
         try { parsed = await resp.Content.ReadFromJsonAsync<ChatResponse>(ct); }
         catch (JsonException) { throw new AiException("The AI endpoint returned an unexpected response."); }
-        return parsed?.Choices?.FirstOrDefault()?.Message?.Content ?? "";
+        var choice = parsed?.Choices?.FirstOrDefault();
+        return (choice?.Message?.Content ?? "", choice?.FinishReason);
+    }
+
+    /// <summary>How many recent AI errors the admin log keeps; older rows are pruned on each insert.</summary>
+    private const int ErrorLogKeep = 100;
+
+    /// <summary>Records a (non-benign) AI failure to the admin error log, then prunes to the most recent
+    /// <see cref="ErrorLogKeep"/>. Best-effort: never lets a logging failure mask the original error.</summary>
+    private async Task RecordErrorAsync(AppUser user, AiJobKind kind, AiJobTrigger trigger, string? label, string message)
+    {
+        try
+        {
+            var who = user.Email ?? user.UserName ?? user.Id.ToString();
+            db.AiErrorLogs.Add(new AiErrorLog
+            {
+                User = who.Truncate(320)!,
+                Kind = kind.ToString(),
+                Trigger = trigger.ToString(),
+                Label = label?.Truncate(300),
+                Message = message.Truncate(4000)!,
+            });
+            // Use None: record the audit even when the request that failed was itself being cancelled.
+            await db.SaveChangesAsync(CancellationToken.None);
+
+            var stale = await db.AiErrorLogs
+                .OrderByDescending(e => e.OccurredAt)
+                .Select(e => e.Id)
+                .Skip(ErrorLogKeep)
+                .ToListAsync(CancellationToken.None);
+            if (stale.Count > 0)
+                await db.AiErrorLogs.Where(e => stale.Contains(e.Id)).ExecuteDeleteAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning(ex, "Could not record AI error for user {UserId}", user.Id);
+        }
     }
 
     private string DecryptKey(string encrypted)
@@ -764,14 +843,16 @@ public sealed class AiSummaryService(
         [property: JsonPropertyName("choices")] IReadOnlyList<StreamChoice>? Choices);
 
     private sealed record StreamChoice(
-        [property: JsonPropertyName("delta")] ChatMessage? Delta);
+        [property: JsonPropertyName("delta")] ChatMessage? Delta,
+        [property: JsonPropertyName("finish_reason")] string? FinishReason);
 
     // Non-streaming shapes, for a server that ignored stream:true and returned one JSON completion.
     private sealed record ChatResponse(
         [property: JsonPropertyName("choices")] IReadOnlyList<ChatChoice>? Choices);
 
     private sealed record ChatChoice(
-        [property: JsonPropertyName("message")] ChatMessage? Message);
+        [property: JsonPropertyName("message")] ChatMessage? Message,
+        [property: JsonPropertyName("finish_reason")] string? FinishReason);
 
     // ── The Weekly: corpus, the model's reply shape, and the cached selection ──
     private sealed record WeeklyCorpusItem(int Index, Guid ArticleId, Guid CategoryId);

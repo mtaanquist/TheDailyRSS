@@ -67,6 +67,26 @@ public sealed class AiSummary
     public DateTimeOffset GeneratedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
+/// <summary>A recorded AI generation failure, for the admin error log. Denormalised (no FK to the user)
+/// so the audit survives a user deletion and never cascades away. Bounded — the service prunes to the
+/// most recent N on each insert.</summary>
+public sealed class AiErrorLog
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public DateTimeOffset OccurredAt { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>The reader the job was for (email/identifier), captured at failure time.</summary>
+    public string User { get; set; } = "";
+    /// <summary>"Daily" / "Weekly" / "Article".</summary>
+    public string Kind { get; set; } = "";
+    /// <summary>"Scheduled" (nightly worker) or "Interactive" (a reader clicked generate).</summary>
+    public string Trigger { get; set; } = "";
+    /// <summary>The job's label (date, week range, or article title).</summary>
+    public string? Label { get; set; }
+    /// <summary>The raw error message, surfaced verbatim so the admin can read what actually went wrong.</summary>
+    public string Message { get; set; } = "";
+}
+
 /// <summary>A global, admin-editable site setting (one row per key). Used for things like the AI
 /// "house style" preamble. An absent or blank row means "fall back to the built-in default", so
 /// no seed migration is needed.</summary>

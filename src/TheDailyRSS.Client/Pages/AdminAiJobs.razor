@@ -45,10 +45,44 @@
     <div class="tdr-hint" style="margin-top:12px">
         @(_jobs is null ? "" : $"{_jobs.Count} running · refreshes every 2s")
     </div>
+
+    <h2 class="tdr-subhead" style="margin-top:28px">Recent errors</h2>
+    <div class="tdr-settings-intro" style="margin-top:4px">
+        The last few AI failures, newest first. Click one to read the raw error message. These persist
+        across restarts; the log keeps the most recent 100.
+    </div>
+
+    @if (_errors is null)
+    {
+        <p class="tdr-hint">Loading…</p>
+    }
+    else if (_errors.Count == 0)
+    {
+        <p class="tdr-hint">No errors recorded.</p>
+    }
+    else
+    {
+        <div class="tdr-jobs">
+            @foreach (var e in _errors)
+            {
+                <details class="tdr-errrow">
+                    <summary>
+                        <span class="kind">@e.Kind</span>
+                        <span class="label">@(string.IsNullOrEmpty(e.Label) ? "—" : e.Label)</span>
+                        <span class="who">@e.User</span>
+                        <span class="tdr-trigger @e.Trigger.ToLowerInvariant()">@e.Trigger</span>
+                        <span class="elapsed">@e.OccurredAt.LocalDateTime.ToString("MMM d, HH:mm")</span>
+                    </summary>
+                    <pre class="tdr-errmsg">@e.Message</pre>
+                </details>
+            }
+        </div>
+    }
 </SettingsShell>
 
 @code {
     private List<AiJobDto>? _jobs;
+    private List<AiErrorDto>? _errors;
     private string? _error;
     private Timer? _timer;
 
@@ -63,8 +97,8 @@
     {
         try
         {
-            var jobs = await Api.GetAiJobsAsync();
-            _jobs = jobs;
+            _jobs = await Api.GetAiJobsAsync();
+            _errors = await Api.GetAiErrorsAsync();
             _error = null;
         }
         catch (ApiException ex) { _error = ex.Message; }
