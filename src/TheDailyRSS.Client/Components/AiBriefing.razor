@@ -82,20 +82,24 @@
             {
                 await Task.Delay(3500, ct);
                 var dto = await Api.GetDailySummaryAsync(Date);
-                if (dto is not null) { _summary = dto; _loading = false; StateHasChanged(); return; }
+                if (dto is not null) { _summary = dto; _loading = false; await InvokeAsync(StateHasChanged); return; }
                 var activity = await Api.GetAiActivityAsync();
                 if (!activity.Running.Contains("Daily"))
                 {
                     _error = FreshError(activity.LastError, "Daily", since)
                         ?? "The briefing couldn't be generated — there may be no stories for this day.";
-                    _loading = false; StateHasChanged(); return;
+                    _loading = false; await InvokeAsync(StateHasChanged); return;
                 }
             }
             _error = "Still working after several minutes — check back shortly.";
-            _loading = false; StateHasChanged();
+            _loading = false; await InvokeAsync(StateHasChanged);
         }
         catch (OperationCanceledException) { /* navigated away or restarted */ }
-        catch (ApiException ex) { _error = ex.Message; _loading = false; StateHasChanged(); }
+        catch (Exception ex)
+        {
+            _error = (ex as ApiException)?.Message ?? "Something went wrong while waiting for the briefing.";
+            _loading = false; await InvokeAsync(StateHasChanged);
+        }
     }
 
     /// <summary>Only surface the recorded error if it's from this run (matching kind, after we enqueued).</summary>
