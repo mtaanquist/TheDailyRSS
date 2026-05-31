@@ -20,7 +20,7 @@ public static class MarkdownLite
         void FlushParagraph()
         {
             if (paragraph.Count == 0) return;
-            sb.Append("<p>").Append(Inline(string.Join(" ", paragraph))).Append("</p>");
+            sb.Append("<p>").Append(BreakBeforeLeadIns(Inline(string.Join(" ", paragraph)))).Append("</p>");
             paragraph.Clear();
         }
         void CloseList()
@@ -76,6 +76,15 @@ public static class MarkdownLite
         CloseList();
         return sb.ToString();
     }
+
+    /// <summary>Puts a line break before each in-paragraph bold "lead-in:" after the first, so a briefing
+    /// the model wrote as one running paragraph of topics still reads one-topic-per-line. Matches only a bold
+    /// run terminated by a colon (the lead-in shape) that sits mid-paragraph (preceded by other text), so a
+    /// leading lead-in and ordinary mid-sentence bold are left alone; the intended bullet-list format, which
+    /// renders as &lt;li&gt; rather than &lt;p&gt;, never reaches here.</summary>
+    private static string BreakBeforeLeadIns(string html) =>
+        System.Text.RegularExpressions.Regex.Replace(
+            html, @"(?<=\S)\s+(<strong>[^<]*:</strong>|<strong>[^<]*</strong>:)", "<br>$1");
 
     /// <summary>Inline formatting on already-escaped text: [text](url) links, **bold**, *italic*, `code`.</summary>
     private static string Inline(string text)
