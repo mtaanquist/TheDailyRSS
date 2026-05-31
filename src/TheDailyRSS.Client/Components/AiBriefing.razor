@@ -5,7 +5,8 @@
 <div class="tdr-ai-panel">
     @if (_loading)
     {
-        <p class="tdr-ai-status">Composing your briefing… this can take a moment.</p>
+        <AiWritingIndicator Message="The editor is composing your briefing"
+                            Hint="Reading the day's stories — a local model can take a little while." />
     }
     else if (_error is not null)
     {

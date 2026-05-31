@@ -52,6 +52,17 @@ public sealed class UpdateAiHouseStyleRequest
     public string? Value { get; set; }
 }
 
+/// <summary>An AI generation that's running right now, for the admin activity view. <see cref="Kind"/> is
+/// "Daily"/"Weekly"/"Article"; <see cref="Trigger"/> is "Scheduled" (nightly worker) or "Interactive"
+/// (a reader clicked generate). <see cref="ElapsedSeconds"/> is how long it's been running.</summary>
+public sealed record AiJobDto(
+    string User,
+    string Kind,
+    string Trigger,
+    string? Label,
+    DateTimeOffset StartedAt,
+    int ElapsedSeconds);
+
 /// <summary>A per-user AI TL;DR of a single article (distinct from <see cref="ArticleSummaryDto"/>,
 /// which is an article card in an edition). Returned when one is generated on demand.</summary>
 public sealed record ArticleAiSummaryDto(

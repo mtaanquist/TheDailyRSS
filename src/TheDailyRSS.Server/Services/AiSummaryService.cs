@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using TheDailyRSS.Server.Data;
 using TheDailyRSS.Shared;
 using static TheDailyRSS.Server.Services.ArticleQueries;
@@ -21,8 +22,12 @@ public sealed class AiSummaryService(
     AppDbContext db,
     IHttpClientFactory httpFactory,
     IDataProtectionProvider dpProvider,
+    IOptions<FeedOptions> options,
+    AiJobTracker jobs,
     ILogger<AiSummaryService> log)
 {
+    private readonly FeedOptions _options = options.Value;
+
     private const int MaxArticles = 150;
     private const int MaxSummaryChars = 400;
 
@@ -133,9 +138,12 @@ public sealed class AiSummaryService(
     /// <summary>Generates (or regenerates) and caches a digest for the period. Throws
     /// <see cref="AiException"/> when AI isn't configured or the upstream call fails.</summary>
     public async Task<AiSummaryDto> GenerateAsync(
-        AppUser user, AiSummaryKind kind, DateOnly start, DateOnly end, CancellationToken ct)
+        AppUser user, AiSummaryKind kind, DateOnly start, DateOnly end, CancellationToken ct,
+        AiJobTrigger trigger = AiJobTrigger.Interactive)
     {
         EnsureConfigured(user);
+        using var _ = jobs.Begin(user.Id,
+            kind == AiSummaryKind.Weekly ? AiJobKind.Weekly : AiJobKind.Daily, trigger, $"{start:MMM d}");
 
         var corpus = await BuildCorpusAsync(user.Id, start, end, ct);
         if (corpus.ArticleCount == 0)
@@ -175,9 +183,11 @@ public sealed class AiSummaryService(
     /// <summary>Generates (or regenerates) and caches a per-user TL;DR for a single article, using the
     /// reader's own BYOK endpoint and the fullest body available. Throws <see cref="AiException"/> when
     /// AI isn't configured, there's no usable text, or the upstream call fails.</summary>
-    public async Task<ArticleAiSummaryDto> SummarizeArticleAsync(AppUser user, Article article, CancellationToken ct)
+    public async Task<ArticleAiSummaryDto> SummarizeArticleAsync(AppUser user, Article article, CancellationToken ct,
+        AiJobTrigger trigger = AiJobTrigger.Interactive)
     {
         EnsureConfigured(user);
+        using var _ = jobs.Begin(user.Id, AiJobKind.Article, trigger, article.Title.Truncate(80));
 
         // Same precedence as the read path: reader-mode extraction, then feed content, then the teaser.
         var raw = !string.IsNullOrEmpty(article.FullContentHtml) ? article.FullContentHtml
@@ -231,9 +241,11 @@ public sealed class AiSummaryService(
     /// <summary>Curates (or re-curates) "The Weekly" for a window: the agent picks the most important
     /// stories per category and writes the masthead, then we cache the selection and return the edition.</summary>
     public async Task<WeeklyEditionDto> GenerateWeeklyEditionAsync(
-        AppUser user, DateOnly start, DateOnly end, CancellationToken ct)
+        AppUser user, DateOnly start, DateOnly end, CancellationToken ct,
+        AiJobTrigger trigger = AiJobTrigger.Interactive)
     {
         EnsureConfigured(user);
+        using var _ = jobs.Begin(user.Id, AiJobKind.Weekly, trigger, $"{start:MMM d} – {end:MMM d}");
 
         var corpus = await BuildWeeklyCorpusAsync(user.Id, start, end, ct);
         if (corpus.Items.Count == 0)
@@ -598,7 +610,11 @@ public sealed class AiSummaryService(
     }
 
     /// <summary>Sends one chat-completion against the user's BYOK endpoint and returns the message text.
-    /// Translates transport/HTTP/parse failures into reader-friendly <see cref="AiException"/>s.</summary>
+    /// The response is streamed (SSE) so a slow-but-progressing model keeps the connection alive: the
+    /// "ai" client carries no wall-clock timeout, and instead we abort only after
+    /// <see cref="FeedOptions.AiRequestTimeoutSeconds"/> elapse with no new bytes — reset on every chunk.
+    /// So a long generation is fine; only a genuinely stalled connection is cut. Translates
+    /// transport/HTTP/parse/stall failures into reader-friendly <see cref="AiException"/>s.</summary>
     private async Task<string> PostChatAsync(
         AppUser user, string system, string userMsg, double temperature, CancellationToken ct)
     {
@@ -608,43 +624,102 @@ public sealed class AiSummaryService(
         var payload = new ChatRequest(
             user.AiModel!,
             [new ChatMessage("system", system), new ChatMessage("user", userMsg)],
-            temperature);
+            temperature,
+            Stream: true);
 
         using var req = new HttpRequestMessage(HttpMethod.Post, CombineUrl(user.AiBaseUrl!, "chat/completions"))
         {
             Content = JsonContent.Create(payload),
         };
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        req.Headers.Accept.ParseAdd("text/event-stream");
 
-        HttpResponseMessage resp;
+        // Inactivity ("idle") timeout: idleCts fires if no data arrives for `idle`; we reschedule it on
+        // every chunk. linked also folds in the caller's ct (request abort / shutdown), so we can tell a
+        // stall (idleCts fired, ct quiet) apart from a real cancellation (ct fired) in the catch below.
+        var idle = TimeSpan.FromSeconds(Math.Max(1, _options.AiRequestTimeoutSeconds));
+        using var idleCts = new CancellationTokenSource();
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, idleCts.Token);
+
         try
         {
-            resp = await http.SendAsync(req, ct);
+            idleCts.CancelAfter(idle);
+            using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, linked.Token);
+            idleCts.CancelAfter(idle); // headers arrived — restart the idle window for the body
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync(linked.Token);
+                log.LogWarning("AI endpoint returned {Status} for user {UserId}: {Body}", resp.StatusCode, user.Id, body.Truncate(500));
+                var hint = resp.StatusCode == System.Net.HttpStatusCode.Unauthorized ? " Check your API key."
+                    : resp.StatusCode == System.Net.HttpStatusCode.NotFound ? " Check the base URL and model."
+                    : "";
+                throw new AiException($"The AI endpoint returned an error ({(int)resp.StatusCode}).{hint}");
+            }
+
+            // We asked for SSE, but be forgiving: a server that ignored stream:true returns a single JSON
+            // completion (application/json) — parse that directly rather than treating it as an empty stream.
+            var text = resp.Content.Headers.ContentType?.MediaType is "application/json"
+                ? await ReadSingleCompletionAsync(resp, linked.Token)
+                : await ReadStreamedContentAsync(resp, idleCts, idle, linked.Token);
+            if (string.IsNullOrWhiteSpace(text))
+                throw new AiException("The AI endpoint returned an empty response.");
+            return text.Trim();
         }
+        // idleCts fired (the model went quiet) but the caller didn't cancel — surface a clear, retriable
+        // stall rather than letting an OperationCanceledException masquerade as a graceful shutdown.
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            log.LogWarning("AI request for user {UserId} stalled (no data for {Idle:0}s)", user.Id, idle.TotalSeconds);
+            throw new AiException(
+                $"The AI endpoint stopped sending data for {idle.TotalSeconds:0}s. If your model is just slow to "
+                + "start, raise Feeds:AiRequestTimeoutSeconds.");
+        }
+        catch (AiException) { throw; }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             log.LogWarning(ex, "AI request failed for user {UserId}", user.Id);
             throw new AiException("Couldn't reach the AI endpoint. Check the base URL and your network.");
         }
+    }
 
-        if (!resp.IsSuccessStatusCode)
+    /// <summary>Reads an OpenAI-style SSE stream, reassembling the assistant message from the
+    /// <c>delta.content</c> fragments (reasoning deltas and keep-alive comments are ignored but still
+    /// count as activity, so they hold the idle timer open). Stops on <c>data: [DONE]</c>.</summary>
+    private static async Task<string> ReadStreamedContentAsync(
+        HttpResponseMessage resp, CancellationTokenSource idleCts, TimeSpan idle, CancellationToken ct)
+    {
+        await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+        using var reader = new StreamReader(stream);
+
+        var content = new StringBuilder();
+        string? line;
+        while ((line = await reader.ReadLineAsync(ct)) is not null)
         {
-            var body = await resp.Content.ReadAsStringAsync(ct);
-            log.LogWarning("AI endpoint returned {Status} for user {UserId}: {Body}", resp.StatusCode, user.Id, body.Truncate(500));
-            var hint = resp.StatusCode == System.Net.HttpStatusCode.Unauthorized ? " Check your API key."
-                : resp.StatusCode == System.Net.HttpStatusCode.NotFound ? " Check the base URL and model."
-                : "";
-            throw new AiException($"The AI endpoint returned an error ({(int)resp.StatusCode}).{hint}");
-        }
+            idleCts.CancelAfter(idle); // any line at all proves the connection is still alive
 
+            if (!line.StartsWith("data:", StringComparison.Ordinal)) continue;
+            var data = line["data:".Length..].Trim();
+            if (data.Length == 0) continue;
+            if (data == "[DONE]") break;
+
+            StreamChunk? chunk;
+            try { chunk = JsonSerializer.Deserialize<StreamChunk>(data); }
+            catch (JsonException) { continue; } // tolerate a stray non-JSON keep-alive line
+
+            var delta = chunk?.Choices?.FirstOrDefault()?.Delta?.Content;
+            if (!string.IsNullOrEmpty(delta)) content.Append(delta);
+        }
+        return content.ToString();
+    }
+
+    /// <summary>Fallback for a server that ignored stream:true and returned a single JSON completion.</summary>
+    private static async Task<string> ReadSingleCompletionAsync(HttpResponseMessage resp, CancellationToken ct)
+    {
         ChatResponse? parsed;
         try { parsed = await resp.Content.ReadFromJsonAsync<ChatResponse>(ct); }
         catch (JsonException) { throw new AiException("The AI endpoint returned an unexpected response."); }
-
-        var text = parsed?.Choices?.FirstOrDefault()?.Message?.Content;
-        if (string.IsNullOrWhiteSpace(text))
-            throw new AiException("The AI endpoint returned an empty response.");
-        return text.Trim();
+        return parsed?.Choices?.FirstOrDefault()?.Message?.Content ?? "";
     }
 
     private string DecryptKey(string encrypted)
@@ -676,12 +751,22 @@ public sealed class AiSummaryService(
     private sealed record ChatRequest(
         [property: JsonPropertyName("model")] string Model,
         [property: JsonPropertyName("messages")] IReadOnlyList<ChatMessage> Messages,
-        [property: JsonPropertyName("temperature")] double Temperature);
+        [property: JsonPropertyName("temperature")] double Temperature,
+        [property: JsonPropertyName("stream")] bool Stream);
 
     private sealed record ChatMessage(
         [property: JsonPropertyName("role")] string Role,
         [property: JsonPropertyName("content")] string Content);
 
+    // Streaming (SSE) chunk shapes: each `data:` line carries an incremental delta. We only consume
+    // delta.content; reasoning_content and other fields are intentionally ignored.
+    private sealed record StreamChunk(
+        [property: JsonPropertyName("choices")] IReadOnlyList<StreamChoice>? Choices);
+
+    private sealed record StreamChoice(
+        [property: JsonPropertyName("delta")] ChatMessage? Delta);
+
+    // Non-streaming shapes, for a server that ignored stream:true and returned one JSON completion.
     private sealed record ChatResponse(
         [property: JsonPropertyName("choices")] IReadOnlyList<ChatChoice>? Choices);
 

@@ -11,6 +11,17 @@ using TheDailyRSS.Server.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── Logging ─────────────────────────────────────────────────────────
+// The default console logger prints no timestamp, which makes `docker logs` useless for working out
+// when (or whether) a background job ran. Use a single timestamped console line per entry, in UTC.
+builder.Logging.ClearProviders();
+builder.Logging.AddSimpleConsole(o =>
+{
+    o.TimestampFormat = "yyyy-MM-dd HH:mm:ss.fff ";
+    o.UseUtcTimestamp = true;
+    o.SingleLine = true;
+});
+
 // ── Data directory (key material, etc.) ─────────────────────────────
 var dataDir = builder.Configuration["DataDir"]
     ?? Path.Combine(builder.Environment.ContentRootPath, "data");
@@ -102,8 +113,8 @@ builder.Services.AddAuthorization(o =>
 // ── App services ────────────────────────────────────────────────────
 // Both outbound clients fetch user-supplied URLs, so both use the SSRF-guarded handler that
 // blocks private/loopback/link-local targets, and both cap the buffered response body.
-var maxResponseBytes = builder.Configuration.GetSection(FeedOptions.SectionName)
-    .Get<FeedOptions>()?.MaxResponseBytes ?? new FeedOptions().MaxResponseBytes;
+var feedOptions = builder.Configuration.GetSection(FeedOptions.SectionName).Get<FeedOptions>() ?? new FeedOptions();
+var maxResponseBytes = feedOptions.MaxResponseBytes;
 
 builder.Services.AddHttpClient("feeds", c =>
 {
@@ -113,10 +124,12 @@ builder.Services.AddHttpClient("feeds", c =>
     c.DefaultRequestHeaders.Accept.ParseAdd("application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.8");
 }).ConfigurePrimaryHttpMessageHandler(() => SsrfGuard.CreateHandler(allowAutoRedirect: true, maxRedirects: 5));
 
-// Client for users' own OpenAI-compatible LLM endpoints (BYOK summaries).
+// Client for users' own OpenAI-compatible LLM endpoints (BYOK summaries). No wall-clock timeout: the
+// completion is streamed and AiSummaryService enforces an inactivity timeout instead, so a slow but
+// progressing local model isn't cut off mid-generation.
 builder.Services.AddHttpClient("ai", c =>
 {
-    c.Timeout = TimeSpan.FromSeconds(120);
+    c.Timeout = Timeout.InfiniteTimeSpan;
     c.MaxResponseContentBufferSize = maxResponseBytes;
 }).ConfigurePrimaryHttpMessageHandler(() => SsrfGuard.CreateHandler(allowAutoRedirect: false));
 
@@ -129,6 +142,7 @@ builder.Services.AddSingleton<HtmlSanitizationService>();
 // Stateless (only IHttpClientFactory/IOptions/ILogger), so a singleton is safe — and lets the
 // singleton backfill hosted service inject it without a captive-dependency on a scoped service.
 builder.Services.AddSingleton<ArticleContentExtractor>();
+builder.Services.AddSingleton<AiJobTracker>();
 builder.Services.AddScoped<FeedDiscoveryService>();
 builder.Services.AddScoped<FeedFetchService>();
 builder.Services.AddScoped<FeedSourceService>();

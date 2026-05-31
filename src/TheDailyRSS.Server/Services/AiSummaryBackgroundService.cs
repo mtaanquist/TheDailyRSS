@@ -83,7 +83,7 @@ public sealed class AiSummaryBackgroundService(
         try
         {
             if (await ai.GetCachedAsync(user.Id, AiSummaryKind.Daily, day, day, ct) is not null) return;
-            await ai.GenerateAsync(user, AiSummaryKind.Daily, day, day, ct);
+            await ai.GenerateAsync(user, AiSummaryKind.Daily, day, day, ct, AiJobTrigger.Scheduled);
             log.LogInformation("Pre-generated daily summary for user {UserId}", user.Id);
         }
         catch (AiException ex) { log.LogInformation("Skipped daily summary for user {UserId}: {Reason}", user.Id, ex.Message); }
@@ -96,7 +96,7 @@ public sealed class AiSummaryBackgroundService(
         {
             // A null edition means it's uncurated (or a legacy markdown row) — (re)curate into the new format.
             if (await ai.GetWeeklyEditionAsync(user.Id, start, end, ct) is not null) return;
-            await ai.GenerateWeeklyEditionAsync(user, start, end, ct);
+            await ai.GenerateWeeklyEditionAsync(user, start, end, ct, AiJobTrigger.Scheduled);
             log.LogInformation("Curated The Weekly for user {UserId}", user.Id);
         }
         catch (AiException ex) { log.LogInformation("Skipped The Weekly for user {UserId}: {Reason}", user.Id, ex.Message); }

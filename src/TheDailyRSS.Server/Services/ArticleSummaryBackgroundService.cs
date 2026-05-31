@@ -76,7 +76,7 @@ public sealed class ArticleSummaryBackgroundService(
             {
                 try
                 {
-                    await ai.SummarizeArticleAsync(user, article, ct);
+                    await ai.SummarizeArticleAsync(user, article, ct, AiJobTrigger.Scheduled);
                 }
                 catch (AiException ex)
                 {

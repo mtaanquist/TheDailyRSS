@@ -52,7 +52,8 @@
     {
         @if (_loading)
         {
-            <p class="tdr-ai-status">Curating The Weekly… the editor is reading the whole week, this can take a moment.</p>
+            <AiWritingIndicator Message="The editor is curating The Weekly"
+                                Hint="Reading the whole week and writing the front page — this can take a while on a local model." />
         }
         else
         {
