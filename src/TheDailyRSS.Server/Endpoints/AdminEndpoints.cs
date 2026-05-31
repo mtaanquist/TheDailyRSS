@@ -97,7 +97,7 @@ public static class AdminEndpoints
 
     private static AiHouseStyleDto HouseStyleDto(string value, bool isDefault) => new(
         value, isDefault, AiSummaryService.DefaultHouseStyle,
-        AiSummaryService.DailyBriefingRules, AiSummaryService.WeeklyCurationRules);
+        AiSummaryService.DailyBriefingRules, AiSummaryService.WeeklyBriefingRules);
 
     private static async Task<IResult> List(AppDbContext db)
     {

@@ -44,10 +44,7 @@ public sealed class AiGenerationWorker(
 
         try
         {
-            if (req.Kind == AiSummaryKind.Weekly)
-                await ai.GenerateWeeklyEditionAsync(user, req.Start, req.End, ct, AiJobTrigger.Interactive);
-            else
-                await ai.GenerateAsync(user, AiSummaryKind.Daily, req.Start, req.End, ct, AiJobTrigger.Interactive);
+            await ai.GenerateAsync(user, req.Kind, req.Start, req.End, ct, AiJobTrigger.Interactive);
         }
         catch (AiException ex)
         {

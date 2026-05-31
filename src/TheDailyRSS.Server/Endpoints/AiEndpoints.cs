@@ -90,7 +90,7 @@ public static class AiEndpoints
         ClaimsPrincipal principal, AiSummaryService ai, IOptions<FeedOptions> opts, CancellationToken ct, string? date = null)
     {
         if (!TryWeek(date, opts.Value, out var start, out var end)) return ApiResults.Fail("Invalid date.");
-        var dto = await ai.GetWeeklyEditionAsync(principal.GetUserId(), start, end, ct);
+        var dto = await ai.GetCachedAsync(principal.GetUserId(), AiSummaryKind.Weekly, start, end, ct);
         return dto is null ? Results.NotFound() : Results.Ok(dto);
     }
 

@@ -94,12 +94,11 @@ public sealed class AiSummaryBackgroundService(
     {
         try
         {
-            // A null edition means it's uncurated (or a legacy markdown row) — (re)curate into the new format.
-            if (await ai.GetWeeklyEditionAsync(user.Id, start, end, ct) is not null) return;
-            await ai.GenerateWeeklyEditionAsync(user, start, end, ct, AiJobTrigger.Scheduled);
-            log.LogInformation("Curated The Weekly for user {UserId}", user.Id);
+            if (await ai.GetCachedAsync(user.Id, AiSummaryKind.Weekly, start, end, ct) is not null) return;
+            await ai.GenerateAsync(user, AiSummaryKind.Weekly, start, end, ct, AiJobTrigger.Scheduled);
+            log.LogInformation("Generated The Weekly for user {UserId}", user.Id);
         }
         catch (AiException ex) { log.LogInformation("Skipped The Weekly for user {UserId}: {Reason}", user.Id, ex.Message); }
-        catch (Exception ex) when (ex is not OperationCanceledException) { log.LogWarning(ex, "Failed to curate The Weekly for user {UserId}", user.Id); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { log.LogWarning(ex, "Failed to generate The Weekly for user {UserId}", user.Id); }
     }
 }
