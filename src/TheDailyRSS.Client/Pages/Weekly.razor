@@ -15,9 +15,7 @@
         <span>@RangeLabel(WeekStart, WeekEnd)</span>
     </div>
     <h1 class="tdr-masthead-title">The Weekly</h1>
-    <div class="tdr-masthead-rule">
-        <span>— @(_edition?.Headline ?? "the week's most important stories") —</span>
-    </div>
+    <div class="tdr-masthead-rule"><span>— your week, in review —</span></div>
 </header>
 
 @if (AiOn)
@@ -39,7 +37,7 @@
         <div class="tdr-empty">
             <div class="tdr-empty-mark">∅</div>
             <h1 class="tdr-empty-title">AI briefings are off</h1>
-            <p class="tdr-empty-sub">Turn them on, then add your endpoint &amp; key — The Weekly is curated for you each Saturday night.</p>
+            <p class="tdr-empty-sub">Turn them on, then add your endpoint &amp; key — The Weekly is written for you each Saturday night.</p>
             <a class="tdr-btn" href="/settings/ai">open AI settings</a>
         </div>
     }
@@ -48,12 +46,12 @@
         <div class="tdr-error">@_error</div>
         <button class="tdr-btn" @onclick="Generate" disabled="@_loading">try again</button>
     }
-    else if (_edition is null)
+    else if (_summary is null)
     {
         @if (_loading)
         {
-            <AiWritingIndicator Message="The editor is curating The Weekly"
-                                Hint="Reading the whole week and writing the front page — this can take a while on a local model." />
+            <AiWritingIndicator Message="The editor is writing The Weekly"
+                                Hint="Reviewing the whole week — this can take a few minutes on a local model." />
         }
         else
         {
@@ -62,79 +60,33 @@
                 <h1 class="tdr-empty-title">@(_isLatest ? "This week isn't out yet" : "No edition for this week")</h1>
                 <p class="tdr-empty-sub">
                     @(_isLatest
-                        ? "The Weekly is curated automatically on Saturday night, ready for Sunday — or compose it now."
-                        : "This week wasn't curated. Compose it now from that week's stories.")
+                        ? "The Weekly is written automatically on Saturday night, ready for Sunday — or write it now."
+                        : "This week wasn't written up. Compose it now from that week's stories.")
                 </p>
-                <button class="tdr-btn" @onclick="Generate">curate The Weekly</button>
+                <button class="tdr-btn" @onclick="Generate">write The Weekly</button>
             </div>
         }
     }
     else
     {
-        var ed = _edition;
+        var ed = _summary;
         <div class="tdr-toolbar">
             <span class="title">The Weekly</span>
             <span class="spacer"></span>
-            <span class="tdr-hint" style="margin:0">@ed.ArticleCount stories considered · @ed.Model</span>
+            <span class="tdr-hint" style="margin:0">@ed.ArticleCount stories · @ed.Model</span>
             <button class="tdr-link muted" @onclick="Generate" disabled="@_loading">regenerate</button>
         </div>
 
-        @if (!string.IsNullOrWhiteSpace(ed.Intro))
-        {
-            <div class="tdr-ai-content tdr-deck" style="margin-bottom:18px">@((MarkupString)MarkdownLite.ToHtml(ed.Intro))</div>
-        }
+        <AiDigest Content="@ed.Content" />
 
-        @if (ed.Lead is { } lead)
-        {
-            <article class="tdr-lead">
-                <div class="tdr-kicker">
-                    <span class="tdr-lead-flag">Story of the Week</span>
-                    <span>@lead.FeedTitle</span>
-                    <span>@RelativeTime.Terse(lead.PublishedAt)</span>
-                    <span style="margin-left:auto; display:inline-flex; align-items:center; gap:4px">
-                        <StarButton Saved="lead.IsSaved" SavedChanged="@(s => OnSave((lead.Id, s)))" />
-                        <HideButton Hidden="lead.IsHidden" HiddenChanged="@(h => OnHide((lead.Id, h)))" />
-                    </span>
-                </div>
-                <h1 @onclick="@(() => Nav.NavigateTo($"/article/{lead.Id}"))">@lead.Title</h1>
-                <div class="tdr-lead-grid">
-                    <NewsImage Src="@lead.ImageUrl" Height="200" Label="lead photo" />
-                    <div>
-                        @if (!string.IsNullOrWhiteSpace(lead.Summary))
-                        {
-                            <div class="tdr-standfirst">@Truncate(lead.Summary, 360)</div>
-                        }
-                        <a class="tdr-link" href="/article/@lead.Id">read the full story →</a>
-                    </div>
-                </div>
-            </article>
-        }
-
-        @foreach (var sec in ed.Sections)
-        {
-            <section class="tdr-section">
-                <div class="tdr-section-head" style="--cat:@sec.Color">
-                    <h2 class="tdr-section-name">@sec.Name</h2>
-                </div>
-                <div class="tdr-grid">
-                    @foreach (var a in sec.Articles)
-                    {
-                        <div class="tdr-grid-item">
-                            <ArticleCard Article="a" OnSaveToggled="OnSave" OnHideToggled="OnHide" />
-                        </div>
-                    }
-                </div>
-            </section>
-        }
-
-        <div class="tdr-hint">Curated @ed.GeneratedAt.LocalDateTime.ToString("MMM d, HH:mm") · AI can be wrong — check the originals.</div>
+        <div class="tdr-hint">Generated @ed.GeneratedAt.LocalDateTime.ToString("MMM d, HH:mm") · AI can be wrong — check the originals.</div>
     }
 </div>
 
 @code {
     [Parameter] public string? Date { get; set; }
 
-    private WeeklyEditionDto? _edition;
+    private AiSummaryDto? _summary;
     private bool _loading;
     private string? _error;
     private string _loadedKey = "";
@@ -167,14 +119,14 @@
         Resolve();
         if (!AiOn) return;
         var key = _sunday.ToString("yyyy-MM-dd");
-        if (key == _loadedKey && _edition is not null) return;
+        if (key == _loadedKey && _summary is not null) return;
         _loadedKey = key;
         CancelPoll(); // moved to a different week — drop any in-flight poll for the old one
         await Load();
     }
 
     /// <summary>Pick the active week (from the URL date, else the current week) and work out the
-    /// neighbouring Sundays — bounded so "earlier" stops once there are no older stories to curate.</summary>
+    /// neighbouring Sundays — bounded so "earlier" stops once there are no older stories to write up.</summary>
     private void Resolve()
     {
         var today = DateOnly.FromDateTime(DateTime.Today);
@@ -192,15 +144,15 @@
     {
         _error = null;
         _loading = true;
-        _edition = null;
-        try { _edition = await Api.GetWeeklyEditionAsync(_isLatest ? null : _sunday); }
+        _summary = null;
+        try { _summary = await Api.GetWeeklyEditionAsync(_isLatest ? null : _sunday); }
         catch (ApiException ex) { _error = ex.Message; }
         finally { _loading = false; }
     }
 
     private async Task Generate()
     {
-        _error = null; _edition = null;
+        _error = null; _summary = null;
         _loading = true;
         StateHasChanged();
         var since = DateTimeOffset.UtcNow;
@@ -209,7 +161,7 @@
         await PollAsync(since);
     }
 
-    /// <summary>Polls the cached GET (and /activity) until the curation lands or the job ends without one.
+    /// <summary>Polls the cached GET (and /activity) until The Weekly lands or the job ends without one.
     /// Generation runs server-side, so this survives navigation away and back.</summary>
     private async Task PollAsync(DateTimeOffset since)
     {
@@ -223,16 +175,16 @@
             {
                 await Task.Delay(3500, ct);
                 var dto = await Api.GetWeeklyEditionAsync(_isLatest ? null : _sunday);
-                if (dto is not null) { _edition = dto; _loading = false; await InvokeAsync(StateHasChanged); return; }
+                if (dto is not null) { _summary = dto; _loading = false; await InvokeAsync(StateHasChanged); return; }
                 var activity = await Api.GetAiActivityAsync();
                 if (!activity.Running.Contains("Weekly"))
                 {
                     _error = FreshError(activity.LastError, "Weekly", since)
-                        ?? "The Weekly couldn't be curated — there may be no stories for this week.";
+                        ?? "The Weekly couldn't be written — there may be no stories for this week.";
                     _loading = false; await InvokeAsync(StateHasChanged); return;
                 }
             }
-            _error = "Still curating after several minutes — check back shortly.";
+            _error = "Still writing after several minutes — check back shortly.";
             _loading = false; await InvokeAsync(StateHasChanged);
         }
         catch (OperationCanceledException) { /* navigated away or restarted */ }
@@ -265,46 +217,12 @@
         return d.AddDays(-daysSinceSaturday).AddDays(1);
     }
 
-    private async Task OnSave((Guid Id, bool Saved) e)
-    {
-        await Api.SetSavedAsync(e.Id, e.Saved);
-        if (_edition is null) return;
-        _edition = _edition with
-        {
-            Lead = MapLead(l => l.Id == e.Id ? l with { IsSaved = e.Saved } : l),
-            Sections = MapArticles(a => a.Id == e.Id ? a with { IsSaved = e.Saved } : a),
-        };
-    }
-
-    private async Task OnHide((Guid Id, bool Hidden) e)
-    {
-        await Api.SetHiddenAsync(e.Id, e.Hidden);
-        if (_edition is null) return;
-        // A hidden story drops out of the curated edition.
-        var lead = _edition.Lead is { } l && l.Id == e.Id ? null : _edition.Lead;
-        var sections = _edition.Sections
-            .Select(sec => sec with { Articles = sec.Articles.Where(a => a.Id != e.Id).ToList() })
-            .Where(sec => sec.Articles.Count > 0)
-            .ToList();
-        _edition = _edition with { Lead = lead, Sections = sections };
-    }
-
-    private ArticleSummaryDto? MapLead(Func<ArticleSummaryDto, ArticleSummaryDto> map) =>
-        _edition!.Lead is { } l ? map(l) : null;
-
-    private List<EditionSectionDto> MapArticles(Func<ArticleSummaryDto, ArticleSummaryDto> map) =>
-        _edition!.Sections
-            .Select(sec => sec with { Articles = sec.Articles.Select(map).ToList() })
-            .ToList();
-
     // Build from integer day/year parts: a lone "d"/"y" in an interpolated DateOnly is the standard
     // short-date/year specifier, not day-of-month, which mangles the label.
     private static string RangeLabel(DateOnly start, DateOnly end) =>
         (start.Month == end.Month
             ? $"{start:MMMM} {start.Day}–{end.Day}, {end.Year}"
             : $"{start:MMM} {start.Day} – {end:MMM} {end.Day}, {end.Year}").ToUpperInvariant();
-
-    private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max].TrimEnd() + "…";
 
     public void Dispose()
     {

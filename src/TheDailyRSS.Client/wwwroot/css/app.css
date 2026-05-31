@@ -522,6 +522,14 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
     .tdr-ai-panel .tdr-ai-content h4 { break-after: avoid; }
     /* The lead "digest" title spans the full width above the columns. */
     .tdr-ai-panel .tdr-ai-content > h2:first-child { column-span: all; margin-top: 0; }
+    /* The Weekly opens with a standfirst (a leading paragraph, no heading): span it full-width above the
+       columns as a deck. The daily briefing starts with a "## " heading, so this never matches there. */
+    .tdr-ai-panel .tdr-ai-content > p:first-child { column-span: all; margin-top: 0; }
+}
+/* Standfirst styling applies at every width (the column-span above only kicks in on wide screens). */
+.tdr-ai-panel .tdr-ai-content > p:first-child {
+    font-style: italic; font-size: 15px; line-height: 1.5; color: var(--ink-2);
+    margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--rule-soft);
 }
 
 /* The citations footnotes band — the foot of the inverted "T". It sits full-width beneath the briefing's

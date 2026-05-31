@@ -97,19 +97,3 @@ public sealed record AiSummaryDto(
     string Model,
     int ArticleCount,
     DateTimeOffset GeneratedAt);
-
-/// <summary>"The Weekly": an AI-curated front page for the past week. The agent picks the most
-/// important stories from each category and writes the masthead; the selected stories are
-/// re-projected to live <see cref="ArticleSummaryDto"/>s so per-user read/saved state stays fresh.</summary>
-public sealed record WeeklyEditionDto(
-    DateOnly PeriodStart,
-    DateOnly PeriodEnd,
-    /// <summary>The AI-written masthead headline (a short phrase capturing the week).</summary>
-    string Headline,
-    /// <summary>The AI editor's note introducing the edition (Markdown).</summary>
-    string Intro,
-    string Model,
-    int ArticleCount,
-    DateTimeOffset GeneratedAt,
-    ArticleSummaryDto? Lead,
-    IReadOnlyList<EditionSectionDto> Sections);

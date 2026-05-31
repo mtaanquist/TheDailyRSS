@@ -1,0 +1,24 @@
+@* Renders an AI digest (daily briefing or The Weekly) as the inverted-T: the prose flows into newspaper
+   columns, and the appended "## Sources" list sits in a full-width footnotes band beneath. A leading
+   paragraph with no heading (The Weekly's standfirst) renders as a full-width deck above the columns. *@
+@{
+    var (body, sources) = SplitSources(Content);
+}
+<div class="tdr-ai-content">@((MarkupString)MarkdownLite.ToHtml(body))</div>
+@if (sources is not null)
+{
+    <div class="tdr-ai-sources">@((MarkupString)MarkdownLite.ToHtml(sources))</div>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Content { get; set; } = "";
+
+    /// <summary>Splits the rendered digest from its appended "## Sources" list so they can be laid out
+    /// separately. Returns the whole thing as the body (and null sources) when there's no Sources section.</summary>
+    private static (string Body, string? Sources) SplitSources(string content)
+    {
+        const string marker = "## Sources";
+        var i = content.LastIndexOf(marker, StringComparison.Ordinal);
+        return i < 0 ? (content, null) : (content[..i].TrimEnd(), content[i..]);
+    }
+}

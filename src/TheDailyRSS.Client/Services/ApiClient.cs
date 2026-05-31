@@ -109,11 +109,11 @@ public sealed class ApiClient(HttpClient http)
     /// and <see cref="GetAiActivityAsync"/> for the result; throws <see cref="ApiException"/> if not configured.</summary>
     public Task GenerateDailySummaryAsync(DateOnly date) => SendAsync(HttpMethod.Post, $"api/ai/summary/daily/{D(date)}");
 
-    /// <summary>"The Weekly" — a curated edition for the week containing <paramref name="anchor"/>
-    /// (null = the current week). GET returns null until that week has been curated.</summary>
-    public Task<WeeklyEditionDto?> GetWeeklyEditionAsync(DateOnly? anchor = null) =>
-        GetOrNullAsync<WeeklyEditionDto>(anchor is { } a ? $"api/ai/weekly/{D(a)}" : "api/ai/weekly");
-    /// <summary>Enqueues a Weekly curation (runs in the background). Poll <see cref="GetWeeklyEditionAsync"/>
+    /// <summary>"The Weekly" — the AI review of the week containing <paramref name="anchor"/>
+    /// (null = the current week). GET returns null until that week has been generated.</summary>
+    public Task<AiSummaryDto?> GetWeeklyEditionAsync(DateOnly? anchor = null) =>
+        GetOrNullAsync<AiSummaryDto>(anchor is { } a ? $"api/ai/weekly/{D(a)}" : "api/ai/weekly");
+    /// <summary>Enqueues a Weekly generation (runs in the background). Poll <see cref="GetWeeklyEditionAsync"/>
     /// and <see cref="GetAiActivityAsync"/> for the result; throws <see cref="ApiException"/> if not configured.</summary>
     public Task GenerateWeeklyEditionAsync(DateOnly? anchor = null) =>
         SendAsync(HttpMethod.Post, anchor is { } a ? $"api/ai/weekly/{D(a)}" : "api/ai/weekly");
