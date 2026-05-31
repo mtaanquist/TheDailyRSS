@@ -524,6 +524,28 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
     .tdr-ai-panel .tdr-ai-content > h2:first-child { column-span: all; margin-top: 0; }
 }
 
+/* The citations footnotes band — the foot of the inverted "T". It sits full-width beneath the briefing's
+   prose columns; the citation list itself is set dense and multi-column (column-width auto-collapses to a
+   single column on narrow screens) so a long list of sources stays compact rather than a tall single strip. */
+.tdr-ai-sources {
+    margin-top: 20px;
+    padding-top: 12px;
+    border-top: 2px solid var(--rule);
+    font-family: var(--serif);
+    color: var(--ink-2);
+}
+.tdr-ai-sources h2 {
+    font-family: var(--typer); font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--ink-2); margin: 0 0 10px;
+}
+.tdr-ai-sources ul {
+    margin: 0; padding: 0; list-style: none;
+    column-width: 20rem; column-gap: 32px;
+    font-size: 12.5px; line-height: 1.45;
+}
+.tdr-ai-sources li { break-inside: avoid; margin-bottom: 6px; }
+.tdr-ai-sources a { color: var(--ink); }
+
 /* ============================================================
    Modal / dialog
    ============================================================ */
