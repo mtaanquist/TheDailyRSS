@@ -44,34 +44,41 @@ else
 
         @if (a.AiSummary is not null || AiEnabled)
         {
-            <div class="tdr-ai-panel" style="margin:14px 0">
-                @if (a.AiSummary is { } summary)
+            <div class="tdr-aibox">
+                <div class="tdr-aibox-head" @onclick="() => _summaryOpen = !_summaryOpen">
+                    <span class="chev" aria-hidden="true">@(_summaryOpen ? "▾" : "▸")</span>
+                    <span class="ttl">AI summary</span>
+                    <span class="spacer"></span>
+                    @if (AiEnabled && a.AiSummary is not null)
+                    {
+                        <button class="tdr-link" @onclick="Summarize" @onclick:stopPropagation="true" disabled="@_summarizing">
+                            @(_summarizing ? "summarising…" : "regenerate")
+                        </button>
+                    }
+                </div>
+                @if (_summaryOpen)
                 {
-                    <div class="tdr-ai-head">
-                        <span>AI summary</span>
-                        @if (AiEnabled)
+                    <div class="tdr-aibox-body">
+                        @if (a.AiSummary is { } summary)
                         {
-                            <button class="tdr-link" @onclick="Summarize" disabled="@_summarizing">
-                                @(_summarizing ? "summarising…" : "regenerate")
+                            <div class="tdr-ai-content">@((MarkupString)MarkdownLite.ToHtml(summary))</div>
+                            <div class="tdr-hint">AI can be wrong — check the full article below.</div>
+                        }
+                        else
+                        {
+                            <button class="tdr-btn" @onclick="Summarize" disabled="@_summarizing">
+                                @(_summarizing ? "summarising…" : "summarise this article")
                             </button>
                         }
+                        @if (_summarizing)
+                        {
+                            <AiWritingIndicator Message="The editor is summarising this article" />
+                        }
+                        @if (_summaryError is not null)
+                        {
+                            <div class="tdr-error" style="margin-top:8px">@_summaryError</div>
+                        }
                     </div>
-                    <div class="tdr-ai-content">@((MarkupString)MarkdownLite.ToHtml(summary))</div>
-                    <div class="tdr-hint">AI can be wrong — check the full article below.</div>
-                }
-                else
-                {
-                    <button class="tdr-btn" @onclick="Summarize" disabled="@_summarizing">
-                        @(_summarizing ? "summarising…" : "summarise this article")
-                    </button>
-                }
-                @if (_summarizing)
-                {
-                    <AiWritingIndicator Message="The editor is summarising this article" />
-                }
-                @if (_summaryError is not null)
-                {
-                    <div class="tdr-error" style="margin-top:8px">@_summaryError</div>
                 }
             </div>
         }
@@ -182,6 +189,7 @@ else
     private string? _filterError;
     private bool _summarizing;
     private string? _summaryError;
+    private bool _summaryOpen = true;
 
     private bool AiEnabled => Auth.CurrentUser?.Preferences.AiEnabled == true;
 
