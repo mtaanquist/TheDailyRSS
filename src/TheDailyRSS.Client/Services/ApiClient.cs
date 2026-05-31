@@ -45,6 +45,7 @@ public sealed class ApiClient(HttpClient http)
         PutAsync<AiHouseStyleDto>("api/admin/settings/ai-house-style", new UpdateAiHouseStyleRequest { Value = value });
 
     public Task<List<AiJobDto>> GetAiJobsAsync() => GetAsync<List<AiJobDto>>("api/admin/ai-jobs");
+    public Task<List<AiErrorDto>> GetAiErrorsAsync() => GetAsync<List<AiErrorDto>>("api/admin/ai-errors");
 
     // ── Keyword filters (mute words) ──────────────────────────────
     public Task<List<KeywordFilterDto>> GetKeywordsAsync() => GetAsync<List<KeywordFilterDto>>("api/keywords");

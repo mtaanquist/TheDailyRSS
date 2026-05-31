@@ -23,6 +23,18 @@ public static class AdminEndpoints
         settings.MapPut("/ai-house-style", SetHouseStyle);
 
         app.MapGet("/api/admin/ai-jobs", GetAiJobs).RequireAuthorization(Roles.Admin);
+        app.MapGet("/api/admin/ai-errors", GetAiErrors).RequireAuthorization(Roles.Admin);
+    }
+
+    /// <summary>The most recent recorded AI failures (raw messages), newest first, for the admin error log.</summary>
+    private static async Task<IResult> GetAiErrors(AppDbContext db, CancellationToken ct)
+    {
+        var errors = await db.AiErrorLogs
+            .OrderByDescending(e => e.OccurredAt)
+            .Take(10)
+            .Select(e => new AiErrorDto(e.OccurredAt, e.User, e.Kind, e.Trigger, e.Label, e.Message))
+            .ToListAsync(ct);
+        return Results.Ok(errors);
     }
 
     /// <summary>The AI generations running right now, scheduled and user-initiated, for the admin

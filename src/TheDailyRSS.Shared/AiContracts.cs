@@ -63,6 +63,16 @@ public sealed record AiJobDto(
     DateTimeOffset StartedAt,
     int ElapsedSeconds);
 
+/// <summary>A recorded AI failure for the admin error log. <see cref="Message"/> is the raw error text,
+/// surfaced verbatim so the admin can read exactly what went wrong.</summary>
+public sealed record AiErrorDto(
+    DateTimeOffset OccurredAt,
+    string User,
+    string Kind,
+    string Trigger,
+    string? Label,
+    string Message);
+
 /// <summary>A per-user AI TL;DR of a single article (distinct from <see cref="ArticleSummaryDto"/>,
 /// which is an article card in an edition). Returned when one is generated on demand.</summary>
 public sealed record ArticleAiSummaryDto(
