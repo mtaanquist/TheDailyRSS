@@ -105,14 +105,21 @@ public sealed class ApiClient(HttpClient http)
     public Task<AiSettingsDto> UpdateAiSettingsAsync(UpdateAiSettingsRequest req) => PutAsync<AiSettingsDto>("api/ai/settings", req);
 
     public Task<AiSummaryDto?> GetDailySummaryAsync(DateOnly date) => GetOrNullAsync<AiSummaryDto>($"api/ai/summary/daily/{D(date)}");
-    public Task<AiSummaryDto> GenerateDailySummaryAsync(DateOnly date) => PostAsync<AiSummaryDto>($"api/ai/summary/daily/{D(date)}", new { });
+    /// <summary>Enqueues a daily-briefing generation (runs in the background). Poll <see cref="GetDailySummaryAsync"/>
+    /// and <see cref="GetAiActivityAsync"/> for the result; throws <see cref="ApiException"/> if not configured.</summary>
+    public Task GenerateDailySummaryAsync(DateOnly date) => SendAsync(HttpMethod.Post, $"api/ai/summary/daily/{D(date)}");
 
     /// <summary>"The Weekly" — a curated edition for the week containing <paramref name="anchor"/>
     /// (null = the current week). GET returns null until that week has been curated.</summary>
     public Task<WeeklyEditionDto?> GetWeeklyEditionAsync(DateOnly? anchor = null) =>
         GetOrNullAsync<WeeklyEditionDto>(anchor is { } a ? $"api/ai/weekly/{D(a)}" : "api/ai/weekly");
-    public Task<WeeklyEditionDto> GenerateWeeklyEditionAsync(DateOnly? anchor = null) =>
-        PostAsync<WeeklyEditionDto>(anchor is { } a ? $"api/ai/weekly/{D(a)}" : "api/ai/weekly", new { });
+    /// <summary>Enqueues a Weekly curation (runs in the background). Poll <see cref="GetWeeklyEditionAsync"/>
+    /// and <see cref="GetAiActivityAsync"/> for the result; throws <see cref="ApiException"/> if not configured.</summary>
+    public Task GenerateWeeklyEditionAsync(DateOnly? anchor = null) =>
+        SendAsync(HttpMethod.Post, anchor is { } a ? $"api/ai/weekly/{D(a)}" : "api/ai/weekly");
+
+    /// <summary>The caller's in-flight AI generation (queued/running kinds) + their most recent error.</summary>
+    public Task<AiActivityDto> GetAiActivityAsync() => GetAsync<AiActivityDto>("api/ai/activity");
 
     private static string Query(Guid? categoryId, Guid? sourceId, bool? saved, bool unreadOnly, bool hidden = false)
     {

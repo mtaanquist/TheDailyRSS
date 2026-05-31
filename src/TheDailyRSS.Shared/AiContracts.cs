@@ -73,6 +73,14 @@ public sealed record AiErrorDto(
     string? Label,
     string Message);
 
+/// <summary>What the caller's own AI generation is doing right now, for the manual-generate poll loop.
+/// <see cref="Running"/> lists the kinds ("Daily"/"Weekly") currently queued or running for this user;
+/// <see cref="LastError"/> is the reader's most recent failure, so a poll that ends without a result can
+/// explain why.</summary>
+public sealed record AiActivityDto(
+    IReadOnlyList<string> Running,
+    AiErrorDto? LastError);
+
 /// <summary>A per-user AI TL;DR of a single article (distinct from <see cref="ArticleSummaryDto"/>,
 /// which is an article card in an edition). Returned when one is generated on demand.</summary>
 public sealed record ArticleAiSummaryDto(
