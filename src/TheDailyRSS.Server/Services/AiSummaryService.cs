@@ -664,6 +664,12 @@ public sealed class AiSummaryService(
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         req.Headers.Accept.ParseAdd("text/event-stream");
 
+        // Log the outgoing prompt size BEFORE sending, so it's on record even if the call then hangs.
+        // Characters, not tokens — a rough but dependable gauge of how big a request we're handing the model.
+        log.LogInformation(
+            "AI request for user {UserId} ({Model}): {SystemChars} system + {PromptChars} prompt = {TotalChars} chars",
+            user.Id, user.AiModel, system.Length, userMsg.Length, system.Length + userMsg.Length);
+
         // Two independent ceilings, both folded into `linked` alongside the caller's ct:
         //  • idleCts — fires after `idle` with no new data; rescheduled on every chunk (catches a stall).
         //  • maxCts  — fires after `max` no matter what; never reset (catches a model that streams forever,
@@ -674,6 +680,7 @@ public sealed class AiSummaryService(
         using var maxCts = new CancellationTokenSource();
         maxCts.CancelAfter(max);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, idleCts.Token, maxCts.Token);
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
 
         try
         {
@@ -709,6 +716,9 @@ public sealed class AiSummaryService(
                       + "probably too large for its context window. Try a model with a bigger context, or fewer feeds."
                     : "The AI endpoint returned an empty response.");
             }
+            log.LogInformation(
+                "AI response for user {UserId}: {Chars} chars in {Seconds:0.0}s (finish={Finish})",
+                user.Id, text.Length, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds, finish ?? "stop");
             return text.Trim();
         }
         // One of our ceilings fired (not the caller's ct) — surface a clear, retriable timeout rather than
