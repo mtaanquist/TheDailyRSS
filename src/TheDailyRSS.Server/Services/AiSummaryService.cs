@@ -639,10 +639,12 @@ public sealed class AiSummaryService(
 
     /// <summary>Sends one chat-completion against the user's BYOK endpoint and returns the message text.
     /// The response is streamed (SSE) so a slow-but-progressing model keeps the connection alive: the
-    /// "ai" client carries no wall-clock timeout, and instead we abort only after
-    /// <see cref="FeedOptions.AiRequestTimeoutSeconds"/> elapse with no new bytes — reset on every chunk.
-    /// So a long generation is fine; only a genuinely stalled connection is cut. Translates
-    /// transport/HTTP/parse/stall failures into reader-friendly <see cref="AiException"/>s.</summary>
+    /// "ai" client carries no wall-clock timeout. Two ceilings bound it instead — an inactivity timeout
+    /// (<see cref="FeedOptions.AiRequestTimeoutSeconds"/>, reset on every chunk) for a genuine stall, and a
+    /// hard total-duration backstop (<see cref="FeedOptions.AiMaxRequestSeconds"/>) for a model that streams
+    /// without end (e.g. runaway reasoning), which the idle timer alone can't catch. So a long generation is
+    /// fine, but the call always terminates. Translates transport/HTTP/parse/timeout failures into
+    /// reader-friendly <see cref="AiException"/>s.</summary>
     private async Task<string> PostChatAsync(
         AppUser user, string system, string userMsg, double temperature, CancellationToken ct)
     {
@@ -662,12 +664,16 @@ public sealed class AiSummaryService(
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         req.Headers.Accept.ParseAdd("text/event-stream");
 
-        // Inactivity ("idle") timeout: idleCts fires if no data arrives for `idle`; we reschedule it on
-        // every chunk. linked also folds in the caller's ct (request abort / shutdown), so we can tell a
-        // stall (idleCts fired, ct quiet) apart from a real cancellation (ct fired) in the catch below.
+        // Two independent ceilings, both folded into `linked` alongside the caller's ct:
+        //  • idleCts — fires after `idle` with no new data; rescheduled on every chunk (catches a stall).
+        //  • maxCts  — fires after `max` no matter what; never reset (catches a model that streams forever,
+        //    whose steady token trickle would otherwise keep idleCts from ever firing).
         var idle = TimeSpan.FromSeconds(Math.Max(1, _options.AiRequestTimeoutSeconds));
+        var max = TimeSpan.FromSeconds(Math.Max(idle.TotalSeconds, _options.AiMaxRequestSeconds));
         using var idleCts = new CancellationTokenSource();
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, idleCts.Token);
+        using var maxCts = new CancellationTokenSource();
+        maxCts.CancelAfter(max);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, idleCts.Token, maxCts.Token);
 
         try
         {
@@ -705,10 +711,19 @@ public sealed class AiSummaryService(
             }
             return text.Trim();
         }
-        // idleCts fired (the model went quiet) but the caller didn't cancel — surface a clear, retriable
-        // stall rather than letting an OperationCanceledException masquerade as a graceful shutdown.
+        // One of our ceilings fired (not the caller's ct) — surface a clear, retriable timeout rather than
+        // letting an OperationCanceledException masquerade as a graceful shutdown. Distinguish which:
+        // maxCts = ran the full duration (likely runaway reasoning); idleCts = went silent mid-stream.
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
+            if (maxCts.IsCancellationRequested)
+            {
+                log.LogWarning("AI request for user {UserId} hit the {Max:0}s hard limit (still generating)", user.Id, max.TotalSeconds);
+                throw new AiException(
+                    $"The AI call ran past the {max.TotalSeconds:0}s limit and was stopped. The model is likely "
+                    + "spending too long 'thinking' on a large briefing — disable thinking for it, shrink the corpus, "
+                    + "or raise Feeds:AiMaxRequestSeconds.");
+            }
             log.LogWarning("AI request for user {UserId} stalled (no data for {Idle:0}s)", user.Id, idle.TotalSeconds);
             throw new AiException(
                 $"The AI endpoint stopped sending data for {idle.TotalSeconds:0}s. If your model is just slow to "

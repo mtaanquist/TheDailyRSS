@@ -100,6 +100,7 @@ Set via `appsettings.json` or environment variables (double-underscore form):
 | Max articles/feed | `Feeds__MaxArticlesPerFeed` | `500` | older non-saved articles are pruned |
 | Full-text fetch delay | `Feeds__FullContentDelaySeconds` | `5` | per-host pause between article-page fetches (full-text feeds) |
 | AI inactivity timeout | `Feeds__AiRequestTimeoutSeconds` | `300` | abort a streamed AI response only after this many seconds with no new data (resets per chunk); raise for slow local models |
+| AI max call duration | `Feeds__AiMaxRequestSeconds` | `600` | hard ceiling on a single AI call regardless of activity; bounds a model that streams without end (e.g. runaway reasoning) |
 | JWT signing key | `Jwt__Key` | auto-generated | persisted to `<DataDir>/jwt-signing.key` if blank |
 | Token lifetime | `Jwt__ExpiryDays` | `30` | |
 | Data directory | `DataDir` | `<contentroot>/data` | holds the JWT key |
