@@ -20,7 +20,14 @@
             <span>Daily briefing · @sum.ArticleCount stories · @sum.Model</span>
             <button class="tdr-link" @onclick="Generate">regenerate</button>
         </div>
-        <div class="tdr-ai-content">@((MarkupString)MarkdownLite.ToHtml(sum.Content))</div>
+        var (body, sources) = SplitSources(sum.Content);
+        @* Inverted-T: the briefing prose flows into balanced newspaper columns; the citations sit in a
+           full-width footnotes band beneath them, rather than hogging a whole side column. *@
+        <div class="tdr-ai-content">@((MarkupString)MarkdownLite.ToHtml(body))</div>
+        @if (sources is not null)
+        {
+            <div class="tdr-ai-sources">@((MarkupString)MarkdownLite.ToHtml(sources))</div>
+        }
         <div class="tdr-hint">Generated @sum.GeneratedAt.LocalDateTime.ToString("MMM d, HH:mm") · AI can be wrong — check the originals.</div>
     }
     else
@@ -105,6 +112,16 @@
     /// <summary>Only surface the recorded error if it's from this run (matching kind, after we enqueued).</summary>
     private static string? FreshError(AiErrorDto? e, string kind, DateTimeOffset since) =>
         e is not null && e.Kind == kind && e.OccurredAt >= since.AddSeconds(-60) ? e.Message : null;
+
+    /// <summary>Splits the rendered briefing from its appended "## Sources" list so they can be laid out
+    /// separately — prose in newspaper columns, citations in a full-width footnotes band. Returns the whole
+    /// thing as the body (and null sources) when there's no Sources section.</summary>
+    private static (string Body, string? Sources) SplitSources(string content)
+    {
+        const string marker = "## Sources";
+        var i = content.LastIndexOf(marker, StringComparison.Ordinal);
+        return i < 0 ? (content, null) : (content[..i].TrimEnd(), content[i..]);
+    }
 
     private void CancelPoll() { _pollCts?.Cancel(); _pollCts?.Dispose(); _pollCts = null; }
 
