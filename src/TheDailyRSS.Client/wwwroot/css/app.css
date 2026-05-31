@@ -436,6 +436,20 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
 .tdr-hint { font-family: var(--serif); font-style: italic; font-size: 12.5px; color: var(--ink-2); margin-top: 6px; }
 .tdr-error { font-family: var(--serif); font-size: 13px; color: var(--red); margin: 8px 0; font-style: italic; }
 
+/* ---------- Article AI-summary box (collapsible, matches the settings card) ---------- */
+.tdr-aibox { border: 1px solid var(--rule); background: var(--card); margin: 14px 0; }
+.tdr-aibox-head {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer;
+    font-family: var(--typer); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-2);
+    user-select: none;
+}
+.tdr-aibox-head .chev { color: var(--ink-3); font-size: 10px; width: 10px; }
+.tdr-aibox-head .ttl { font-weight: 700; }
+.tdr-aibox-head .spacer { flex: 1; }
+.tdr-aibox-head .tdr-link { text-transform: none; letter-spacing: 0; }
+.tdr-aibox-body { padding: 10px 12px 12px; border-top: 1px dashed var(--rule-soft); }
+.tdr-aibox-body .tdr-ai-content { max-width: none; }
+
 /* ---------- "The editor is writing…" in-flight indicator ---------- */
 .tdr-ai-writing {
     display: flex; align-items: center; gap: 9px; margin: 6px 0;
