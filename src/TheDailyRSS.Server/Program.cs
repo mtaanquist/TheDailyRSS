@@ -124,12 +124,12 @@ builder.Services.AddHttpClient("feeds", c =>
     c.DefaultRequestHeaders.Accept.ParseAdd("application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.8");
 }).ConfigurePrimaryHttpMessageHandler(() => SsrfGuard.CreateHandler(allowAutoRedirect: true, maxRedirects: 5));
 
-// Client for users' own OpenAI-compatible LLM endpoints (BYOK summaries). No wall-clock timeout: the
-// completion is streamed and AiSummaryService enforces an inactivity timeout instead, so a slow but
-// progressing local model isn't cut off mid-generation.
+// Client for users' own OpenAI-compatible LLM endpoints (BYOK summaries). Non-streaming buffered calls,
+// run off the request thread by the background worker, so a generous wall-clock timeout is the right bound:
+// a slow local model on a big briefing can need minutes, but the call always terminates.
 builder.Services.AddHttpClient("ai", c =>
 {
-    c.Timeout = Timeout.InfiniteTimeSpan;
+    c.Timeout = TimeSpan.FromSeconds(Math.Max(1, feedOptions.AiRequestTimeoutSeconds));
     c.MaxResponseContentBufferSize = maxResponseBytes;
 }).ConfigurePrimaryHttpMessageHandler(() => SsrfGuard.CreateHandler(allowAutoRedirect: false));
 
@@ -143,6 +143,7 @@ builder.Services.AddSingleton<HtmlSanitizationService>();
 // singleton backfill hosted service inject it without a captive-dependency on a scoped service.
 builder.Services.AddSingleton<ArticleContentExtractor>();
 builder.Services.AddSingleton<AiJobTracker>();
+builder.Services.AddSingleton<AiGenerationQueue>();
 builder.Services.AddScoped<FeedDiscoveryService>();
 builder.Services.AddScoped<FeedFetchService>();
 builder.Services.AddScoped<FeedSourceService>();
@@ -152,6 +153,7 @@ builder.Services.AddHostedService<FeedRefreshBackgroundService>();
 builder.Services.AddHostedService<FullContentBackfillService>();
 builder.Services.AddHostedService<AiSummaryBackgroundService>();
 builder.Services.AddHostedService<ArticleSummaryBackgroundService>();
+builder.Services.AddHostedService<AiGenerationWorker>();
 
 var app = builder.Build();
 

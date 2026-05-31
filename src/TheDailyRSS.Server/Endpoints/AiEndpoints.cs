@@ -23,6 +23,8 @@ public static class AiEndpoints
         group.MapGet("/weekly/{date}", GetWeekly);
         group.MapPost("/weekly", GenerateWeekly);
         group.MapPost("/weekly/{date}", GenerateWeekly);
+        // The caller's own in-flight generation + last error, for the manual-generate poll loop.
+        group.MapGet("/activity", GetActivity);
     }
 
     private static async Task<IResult> GetSettings(ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
@@ -72,20 +74,16 @@ public static class AiEndpoints
     }
 
     private static async Task<IResult> GenerateDailySummary(
-        string date, ClaimsPrincipal principal, AppDbContext db, AiSummaryService ai, CancellationToken ct)
+        string date, ClaimsPrincipal principal, AppDbContext db, AiGenerationQueue queue, CancellationToken ct)
     {
         if (!DateOnly.TryParse(date, out var d)) return ApiResults.Fail("Invalid date.");
         var user = await db.Users.FindAsync([principal.GetUserId()], ct);
         if (user is null) return Results.Unauthorized();
+        if (NotConfigured(user, out var why)) return ApiResults.Fail(why);
 
-        try
-        {
-            return Results.Ok(await ai.GenerateAsync(user, AiSummaryKind.Daily, d, d, ct));
-        }
-        catch (AiException ex)
-        {
-            return ApiResults.Fail(ex.Message);
-        }
+        // Generation runs off-request on the background worker; the client polls the cached GET + /activity.
+        queue.Enqueue(new AiGenerationRequest(user.Id, AiSummaryKind.Daily, d, d));
+        return Results.Accepted();
     }
 
     private static async Task<IResult> GetWeekly(
@@ -97,20 +95,50 @@ public static class AiEndpoints
     }
 
     private static async Task<IResult> GenerateWeekly(
-        ClaimsPrincipal principal, AppDbContext db, AiSummaryService ai, IOptions<FeedOptions> opts, CancellationToken ct, string? date = null)
+        ClaimsPrincipal principal, AppDbContext db, AiGenerationQueue queue, IOptions<FeedOptions> opts, CancellationToken ct, string? date = null)
     {
         if (!TryWeek(date, opts.Value, out var start, out var end)) return ApiResults.Fail("Invalid date.");
         var user = await db.Users.FindAsync([principal.GetUserId()], ct);
         if (user is null) return Results.Unauthorized();
+        if (NotConfigured(user, out var why)) return ApiResults.Fail(why);
 
-        try
+        queue.Enqueue(new AiGenerationRequest(user.Id, AiSummaryKind.Weekly, start, end));
+        return Results.Accepted();
+    }
+
+    /// <summary>The caller's own in-flight generation (queued or running) plus their most recent failure, so
+    /// the manual-generate poll loop can tell "keep waiting" from "done" from "it failed — here's why".</summary>
+    private static async Task<IResult> GetActivity(
+        ClaimsPrincipal principal, AppDbContext db, AiGenerationQueue queue, CancellationToken ct)
+    {
+        var uid = principal.GetUserId();
+        var running = queue.PendingKinds(uid).Select(k => k.ToString()).ToList();
+        var email = await db.Users.Where(u => u.Id == uid).Select(u => u.Email).FirstOrDefaultAsync(ct);
+        AiErrorDto? lastError = email is null ? null : await db.AiErrorLogs
+            .Where(e => e.User == email)
+            .OrderByDescending(e => e.OccurredAt)
+            .Select(e => new AiErrorDto(e.OccurredAt, e.User, e.Kind, e.Trigger, e.Label, e.Message))
+            .FirstOrDefaultAsync(ct);
+        return Results.Ok(new AiActivityDto(running, lastError));
+    }
+
+    /// <summary>True (with a reader-facing reason) when the user's BYOK config isn't complete — so a manual
+    /// generate fails fast with clear feedback instead of silently enqueuing work that can't run.</summary>
+    private static bool NotConfigured(AppUser user, out string why)
+    {
+        if (!user.AiEnabled)
         {
-            return Results.Ok(await ai.GenerateWeeklyEditionAsync(user, start, end, ct));
+            why = "AI summaries are turned off. Enable them in settings.";
+            return true;
         }
-        catch (AiException ex)
+        if (string.IsNullOrWhiteSpace(user.AiBaseUrl) || string.IsNullOrWhiteSpace(user.AiModel)
+            || string.IsNullOrEmpty(user.AiApiKeyEncrypted))
         {
-            return ApiResults.Fail(ex.Message);
+            why = "AI summaries aren't fully configured. Add an endpoint, model and API key in settings.";
+            return true;
         }
+        why = "";
+        return false;
     }
 
     /// <summary>Resolves the Monday–Saturday week for an anchor date (null = the current week).</summary>

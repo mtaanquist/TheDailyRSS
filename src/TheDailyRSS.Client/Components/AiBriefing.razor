@@ -1,3 +1,4 @@
+@implements IDisposable
 @inject ApiClient Api
 
 @* The daily briefing panel. Auto-loads the cached digest for its edition date; offers to generate
@@ -37,11 +38,13 @@
     private bool _loading;
     private string? _error;
     private DateOnly _loadedFor;
+    private CancellationTokenSource? _pollCts;
 
     protected override async Task OnParametersSetAsync()
     {
         if (Date == _loadedFor) return;
         _loadedFor = Date;
+        CancelPoll(); // moved to a different edition — drop any in-flight poll for the old one
         await Load();
     }
 
@@ -56,10 +59,50 @@
 
     private async Task Generate()
     {
-        _loading = true; _error = null;
+        _error = null; _summary = null;
+        _loading = true;
         StateHasChanged();
-        try { _summary = await Api.GenerateDailySummaryAsync(Date); }
-        catch (ApiException ex) { _error = ex.Message; }
-        finally { _loading = false; }
+        var since = DateTimeOffset.UtcNow;
+        try { await Api.GenerateDailySummaryAsync(Date); } // enqueue; runs in the background
+        catch (ApiException ex) { _error = ex.Message; _loading = false; return; }
+        await PollAsync(since);
     }
+
+    /// <summary>Polls the cached GET (and /activity) until the briefing lands or the job ends without one.
+    /// Generation runs server-side, so this survives navigation away and back.</summary>
+    private async Task PollAsync(DateTimeOffset since)
+    {
+        CancelPoll();
+        _pollCts = new CancellationTokenSource();
+        var ct = _pollCts.Token;
+        var deadline = since.AddMinutes(12);
+        try
+        {
+            while (DateTimeOffset.UtcNow < deadline)
+            {
+                await Task.Delay(3500, ct);
+                var dto = await Api.GetDailySummaryAsync(Date);
+                if (dto is not null) { _summary = dto; _loading = false; StateHasChanged(); return; }
+                var activity = await Api.GetAiActivityAsync();
+                if (!activity.Running.Contains("Daily"))
+                {
+                    _error = FreshError(activity.LastError, "Daily", since)
+                        ?? "The briefing couldn't be generated — there may be no stories for this day.";
+                    _loading = false; StateHasChanged(); return;
+                }
+            }
+            _error = "Still working after several minutes — check back shortly.";
+            _loading = false; StateHasChanged();
+        }
+        catch (OperationCanceledException) { /* navigated away or restarted */ }
+        catch (ApiException ex) { _error = ex.Message; _loading = false; StateHasChanged(); }
+    }
+
+    /// <summary>Only surface the recorded error if it's from this run (matching kind, after we enqueued).</summary>
+    private static string? FreshError(AiErrorDto? e, string kind, DateTimeOffset since) =>
+        e is not null && e.Kind == kind && e.OccurredAt >= since.AddSeconds(-60) ? e.Message : null;
+
+    private void CancelPoll() { _pollCts?.Cancel(); _pollCts?.Dispose(); _pollCts = null; }
+
+    public void Dispose() => CancelPoll();
 }

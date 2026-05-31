@@ -138,6 +138,7 @@
     private bool _loading;
     private string? _error;
     private string _loadedKey = "";
+    private CancellationTokenSource? _pollCts;
 
     // "The Weekly" is delivered on a Sunday and covers the preceding Monday–Saturday. We navigate by
     // that delivery Sunday: each step is the previous/next Sunday. Seeded to a valid Sunday up front so
@@ -168,6 +169,7 @@
         var key = _sunday.ToString("yyyy-MM-dd");
         if (key == _loadedKey && _edition is not null) return;
         _loadedKey = key;
+        CancelPoll(); // moved to a different week — drop any in-flight poll for the old one
         await Load();
     }
 
@@ -198,12 +200,51 @@
 
     private async Task Generate()
     {
-        _loading = true; _error = null;
+        _error = null; _edition = null;
+        _loading = true;
         StateHasChanged();
-        try { _edition = await Api.GenerateWeeklyEditionAsync(_isLatest ? null : _sunday); }
-        catch (ApiException ex) { _error = ex.Message; }
-        finally { _loading = false; }
+        var since = DateTimeOffset.UtcNow;
+        try { await Api.GenerateWeeklyEditionAsync(_isLatest ? null : _sunday); } // enqueue; runs in the background
+        catch (ApiException ex) { _error = ex.Message; _loading = false; return; }
+        await PollAsync(since);
     }
+
+    /// <summary>Polls the cached GET (and /activity) until the curation lands or the job ends without one.
+    /// Generation runs server-side, so this survives navigation away and back.</summary>
+    private async Task PollAsync(DateTimeOffset since)
+    {
+        CancelPoll();
+        _pollCts = new CancellationTokenSource();
+        var ct = _pollCts.Token;
+        var deadline = since.AddMinutes(12);
+        try
+        {
+            while (DateTimeOffset.UtcNow < deadline)
+            {
+                await Task.Delay(3500, ct);
+                var dto = await Api.GetWeeklyEditionAsync(_isLatest ? null : _sunday);
+                if (dto is not null) { _edition = dto; _loading = false; StateHasChanged(); return; }
+                var activity = await Api.GetAiActivityAsync();
+                if (!activity.Running.Contains("Weekly"))
+                {
+                    _error = FreshError(activity.LastError, "Weekly", since)
+                        ?? "The Weekly couldn't be curated — there may be no stories for this week.";
+                    _loading = false; StateHasChanged(); return;
+                }
+            }
+            _error = "Still curating after several minutes — check back shortly.";
+            _loading = false; StateHasChanged();
+        }
+        catch (OperationCanceledException) { /* navigated away or restarted */ }
+        catch (ApiException ex) { _error = ex.Message; _loading = false; StateHasChanged(); }
+    }
+
+    /// <summary>Only surface the recorded error if it's from this run (matching kind, after we enqueued) —
+    /// a small clock-skew buffer guards the comparison. Otherwise it's a stale error from a past attempt.</summary>
+    private static string? FreshError(AiErrorDto? e, string kind, DateTimeOffset since) =>
+        e is not null && e.Kind == kind && e.OccurredAt >= since.AddSeconds(-60) ? e.Message : null;
+
+    private void CancelPoll() { _pollCts?.Cancel(); _pollCts?.Dispose(); _pollCts = null; }
 
     private void Go(DateOnly? sunday)
     {
@@ -261,5 +302,9 @@
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max].TrimEnd() + "…";
 
-    public void Dispose() => State.Changed -= OnStateChanged;
+    public void Dispose()
+    {
+        State.Changed -= OnStateChanged;
+        CancelPoll();
+    }
 }

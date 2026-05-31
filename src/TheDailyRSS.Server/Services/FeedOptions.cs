@@ -17,17 +17,11 @@ public sealed class FeedOptions
     /// runaway endpoint exhausting memory. Applies to feed fetches, discovery scrapes and OPML import.</summary>
     public int MaxResponseBytes { get; set; } = 16 * 1024 * 1024;
 
-    /// <summary>Inactivity timeout for the streamed BYOK AI response: we abort only after this many
-    /// seconds pass with no new data from the model, reset on every chunk. So it bounds a stall — not
-    /// total generation time — and only needs to exceed the gap before the first token (model load +
-    /// prompt eval). Generous by default for slow local reasoning models.</summary>
-    public int AiRequestTimeoutSeconds { get; set; } = 300;
-
-    /// <summary>Absolute ceiling on a single AI call, regardless of activity. The inactivity timeout alone
-    /// can't bound a model that streams continuously (e.g. a reasoning model that never stops "thinking",
-    /// whose token trickle keeps resetting the idle timer) — this guarantees the call always terminates
-    /// with a recorded error instead of hanging forever. Set comfortably above a normal generation.</summary>
-    public int AiMaxRequestSeconds { get; set; } = 600;
+    /// <summary>Wall-clock timeout for a single (non-streaming) BYOK AI call. Generous by default because a
+    /// self-hosted reasoning model on a full daily/weekly corpus can legitimately take minutes; the call runs
+    /// off the request thread (background worker), so this only needs to exceed a real generation. The call
+    /// always terminates at this bound with a recorded error rather than hanging.</summary>
+    public int AiRequestTimeoutSeconds { get; set; } = 600;
 
     // ── Full-article (reader-mode) extraction ────────────────────────────
     // When a source has FetchFullContent on, the fetcher steps into each article's page. These
