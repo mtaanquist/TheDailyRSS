@@ -23,6 +23,12 @@ public sealed class FeedOptions
     /// prompt eval). Generous by default for slow local reasoning models.</summary>
     public int AiRequestTimeoutSeconds { get; set; } = 300;
 
+    /// <summary>Absolute ceiling on a single AI call, regardless of activity. The inactivity timeout alone
+    /// can't bound a model that streams continuously (e.g. a reasoning model that never stops "thinking",
+    /// whose token trickle keeps resetting the idle timer) — this guarantees the call always terminates
+    /// with a recorded error instead of hanging forever. Set comfortably above a normal generation.</summary>
+    public int AiMaxRequestSeconds { get; set; } = 600;
+
     // ── Full-article (reader-mode) extraction ────────────────────────────
     // When a source has FetchFullContent on, the fetcher steps into each article's page. These
     // bound how aggressively we scrape so we stay a polite citizen and don't get blocked.
