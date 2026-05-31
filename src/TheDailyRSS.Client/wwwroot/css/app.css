@@ -514,11 +514,12 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
    cap so it spans the page like a standfirst rather than hugging the left. */
 .tdr-ai-content.tdr-deck { max-width: none; font-size: 14.5px; }
 
-/* The daily briefing flows into newspaper columns on wide screens so it fills the edition width
-   (as many ~22rem columns as fit — two on the 1100px shell, three when expanded). Scoped to the
-   briefing panel so The Weekly's short editor's note stays a single full-width standfirst. */
+/* An AI digest (daily briefing or The Weekly, both rendered by the shared AiDigest component, which wraps
+   its output in .tdr-digest) flows into newspaper columns on wide screens so it fills the edition width
+   (as many ~22rem columns as fit — two on the 1100px shell, three when expanded). Scoped to .tdr-digest so
+   the short per-article summary, which uses .tdr-ai-content on its own, stays a single column. */
 @media (min-width: 900px) {
-    .tdr-ai-panel .tdr-ai-content {
+    .tdr-digest .tdr-ai-content {
         max-width: none;
         column-width: 22rem;
         column-gap: 36px;
@@ -526,22 +527,22 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
     }
     /* Don't split a bullet, paragraph or heading across the column break, and keep a heading with
        the text that follows it. */
-    .tdr-ai-panel .tdr-ai-content li,
-    .tdr-ai-panel .tdr-ai-content p,
-    .tdr-ai-panel .tdr-ai-content h2,
-    .tdr-ai-panel .tdr-ai-content h3,
-    .tdr-ai-panel .tdr-ai-content h4 { break-inside: avoid; }
-    .tdr-ai-panel .tdr-ai-content h2,
-    .tdr-ai-panel .tdr-ai-content h3,
-    .tdr-ai-panel .tdr-ai-content h4 { break-after: avoid; }
-    /* The lead "digest" title spans the full width above the columns. */
-    .tdr-ai-panel .tdr-ai-content > h2:first-child { column-span: all; margin-top: 0; }
+    .tdr-digest .tdr-ai-content li,
+    .tdr-digest .tdr-ai-content p,
+    .tdr-digest .tdr-ai-content h2,
+    .tdr-digest .tdr-ai-content h3,
+    .tdr-digest .tdr-ai-content h4 { break-inside: avoid; }
+    .tdr-digest .tdr-ai-content h2,
+    .tdr-digest .tdr-ai-content h3,
+    .tdr-digest .tdr-ai-content h4 { break-after: avoid; }
+    /* A lead "digest" title spans the full width above the columns. */
+    .tdr-digest .tdr-ai-content > h2:first-child { column-span: all; margin-top: 0; }
     /* The Weekly opens with a standfirst (a leading paragraph, no heading): span it full-width above the
        columns as a deck. The daily briefing starts with a "## " heading, so this never matches there. */
-    .tdr-ai-panel .tdr-ai-content > p:first-child { column-span: all; margin-top: 0; }
+    .tdr-digest .tdr-ai-content > p:first-child { column-span: all; margin-top: 0; }
 }
 /* Standfirst styling applies at every width (the column-span above only kicks in on wide screens). */
-.tdr-ai-panel .tdr-ai-content > p:first-child {
+.tdr-digest .tdr-ai-content > p:first-child {
     font-style: italic; font-size: 15px; line-height: 1.5; color: var(--ink-2);
     margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--rule-soft);
 }

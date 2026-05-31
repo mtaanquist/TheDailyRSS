@@ -4,11 +4,13 @@
 @{
     var (body, sources) = SplitSources(Content);
 }
-<div class="tdr-ai-content">@((MarkupString)MarkdownLite.ToHtml(body))</div>
-@if (sources is not null)
-{
-    <div class="tdr-ai-sources">@((MarkupString)MarkdownLite.ToHtml(sources))</div>
-}
+<div class="tdr-digest">
+    <div class="tdr-ai-content">@((MarkupString)MarkdownLite.ToHtml(body))</div>
+    @if (sources is not null)
+    {
+        <div class="tdr-ai-sources">@((MarkupString)MarkdownLite.ToHtml(sources))</div>
+    }
+</div>
 
 @code {
     [Parameter, EditorRequired] public string Content { get; set; } = "";
