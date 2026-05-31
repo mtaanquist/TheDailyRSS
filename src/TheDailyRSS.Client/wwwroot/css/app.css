@@ -566,8 +566,16 @@ html[data-theme="evening"] .tdr-article .content > p:first-of-type::first-letter
     column-width: 20rem; column-gap: 32px;
     font-size: 12.5px; line-height: 1.45;
 }
-.tdr-ai-sources li { break-inside: avoid; margin-bottom: 6px; }
+.tdr-ai-sources li { break-inside: avoid; margin-bottom: 6px; scroll-margin-top: 80px; }
 .tdr-ai-sources a { color: var(--ink); }
+/* The clicked-to footnote flashes so the eye lands on it. */
+.tdr-ai-sources li:target { background: var(--hilite); box-shadow: 0 0 0 4px var(--hilite); border-radius: 2px; }
+
+/* Inline [n] citations: Wikipedia-style superscript links that jump to the footnote band. */
+html { scroll-behavior: smooth; }
+.tdr-cite { font-size: 0.72em; }
+.tdr-cite a { text-decoration: none; color: var(--ink-3); }
+.tdr-cite a:hover { color: var(--accent); }
 
 /* ============================================================
    Modal / dialog

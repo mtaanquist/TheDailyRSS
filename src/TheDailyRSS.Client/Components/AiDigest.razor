@@ -5,10 +5,10 @@
     var (body, sources) = SplitSources(Content);
 }
 <div class="tdr-digest">
-    <div class="tdr-ai-content">@((MarkupString)MarkdownLite.ToHtml(body))</div>
+    <div class="tdr-ai-content">@((MarkupString)LinkCitations(MarkdownLite.ToHtml(body)))</div>
     @if (sources is not null)
     {
-        <div class="tdr-ai-sources">@((MarkupString)MarkdownLite.ToHtml(sources))</div>
+        <div class="tdr-ai-sources">@((MarkupString)AnchorSources(MarkdownLite.ToHtml(sources)))</div>
     }
 </div>
 
@@ -23,4 +23,15 @@
         var i = content.LastIndexOf(marker, StringComparison.Ordinal);
         return i < 0 ? (content, null) : (content[..i].TrimEnd(), content[i..]);
     }
+
+    /// <summary>Turns each inline [n] citation in the body into a superscript link that jumps to the matching
+    /// footnote (Wikipedia-style). The body never contains real links, so a bracketed number is always a cite.</summary>
+    private static string LinkCitations(string html) =>
+        System.Text.RegularExpressions.Regex.Replace(html, @"\[(\d{1,4})\]",
+            "<sup class=\"tdr-cite\"><a href=\"#cite-$1\">[$1]</a></sup>");
+
+    /// <summary>Gives each footnote list item an id (cite-n) so the inline citations can scroll to it.</summary>
+    private static string AnchorSources(string html) =>
+        System.Text.RegularExpressions.Regex.Replace(html, @"<li>(\s*\[(\d{1,4})\])",
+            "<li id=\"cite-$2\">$1");
 }
