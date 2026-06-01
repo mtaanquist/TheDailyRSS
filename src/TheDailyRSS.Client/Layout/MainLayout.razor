@@ -40,6 +40,7 @@
         if (!firstRender) return;
         _ref = DotNetObjectReference.Create(this);
         await JS.InvokeVoidAsync("tdrHotkeys.register", _ref);
+        await JS.InvokeVoidAsync("tdrScroll.init");
     }
 
     [JSInvokable] public Task OnRefreshHotkey() => State.RequestReloadAsync();

@@ -7,6 +7,7 @@
 @inject AppState State
 @inject NavigationManager Nav
 @inject AuthService Auth
+@inject IJSRuntime JS
 
 <PageTitle>@(_edition?.CategoryName ?? "Front page") · The Daily RSS</PageTitle>
 
@@ -183,6 +184,19 @@ else
     private string CurrentSlug => Saved ? "saved" : Hidden ? "hidden" : string.IsNullOrEmpty(Slug) ? "today" : Slug!;
 
     protected override void OnInitialized() => State.ReloadRequested += Refresh;
+
+    private string _restoredKey = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Once the edition for this route has actually rendered (not the dimmed old one mid-load),
+        // restore the reader's last scroll position for it — so "back" from an article lands in place.
+        if (_edition is not null && !_loading && _restoredKey != _loadedKey)
+        {
+            _restoredKey = _loadedKey;
+            await JS.InvokeVoidAsync("tdrScroll.restore");
+        }
+    }
 
     /// <summary>Reload the edition from the database in place. A reload (masthead click, "Today's
     /// stories", or the refresh hotkey) shouldn't sit waiting on a network re-fetch of every feed —

@@ -46,3 +46,34 @@ window.tdrHotkeys = {
         window.tdrHotkeys.ref = null;
     }
 };
+
+// Per-route scroll memory for the .tdr-main news column. We persist its scrollTop (keyed by the
+// full path) as the reader scrolls, then a page restores it once its content has rendered — so
+// "back" from an article lands where you left off, while a freshly-opened article starts at the top.
+window.tdrScroll = {
+    _key: () => 'tdr.scroll:' + location.pathname + location.search,
+    _bound: false,
+    init: () => {
+        if (window.tdrScroll._bound) return;
+        window.tdrScroll._bound = true;
+        let raf = 0;
+        // scroll events don't bubble; the capture phase still catches them on .tdr-main.
+        document.addEventListener('scroll', (e) => {
+            const m = e.target;
+            if (!m || !m.classList || !m.classList.contains('tdr-main')) return;
+            if (raf) return;
+            raf = requestAnimationFrame(() => {
+                raf = 0;
+                try { sessionStorage.setItem(window.tdrScroll._key(), String(m.scrollTop)); } catch (_) { /* storage off */ }
+            });
+        }, true);
+    },
+    // Restore the saved offset for the current route (0 if none — e.g. a fresh article opens at the top).
+    restore: () => {
+        const m = document.querySelector('.tdr-main');
+        if (!m) return;
+        let v = 0;
+        try { const s = sessionStorage.getItem(window.tdrScroll._key()); if (s !== null) v = parseInt(s, 10) || 0; } catch (_) { /* storage off */ }
+        m.scrollTop = v;
+    }
+};
