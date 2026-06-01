@@ -46,4 +46,7 @@ public sealed class FeedOptions
     /// <summary>Wall-clock timeout for a single call to a fixed third-party JSON API (via
     /// <see cref="ExternalApiClient"/>). Short — these are quick metadata calls, fetched on a schedule.</summary>
     public int ExternalApiTimeoutSeconds { get; set; } = 15;
+
+    /// <summary>How often the background worker refreshes today's weather for each watched location (#33).</summary>
+    public int WeatherRefreshIntervalMinutes { get; set; } = 60;
 }

@@ -32,7 +32,7 @@ public sealed class AppFixture : IAsyncLifetime
             builder.ConfigureServices(services =>
             {
                 // Drop the background services so tests never reach out to the network.
-                foreach (var t in new[] { typeof(FeedRefreshBackgroundService), typeof(AiSummaryBackgroundService) })
+                foreach (var t in new[] { typeof(FeedRefreshBackgroundService), typeof(AiSummaryBackgroundService), typeof(WeatherBackgroundService) })
                 {
                     var hosted = services.SingleOrDefault(d => d.ImplementationType == t);
                     if (hosted is not null) services.Remove(hosted);

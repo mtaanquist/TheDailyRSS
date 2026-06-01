@@ -113,6 +113,33 @@
                     </label>
                     <div class="tdr-hint">Hide every image for a text-only read. Pictures are still fetched, so turning this back off brings them straight back.</div>
                 </div>
+
+                <div>
+                    <h2 style="font-weight:800; font-size:14px; margin-bottom:8px">Weather</h2>
+                    <div class="tdr-sidebar-label" style="margin:0 0 4px">Location</div>
+                    <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px">
+                        <input class="tdr-input" style="max-width:240px" placeholder="e.g. Copenhagen"
+                               @bind="_weatherQuery" @bind:event="oninput" @onkeydown="WeatherKeyDown" />
+                        <button class="tdr-link" @onclick="SaveWeatherLocation" disabled="@(Busy || !WeatherChanged)">save</button>
+                    </div>
+                    @if (!string.IsNullOrEmpty(Pref.WeatherLocation))
+                    {
+                        <div class="tdr-hint" style="margin-top:0">Showing weather for <strong>@Pref.WeatherLocation</strong>.
+                            <button class="tdr-link" style="margin-left:6px" @onclick="ClearWeatherLocation" disabled="@Busy">clear</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="tdr-hint" style="margin-top:0">Set a town or city to see the local forecast.</div>
+                    }
+
+                    <div class="tdr-sidebar-label" style="margin:14px 0 4px">Masthead</div>
+                    <label class="tdr-toggle-row" @onclick="() => SetShowWeather(!Pref.ShowWeather)">
+                        <span class="tdr-toggle @(Pref.ShowWeather ? "on" : "")"><span class="knob"></span></span>
+                        <span>Show weather at a glance</span>
+                    </label>
+                    <div class="tdr-hint">A small temperature &amp; conditions readout in the front-page masthead, linking to the day's forecast.</div>
+                </div>
             </div>
 
             @if (_saved)
@@ -136,7 +163,13 @@
     private bool _changingEmail;
     private string _newEmail = "";
     private string _emailPw = "";
+    private string _weatherQuery = "";
     private bool _saved;
+
+    /// <summary>The location box differs from what's saved (so "save" is worth offering).</summary>
+    private bool WeatherChanged =>
+        _weatherQuery.Trim().Length > 0 &&
+        !string.Equals(_weatherQuery.Trim(), Pref.WeatherLocation, StringComparison.OrdinalIgnoreCase);
 
     private static readonly (HeadlineFont, string)[] Fonts =
         [(HeadlineFont.PtSerif, "Source Serif"), (HeadlineFont.Newsreader, "Newsreader"), (HeadlineFont.Lora, "Lora")];
@@ -147,6 +180,7 @@
     {
         _user = Auth.CurrentUser;
         _name = _user?.DisplayName ?? "";
+        _weatherQuery = _user?.Preferences.WeatherLocation ?? "";
     }
 
     private async Task SaveName()
@@ -191,6 +225,28 @@
     private Task SetDensity(ReadingDensity d) => SavePref(p => p.Density = d);
     private Task SetShowUnread(bool v) => SavePref(p => p.ShowUnread = v);
     private Task SetHideImages(bool v) => SavePref(p => p.HideImages = v);
+    private Task SetShowWeather(bool v) => SavePref(p => p.ShowWeather = v);
+
+    private async Task WeatherKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && WeatherChanged) await SaveWeatherLocation();
+    }
+
+    private Task SaveWeatherLocation() => SaveWeather(_weatherQuery.Trim());
+    private Task ClearWeatherLocation() => SaveWeather("");
+
+    private async Task SaveWeather(string query)
+    {
+        if (await RunAsync(async () =>
+        {
+            _user = await Api.SetWeatherLocationAsync(query);
+            Auth.UpdateUser(_user!);
+            _weatherQuery = _user!.Preferences.WeatherLocation ?? "";
+        }))
+        {
+            Flash();
+        }
+    }
 
     private async Task SavePref(Action<PreferencesDto> mutate)
     {

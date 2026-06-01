@@ -22,6 +22,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<AiSummary> AiSummaries => Set<AiSummary>();
     public DbSet<AiErrorLog> AiErrorLogs => Set<AiErrorLog>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+    public DbSet<WeatherSnapshot> WeatherSnapshots => Set<WeatherSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -214,12 +215,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(x => x.Value).HasMaxLength(8000);
         });
 
+        b.Entity<WeatherSnapshot>(e =>
+        {
+            // One stored forecast per location per edition day; the worker upserts on this key.
+            e.HasIndex(x => new { x.LocationKey, x.EditionDate }).IsUnique();
+            e.Property(x => x.LocationKey).HasMaxLength(32);
+            e.Property(x => x.TimeZone).HasMaxLength(64);
+        });
+
         b.Entity<AppUser>(e =>
         {
             e.Property(x => x.DisplayName).HasMaxLength(120);
             e.Property(x => x.AiBaseUrl).HasMaxLength(2000);
             e.Property(x => x.AiModel).HasMaxLength(200);
             e.Property(x => x.AiSystemPrompt).HasMaxLength(4000);
+            e.Property(x => x.WeatherLocationName).HasMaxLength(200);
         });
     }
 
