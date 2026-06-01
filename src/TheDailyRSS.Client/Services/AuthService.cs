@@ -31,10 +31,14 @@ public sealed class AuthService(ApiClient api, TokenStore store, LocalStorage st
         AuthChanged?.Invoke();
     }
 
-    public async Task LoginAsync(string email, string password)
+    /// <summary>Attempts sign-in. Returns <c>true</c> when fully signed in, or <c>false</c> when the account
+    /// has two-factor on and a code is needed — the caller should then re-call with <paramref name="totpCode"/>.</summary>
+    public async Task<bool> LoginAsync(string email, string password, string? totpCode = null)
     {
-        var resp = await api.LoginAsync(new LoginRequest { Email = email, Password = password });
-        await SetAuthAsync(resp);
+        var resp = await api.LoginAsync(new LoginRequest { Email = email, Password = password, TotpCode = totpCode });
+        if (resp.RequiresTotp) return false;
+        await SetAuthAsync(resp.Auth!);
+        return true;
     }
 
     public async Task RegisterAsync(string email, string displayName, string password)

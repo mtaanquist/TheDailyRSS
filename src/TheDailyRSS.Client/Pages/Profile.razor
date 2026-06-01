@@ -142,6 +142,68 @@
                 </div>
             </div>
 
+            <div style="margin-top:22px; padding-top:16px; border-top:1px solid var(--rule)">
+                <h2 style="font-weight:800; font-size:14px; margin-bottom:8px">Security · Two-factor authentication</h2>
+
+                @if (_recoveryCodes is { } codes)
+                {
+                    <div class="tdr-folder" style="padding:14px; margin-top:6px; max-width:440px">
+                        <div style="font-weight:800; margin-bottom:6px">Two-factor is on — save your recovery codes</div>
+                        <p class="tdr-hint" style="margin-top:0">Each works once if you lose your authenticator. Store them somewhere safe — they won't be shown again.</p>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 16px; font-family:monospace; font-size:14px; margin:10px 0">
+                            @foreach (var c in codes)
+                            {
+                                <span>@c</span>
+                            }
+                        </div>
+                        <button class="tdr-btn" @onclick="() => _recoveryCodes = null">done</button>
+                    </div>
+                }
+                else if (user.TwoFactorEnabled)
+                {
+                    <div class="tdr-hint" style="margin-top:0; color:var(--ink-2)">Two-factor is <strong>on</strong>. You'll enter an authenticator code when signing in.</div>
+                    @if (!_showDisable)
+                    {
+                        <button class="tdr-btn" style="margin-top:8px" @onclick="() => _showDisable = true">Turn off two-factor</button>
+                    }
+                    else
+                    {
+                        <div class="tdr-folder" style="padding:14px; margin-top:10px; max-width:420px">
+                            <div class="tdr-field">
+                                <label>Confirm your password</label>
+                                <input class="tdr-input" type="password" @bind="_disablePw" />
+                            </div>
+                            <button class="tdr-btn" @onclick="DisableTotp" disabled="@Busy">turn off</button>
+                            <button class="tdr-link" style="margin-left:8px" @onclick="CancelDisable">cancel</button>
+                        </div>
+                    }
+                }
+                else if (_enroll is { } enroll)
+                {
+                    <div class="tdr-folder" style="padding:14px; margin-top:6px; max-width:540px">
+                        <p style="margin:0 0 10px">Scan this with your authenticator app — or enter the key by hand — then type the 6-digit code to finish.</p>
+                        <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start">
+                            <div style="width:160px; height:160px; flex:none">@((MarkupString)enroll.QrSvg)</div>
+                            <div style="flex:1; min-width:220px">
+                                <div class="tdr-sidebar-label" style="margin:0 0 4px">Setup key</div>
+                                <code style="word-break:break-all; font-size:13px">@enroll.Secret</code>
+                                <div class="tdr-field" style="margin-top:12px">
+                                    <label>Verification code</label>
+                                    <input class="tdr-input" inputmode="numeric" @bind="_confirmCode" placeholder="123456" />
+                                </div>
+                                <button class="tdr-btn" @onclick="ConfirmTotp" disabled="@Busy">verify &amp; turn on</button>
+                                <button class="tdr-link" style="margin-left:8px" @onclick="() => _enroll = null">cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="tdr-hint" style="margin-top:0; color:var(--ink-2)">Add a second step at sign-in with an authenticator app (TOTP), like Google Authenticator or 1Password.</div>
+                    <button class="tdr-btn" style="margin-top:8px" @onclick="EnableTotp" disabled="@Busy">Set up two-factor</button>
+                }
+            </div>
+
             @if (_saved)
             {
                 <div class="tdr-hint" style="margin-top:16px">↳ saved &amp; synced to every device.</div>
@@ -165,6 +227,13 @@
     private string _emailPw = "";
     private string _weatherQuery = "";
     private bool _saved;
+
+    // Two-factor enrollment state.
+    private TotpEnrollResponse? _enroll;
+    private List<string>? _recoveryCodes;
+    private string _confirmCode = "";
+    private bool _showDisable;
+    private string _disablePw = "";
 
     /// <summary>The location box differs from what's saved (so "save" is worth offering).</summary>
     private bool WeatherChanged =>
@@ -264,6 +333,39 @@
     }
 
     private void Flash() { _saved = true; }
+
+    // ── Two-factor (TOTP) ───────────────────────────────────────────────
+    private Task EnableTotp() => RunAsync(async () =>
+    {
+        _confirmCode = "";
+        _enroll = await Api.TotpEnrollAsync();
+    });
+
+    private async Task ConfirmTotp()
+    {
+        await RunAsync(async () =>
+        {
+            var resp = await Api.TotpConfirmAsync(_confirmCode.Trim());
+            _recoveryCodes = resp.RecoveryCodes;
+            _enroll = null;
+            _confirmCode = "";
+            _user = await Api.MeAsync();
+            Auth.UpdateUser(_user!);
+        });
+    }
+
+    private async Task DisableTotp()
+    {
+        await RunAsync(async () =>
+        {
+            _user = await Api.TotpDisableAsync(_disablePw);
+            Auth.UpdateUser(_user!);
+            _showDisable = false;
+            _disablePw = "";
+        });
+    }
+
+    private void CancelDisable() { _showDisable = false; _disablePw = ""; }
 
     private static string FontStack(HeadlineFont f) => f switch
     {
