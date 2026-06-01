@@ -11,35 +11,18 @@ namespace TheDailyRSS.Server.Services;
 /// </summary>
 public sealed class ArticleSummaryBackgroundService(
     IServiceScopeFactory scopeFactory,
-    ILogger<ArticleSummaryBackgroundService> log) : BackgroundService
+    ILogger<ArticleSummaryBackgroundService> log) : PeriodicBackgroundService(log)
 {
     /// <summary>Newest-N articles summarised per user per sweep — bounds each reader's API spend.</summary>
     private const int BatchPerUser = 10;
-    private static readonly TimeSpan Interval = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan BetweenCalls = TimeSpan.FromSeconds(2);
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        // Stagger after the feed-refresh and full-content backfill workers' startup delays.
-        await Task.Delay(TimeSpan.FromSeconds(25), stoppingToken);
+    protected override string Name => "Article-summary";
+    // Stagger after the feed-refresh and full-content backfill workers' startup delays.
+    protected override TimeSpan InitialDelay => TimeSpan.FromSeconds(25);
+    protected override TimeSpan Period => TimeSpan.FromMinutes(5);
 
-        using var timer = new PeriodicTimer(Interval);
-        do
-        {
-            try
-            {
-                await RunAsync(stoppingToken);
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                log.LogError(ex, "Article-summary sweep failed");
-            }
-        }
-        while (await timer.WaitForNextTickAsync(stoppingToken));
-    }
-
-    private async Task RunAsync(CancellationToken ct)
+    protected override async Task RunAsync(CancellationToken ct)
     {
         List<Guid> userIds;
         using (var scope = scopeFactory.CreateScope())
@@ -81,12 +64,12 @@ public sealed class ArticleSummaryBackgroundService(
                 catch (AiException ex)
                 {
                     // Misconfig or a down endpoint — stop this user's batch rather than hammer it.
-                    log.LogInformation("Stopping article summaries for user {UserId}: {Reason}", uid, ex.Message);
+                    Log.LogInformation("Stopping article summaries for user {UserId}: {Reason}", uid, ex.Message);
                     break;
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    log.LogWarning(ex, "Failed to summarise article {ArticleId} for user {UserId}", article.Id, uid);
+                    Log.LogWarning(ex, "Failed to summarise article {ArticleId} for user {UserId}", article.Id, uid);
                 }
 
                 await Task.Delay(BetweenCalls, ct);
