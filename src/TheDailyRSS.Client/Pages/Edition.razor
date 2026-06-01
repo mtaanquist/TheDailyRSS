@@ -24,15 +24,12 @@ else
     <TickerBar Tickers="_promotedTickers" />
     <header class="tdr-masthead">
         <div class="tdr-masthead-meta">
-            <span>@ed.VolumeLabel · @ed.IssueLabel</span>
-            <span>@ed.DateLabel</span>
-            @if (ShowUnread)
-            {
-                <span>Unread · @ed.UnreadTotal</span>
-            }
+            <span class="tdr-masthead-imprint">@ed.VolumeLabel · @ed.IssueLabel</span>
+            <span class="tdr-masthead-date">@ed.DateLabel</span>
             @if (_weather is { } w)
             {
-                <a href="@($"/forecast/{w.Date:yyyy-MM-dd}")" title="@WeatherCodes.Label(w.CurrentCode) — see the forecast"
+                <a class="tdr-masthead-weather" href="@($"/forecast/{w.Date:yyyy-MM-dd}")"
+                   title="@WeatherCodes.Label(w.CurrentCode) — see the forecast"
                    style="display:inline-flex; align-items:center; gap:4px; text-decoration:none; color:inherit">
                     <Icon Name="@WeatherCodes.Icon(w.CurrentCode)" Size="15" />
                     <span>@FormatTemp(w.CurrentTempC)</span>
