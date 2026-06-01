@@ -21,7 +21,6 @@
 else
 {
     var ed = _edition;
-    <TickerBar Tickers="_promotedTickers" />
     <header class="tdr-masthead">
         <div class="tdr-masthead-meta">
             <span class="tdr-masthead-imprint">@ed.VolumeLabel · @ed.IssueLabel</span>
@@ -59,6 +58,7 @@ else
     }
 
     <div class="tdr-edition-body @(_loading ? "loading" : "")">
+        <TickerBar Tickers="_promotedTickers" />
         <div class="tdr-toolbar">
             <span class="title">@(Saved ? "Read later" : Hidden ? "Hidden" : ed.CategoryName ?? (ed.IsToday ? "Today's stories" : "All stories"))</span>
             <span class="spacer"></span>

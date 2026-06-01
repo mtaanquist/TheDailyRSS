@@ -10,7 +10,7 @@
 </header>
 
 <div class="tdr-edition-body">
-    <div class="tdr-folder" style="padding:14px; max-width:520px; position:relative">
+    <div class="tdr-folder" style="padding:14px; margin-top:20px; position:relative">
         <div class="tdr-field" style="margin:0">
             <label>Track a ticker</label>
             <div style="display:flex; gap:8px; align-items:center">
@@ -61,9 +61,10 @@
                     <button class="tdr-iconbtn" title="@(t.Promoted ? "Pinned to front page" : "Pin to front page")"
                             @onclick="() => TogglePromote(t)"
                             style="color:@(t.Promoted ? "var(--accent, #a83020)" : "var(--ink-3)"); background:none; border:none; cursor:pointer; padding:2px">
-                        <Icon Name="star" Size="18" />
+                        <Icon Name="star" Size="18" Filled="@t.Promoted" />
                     </button>
-                    <div style="min-width:80px; font-weight:800">@t.Symbol</div>
+                    <a href="@QuoteUrl(t.Symbol)" target="_blank" rel="noopener noreferrer"
+                       style="min-width:80px; font-weight:800; text-decoration:none" title="View @t.Symbol on Yahoo Finance">@t.Symbol ↗</a>
                     <div style="flex:1; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap">@t.Name</div>
                     <div style="text-align:right; min-width:90px; font-weight:700">@Price(t) <span style="font-weight:400; color:var(--ink-3); font-size:11px">@t.Currency</span></div>
                     <div style="text-align:right; min-width:110px; color:@Color(t); font-weight:700">@Arrow(t) @Change(t) (@Pct(t))</div>
@@ -153,4 +154,7 @@
     private static string Pct(TickerDto t) => $"{(t.ChangePercent >= 0 ? "+" : "")}{t.ChangePercent.ToString("0.00")}%";
     private static string Arrow(TickerDto t) => t.Change >= 0 ? "▲" : "▼";
     private static string Color(TickerDto t) => t.Change >= 0 ? "#1a7f37" : "#b3261e";
+
+    /// <summary>The quote's page on the data source (Yahoo Finance), where the prices come from.</summary>
+    private static string QuoteUrl(string symbol) => $"https://finance.yahoo.com/quote/{Uri.EscapeDataString(symbol)}";
 }

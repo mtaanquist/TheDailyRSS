@@ -1,5 +1,5 @@
 @* Inline Lucide-style stroke icons (matches the sign-out SVG in Sidebar.razor). *@
-<svg class="tdr-icon @Class" viewBox="0 0 24 24" width="@Size" height="@Size" fill="none"
+<svg class="tdr-icon @Class" viewBox="0 0 24 24" width="@Size" height="@Size" fill="@(Filled ? "currentColor" : "none")"
      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     @(new MarkupString(Path(Name)))
 </svg>
@@ -8,6 +8,9 @@
     [Parameter, EditorRequired] public string Name { get; set; } = "";
     [Parameter] public int Size { get; set; } = 16;
     [Parameter] public string? Class { get; set; }
+
+    /// <summary>Fill the glyph with the current colour (e.g. a favourited star) instead of a hollow outline.</summary>
+    [Parameter] public bool Filled { get; set; }
 
     private static string Path(string name) => name switch
     {
