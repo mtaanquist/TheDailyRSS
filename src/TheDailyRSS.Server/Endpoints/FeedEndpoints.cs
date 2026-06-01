@@ -31,9 +31,12 @@ public static class FeedEndpoints
         opml.MapPost("", ImportOpml);
     }
 
-    private static async Task<IResult> List(ClaimsPrincipal principal, AppDbContext db, Guid? categoryId)
+    private static async Task<IResult> List(ClaimsPrincipal principal, AppDbContext db, IOptions<FeedOptions> opts, Guid? categoryId)
     {
         var uid = principal.GetUserId();
+        // Per-source unread is scoped to today's edition, matching the sidebar's category counts and the
+        // masthead — an all-time count never reflected "mark all read" and overwhelmed after a hiatus.
+        var today = EditionClock.Today(opts.Value);
         var query = db.Subscriptions.Where(s => s.UserId == uid);
         if (categoryId is { } cid) query = query.Where(s => s.CategoryId == cid);
 
@@ -42,7 +45,7 @@ public static class FeedEndpoints
             .Select(s => new FeedDto(
                 s.Id, s.SourceId, s.CategoryId,
                 s.CustomTitle ?? s.Source!.Title, s.Source!.FeedUrl, s.Source.SiteUrl, s.Source.IconText, s.SortOrder,
-                db.Articles.Count(a => a.SourceId == s.SourceId && !a.States.Any(st => st.UserId == uid && st.IsRead)),
+                db.Articles.Count(a => a.SourceId == s.SourceId && a.EditionDate == today && !a.States.Any(st => st.UserId == uid && st.IsRead)),
                 db.Articles.Count(a => a.SourceId == s.SourceId),
                 s.Source.LastFetchedAt, s.Source.LastFetchError, s.Source.FetchFullContent))
             .ToListAsync();
@@ -56,7 +59,7 @@ public static class FeedEndpoints
     }
 
     private static async Task<IResult> Add(
-        AddFeedRequest req, ClaimsPrincipal principal, AppDbContext db,
+        AddFeedRequest req, ClaimsPrincipal principal, AppDbContext db, IOptions<FeedOptions> opts,
         FeedDiscoveryService discovery, FeedSourceService sources, FeedFetchService fetcher, CancellationToken ct)
     {
         var uid = principal.GetUserId();
@@ -100,10 +103,11 @@ public static class FeedEndpoints
         // reader-mode bodies in the background (issue #34).
         if (created) await fetcher.RefreshAsync(source, ct, inlineFullContent: false);
 
+        var today = EditionClock.Today(opts.Value);
         return Results.Ok(new FeedDto(
             sub.Id, source.Id, sub.CategoryId, customTitle ?? source.Title,
             source.FeedUrl, source.SiteUrl, source.IconText, sub.SortOrder,
-            await db.Articles.CountAsync(a => a.SourceId == source.Id && !a.States.Any(st => st.UserId == uid && st.IsRead), ct),
+            await db.Articles.CountAsync(a => a.SourceId == source.Id && a.EditionDate == today && !a.States.Any(st => st.UserId == uid && st.IsRead), ct),
             await db.Articles.CountAsync(a => a.SourceId == source.Id, ct),
             source.LastFetchedAt, source.LastFetchError, source.FetchFullContent));
     }
