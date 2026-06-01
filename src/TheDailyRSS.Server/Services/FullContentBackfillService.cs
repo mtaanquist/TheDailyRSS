@@ -15,34 +15,16 @@ public sealed class FullContentBackfillService(
     IServiceScopeFactory scopeFactory,
     ArticleContentExtractor extractor,
     IOptions<FeedOptions> options,
-    ILogger<FullContentBackfillService> log) : BackgroundService
+    ILogger<FullContentBackfillService> log) : PeriodicBackgroundService(log)
 {
     private readonly FeedOptions _options = options.Value;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        // Let the DB/migrations settle, and stagger after the feed-refresh service's own startup delay.
-        await Task.Delay(TimeSpan.FromSeconds(20), stoppingToken);
+    protected override string Name => "Full-content backfill";
+    // Let the DB/migrations settle, and stagger after the feed-refresh service's own startup delay.
+    protected override TimeSpan InitialDelay => TimeSpan.FromSeconds(20);
+    protected override TimeSpan Period => TimeSpan.FromMinutes(Math.Max(1, _options.FullContentBackfillIntervalMinutes));
 
-        var interval = TimeSpan.FromMinutes(Math.Max(1, _options.FullContentBackfillIntervalMinutes));
-        using var timer = new PeriodicTimer(interval);
-
-        do
-        {
-            try
-            {
-                await BackfillAsync(stoppingToken);
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                log.LogError(ex, "Full-content backfill sweep failed");
-            }
-        }
-        while (await timer.WaitForNextTickAsync(stoppingToken));
-    }
-
-    private async Task BackfillAsync(CancellationToken ct)
+    protected override async Task RunAsync(CancellationToken ct)
     {
         List<Guid> sourceIds;
         using (var scope = scopeFactory.CreateScope())

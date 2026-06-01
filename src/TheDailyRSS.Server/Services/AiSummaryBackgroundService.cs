@@ -12,7 +12,7 @@ namespace TheDailyRSS.Server.Services;
 public sealed class AiSummaryBackgroundService(
     IServiceScopeFactory scopeFactory,
     IOptions<FeedOptions> options,
-    ILogger<AiSummaryBackgroundService> log) : BackgroundService
+    ILogger<AiSummaryBackgroundService> log) : PeriodicBackgroundService(log)
 {
     private readonly FeedOptions _options = options.Value;
 
@@ -20,24 +20,11 @@ public sealed class AiSummaryBackgroundService(
     /// day's stories are essentially all in.</summary>
     private static readonly TimeOnly RunAt = new(23, 55);
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try { await Task.Delay(DelayUntilNextRun(), stoppingToken); }
-            catch (OperationCanceledException) { return; }
-
-            try
-            {
-                await RunAsync(stoppingToken);
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                log.LogError(ex, "AI nightly run failed");
-            }
-        }
-    }
+    protected override string Name => "AI nightly";
+    // This worker runs at a fixed clock time, not a fixed cadence: both the first wait and the wait
+    // between runs are "until the next 23:55", recomputed each loop.
+    protected override TimeSpan InitialDelay => DelayUntilNextRun();
+    protected override TimeSpan Period => DelayUntilNextRun();
 
     /// <summary>Time until the next <see cref="RunAt"/> in the edition timezone.</summary>
     private TimeSpan DelayUntilNextRun()
@@ -51,7 +38,7 @@ public sealed class AiSummaryBackgroundService(
         return delay > TimeSpan.Zero ? delay : TimeSpan.FromMinutes(1);
     }
 
-    private async Task RunAsync(CancellationToken ct)
+    protected override async Task RunAsync(CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -84,10 +71,10 @@ public sealed class AiSummaryBackgroundService(
         {
             if (await ai.GetCachedAsync(user.Id, AiSummaryKind.Daily, day, day, ct) is not null) return;
             await ai.GenerateAsync(user, AiSummaryKind.Daily, day, day, ct, AiJobTrigger.Scheduled);
-            log.LogInformation("Pre-generated daily summary for user {UserId}", user.Id);
+            Log.LogInformation("Pre-generated daily summary for user {UserId}", user.Id);
         }
-        catch (AiException ex) { log.LogInformation("Skipped daily summary for user {UserId}: {Reason}", user.Id, ex.Message); }
-        catch (Exception ex) when (ex is not OperationCanceledException) { log.LogWarning(ex, "Failed to pre-generate daily summary for user {UserId}", user.Id); }
+        catch (AiException ex) { Log.LogInformation("Skipped daily summary for user {UserId}: {Reason}", user.Id, ex.Message); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { Log.LogWarning(ex, "Failed to pre-generate daily summary for user {UserId}", user.Id); }
     }
 
     private async Task EnsureWeeklyAsync(AiSummaryService ai, AppUser user, DateOnly start, DateOnly end, CancellationToken ct)
@@ -96,9 +83,9 @@ public sealed class AiSummaryBackgroundService(
         {
             if (await ai.GetCachedAsync(user.Id, AiSummaryKind.Weekly, start, end, ct) is not null) return;
             await ai.GenerateAsync(user, AiSummaryKind.Weekly, start, end, ct, AiJobTrigger.Scheduled);
-            log.LogInformation("Generated The Weekly for user {UserId}", user.Id);
+            Log.LogInformation("Generated The Weekly for user {UserId}", user.Id);
         }
-        catch (AiException ex) { log.LogInformation("Skipped The Weekly for user {UserId}: {Reason}", user.Id, ex.Message); }
-        catch (Exception ex) when (ex is not OperationCanceledException) { log.LogWarning(ex, "Failed to generate The Weekly for user {UserId}", user.Id); }
+        catch (AiException ex) { Log.LogInformation("Skipped The Weekly for user {UserId}: {Reason}", user.Id, ex.Message); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { Log.LogWarning(ex, "Failed to generate The Weekly for user {UserId}", user.Id); }
     }
 }

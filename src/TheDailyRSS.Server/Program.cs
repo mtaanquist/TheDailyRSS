@@ -133,6 +133,18 @@ builder.Services.AddHttpClient("ai", c =>
     c.MaxResponseContentBufferSize = maxResponseBytes;
 }).ConfigurePrimaryHttpMessageHandler(() => SsrfGuard.CreateHandler(allowAutoRedirect: false));
 
+// Client for the app's own integrations with fixed third-party JSON APIs (weather, tickers, …). Short
+// timeout (quick metadata calls), capped body, JSON Accept. URLs are code-controlled, but it keeps the
+// SSRF guard as defence-in-depth — public API hosts pass it, and it protects if a URL ever derives from
+// user input.
+builder.Services.AddHttpClient("external", c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(Math.Max(1, feedOptions.ExternalApiTimeoutSeconds));
+    c.MaxResponseContentBufferSize = maxResponseBytes;
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("TheDailyRSS/1.0 (+https://github.com/self-hosted)");
+    c.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+}).ConfigurePrimaryHttpMessageHandler(() => SsrfGuard.CreateHandler(allowAutoRedirect: true, maxRedirects: 3));
+
 // Persist DataProtection keys to the data volume so they survive container restarts.
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir, "keys")));
@@ -142,6 +154,9 @@ builder.Services.AddSingleton<HtmlSanitizationService>();
 // Stateless (only IHttpClientFactory/IOptions/ILogger), so a singleton is safe — and lets the
 // singleton backfill hosted service inject it without a captive-dependency on a scoped service.
 builder.Services.AddSingleton<ArticleContentExtractor>();
+// Stateless GET-JSON helper for fixed third-party APIs — singleton so the (singleton) data-polling
+// background workers can inject it without a captive-dependency on a scoped service.
+builder.Services.AddSingleton<ExternalApiClient>();
 builder.Services.AddSingleton<AiJobTracker>();
 builder.Services.AddSingleton<AiGenerationQueue>();
 builder.Services.AddScoped<FeedDiscoveryService>();

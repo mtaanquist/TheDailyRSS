@@ -40,4 +40,10 @@ public sealed class FeedOptions
     /// <summary>Cap on how many newly-fetched articles get reader-mode extraction inline during a
     /// refresh (the rest are left to the backfill worker, keeping the synchronous Add fast).</summary>
     public int FullContentInlineLimit { get; set; } = 5;
+
+    // ── Third-party data APIs (weather, tickers, …) ─────────────────────
+
+    /// <summary>Wall-clock timeout for a single call to a fixed third-party JSON API (via
+    /// <see cref="ExternalApiClient"/>). Short — these are quick metadata calls, fetched on a schedule.</summary>
+    public int ExternalApiTimeoutSeconds { get; set; } = 15;
 }
