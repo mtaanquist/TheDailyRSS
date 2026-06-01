@@ -46,13 +46,23 @@
                 <input class="tdr-input" type="password" @bind="_password" @bind:event="oninput" placeholder="@(_mode == Mode.SignUp ? "at least 8 characters" : "••••••••")" />
             </div>
 
+            @if (_mode == Mode.SignIn && _totpRequired)
+            {
+                <div class="tdr-field">
+                    <label>Authenticator code</label>
+                    <input class="tdr-input" inputmode="numeric" autocomplete="one-time-code" autofocus
+                           @bind="_totpCode" @bind:event="oninput" placeholder="123456" />
+                    <div class="tdr-hint">Enter the 6-digit code from your authenticator app, or one of your recovery codes.</div>
+                </div>
+            }
+
             @if (_error is not null)
             {
                 <div class="tdr-error">@_error</div>
             }
 
             <button class="tdr-btn block" type="submit" disabled="@_busy">
-                @(_busy ? "…" : _mode == Mode.SignIn ? "Sign in →" : "Create account →")
+                @(_busy ? "…" : _mode == Mode.SignUp ? "Create account →" : _totpRequired ? "Verify →" : "Sign in →")
             </button>
         </EditForm>
 
@@ -71,6 +81,8 @@
     private string _name = "";
     private string _email = "";
     private string _password = "";
+    private string _totpCode = "";
+    private bool _totpRequired;
     private string? _error;
     private bool _busy;
 
@@ -79,7 +91,7 @@
         if (Auth.IsAuthenticated) GoBack();
     }
 
-    private void Switch(Mode mode) { _mode = mode; _error = null; }
+    private void Switch(Mode mode) { _mode = mode; _error = null; _totpRequired = false; _totpCode = ""; }
 
     private async Task Submit()
     {
@@ -95,13 +107,30 @@
             return;
         }
 
+        if (_totpRequired && string.IsNullOrWhiteSpace(_totpCode))
+        {
+            _error = "Enter your authenticator or recovery code.";
+            return;
+        }
+
         _busy = true;
         try
         {
             if (_mode == Mode.SignIn)
-                await Auth.LoginAsync(_email.Trim(), _password);
+            {
+                var signedIn = await Auth.LoginAsync(_email.Trim(), _password, _totpRequired ? _totpCode.Trim() : null);
+                if (!signedIn)
+                {
+                    // Password was right; the account needs a second factor. Reveal the code field.
+                    _totpRequired = true;
+                    _error = null;
+                    return;
+                }
+            }
             else
+            {
                 await Auth.RegisterAsync(_email.Trim(), _name.Trim(), _password);
+            }
             GoBack();
         }
         catch (ApiException ex) { _error = ex.Message; }

@@ -24,6 +24,7 @@ public static class Mappers
         Initials(u.DisplayName),
         u.CreatedAt,
         roles?.Contains(Auth.Roles.Admin) ?? false,
+        u.IsTotpEnabled,
         new PreferencesDto
         {
             Theme = u.Theme, HeadlineFont = u.HeadlineFont, Density = u.Density, ShowUnread = u.ShowUnread,

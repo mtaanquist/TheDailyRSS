@@ -18,9 +18,12 @@ public sealed class ApiClient(HttpClient http)
 
     // ── Auth ──────────────────────────────────────────────────────
     public Task<AuthResponse> RegisterAsync(RegisterRequest req) => PostAsync<AuthResponse>("api/auth/register", req);
-    public Task<AuthResponse> LoginAsync(LoginRequest req) => PostAsync<AuthResponse>("api/auth/login", req);
+    public Task<LoginResponse> LoginAsync(LoginRequest req) => PostAsync<LoginResponse>("api/auth/login", req);
     public Task LogoutAsync() => SendAsync(HttpMethod.Post, "api/auth/logout");
     public Task<UserDto> MeAsync() => GetAsync<UserDto>("api/auth/me");
+    public Task<TotpEnrollResponse> TotpEnrollAsync() => PostAsync<TotpEnrollResponse>("api/auth/totp/enroll", new { });
+    public Task<TotpConfirmResponse> TotpConfirmAsync(string code) => PostAsync<TotpConfirmResponse>("api/auth/totp/confirm", new TotpConfirmRequest { Code = code });
+    public Task<UserDto> TotpDisableAsync(string password) => PostAsync<UserDto>("api/auth/totp/disable", new TotpDisableRequest { Password = password });
     public Task<UserDto> UpdateProfileAsync(UpdateProfileRequest req) => PutAsync<UserDto>("api/auth/profile", req);
     public Task<UserDto> UpdatePreferencesAsync(PreferencesDto req) => PutAsync<UserDto>("api/auth/preferences", req);
     public Task ChangePasswordAsync(ChangePasswordRequest req) => SendAsync(HttpMethod.Post, "api/auth/password", req);

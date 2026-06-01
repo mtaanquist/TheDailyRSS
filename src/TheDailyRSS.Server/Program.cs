@@ -160,6 +160,7 @@ builder.Services.AddSingleton<ExternalApiClient>();
 // Stateless HTTP + mapping over ExternalApiClient; the scheduled-data workers (singletons) inject these.
 builder.Services.AddSingleton<WeatherService>();
 builder.Services.AddSingleton<TickerService>();
+builder.Services.AddSingleton<TotpService>();
 builder.Services.AddSingleton<AiJobTracker>();
 builder.Services.AddSingleton<AiGenerationQueue>();
 builder.Services.AddScoped<FeedDiscoveryService>();
@@ -229,6 +230,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapAuthEndpoints();
+app.MapTotpEndpoints();
 app.MapCategoryEndpoints();
 app.MapFeedEndpoints();
 app.MapEditionEndpoints();

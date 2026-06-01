@@ -63,6 +63,31 @@ public sealed class AppUser : IdentityUser<Guid>
     public List<AiSummary> AiSummaries { get; set; } = new();
     public List<ArticleSummary> ArticleSummaries { get; set; } = new();
     public List<UserTicker> UserTickers { get; set; } = new();
+    public List<RecoveryCode> RecoveryCodes { get; set; } = new();
+
+    // ── Two-factor authentication (TOTP; opt-in, per-user; #38) ─────────
+    /// <summary>When true, login requires a valid authenticator (or recovery) code after the password.</summary>
+    public bool IsTotpEnabled { get; set; }
+
+    /// <summary>The TOTP shared secret (base32), encrypted at rest via DataProtection. Set when enrollment
+    /// begins; <see cref="IsTotpEnabled"/> only flips once a generated code is confirmed.</summary>
+    public string? TotpSecretEncrypted { get; set; }
+}
+
+/// <summary>A single-use backup code for signing in when an authenticator is unavailable. Stored hashed
+/// (never plaintext); the plaintext set is shown to the reader exactly once, at enable time.</summary>
+public sealed class RecoveryCode
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid UserId { get; set; }
+    public AppUser? User { get; set; }
+
+    /// <summary>Hex SHA-256 of the normalized (lower-cased, dash-stripped) code.</summary>
+    public string CodeHash { get; set; } = "";
+
+    /// <summary>Set when the code is redeemed; a non-null value means it can't be used again.</summary>
+    public DateTimeOffset? UsedAt { get; set; }
 }
 
 /// <summary>A cached AI-generated digest for one user over a date range. Daily summaries set

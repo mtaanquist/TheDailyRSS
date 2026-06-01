@@ -25,6 +25,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<WeatherSnapshot> WeatherSnapshots => Set<WeatherSnapshot>();
     public DbSet<Ticker> Tickers => Set<Ticker>();
     public DbSet<UserTicker> UserTickers => Set<UserTicker>();
+    public DbSet<RecoveryCode> RecoveryCodes => Set<RecoveryCode>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -261,6 +262,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(x => x.AiModel).HasMaxLength(200);
             e.Property(x => x.AiSystemPrompt).HasMaxLength(4000);
             e.Property(x => x.WeatherLocationName).HasMaxLength(200);
+            e.Property(x => x.TotpSecretEncrypted).HasMaxLength(400);
+        });
+
+        b.Entity<RecoveryCode>(e =>
+        {
+            e.HasIndex(x => x.UserId);
+            e.Property(x => x.CodeHash).HasMaxLength(64);
+            e.HasOne(x => x.User)
+                .WithMany(u => u.RecoveryCodes)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

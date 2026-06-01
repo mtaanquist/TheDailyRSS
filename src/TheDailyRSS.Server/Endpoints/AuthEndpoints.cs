@@ -51,21 +51,50 @@ public static class AuthEndpoints
         if (await db.Users.CountAsync() == 1)
             await users.AddToRoleAsync(user, Roles.Admin);
 
-        return await IssueAsync(user, users, db, tokens, http);
+        return Results.Ok(await IssueAsync(user, users, db, tokens, http));
     }
 
     private static async Task<IResult> Login(
         LoginRequest req, UserManager<AppUser> users, AppDbContext db,
-        JwtTokenService tokens, HttpContext http)
+        JwtTokenService tokens, TotpService totp, HttpContext http, CancellationToken ct)
     {
         var user = await users.FindByEmailAsync(req.Email);
         if (user is null || !await users.CheckPasswordAsync(user, req.Password))
             return Results.Unauthorized();
 
-        return await IssueAsync(user, users, db, tokens, http);
+        // Second factor: only after the password is verified, so this never leaks who has TOTP on.
+        if (user.IsTotpEnabled)
+        {
+            var code = (req.TotpCode ?? "").Trim();
+            if (code.Length == 0)
+                return Results.Ok(new LoginResponse(true, null)); // prompt the client for a code
+
+            if (!await VerifySecondFactorAsync(user, code, db, totp, ct))
+                return ApiResults.Fail("That verification code didn't match.");
+        }
+
+        return Results.Ok(new LoginResponse(false, await IssueAsync(user, users, db, tokens, http)));
     }
 
-    private static async Task<IResult> IssueAsync(
+    /// <summary>Accepts a current authenticator code, or burns a single-use recovery code.</summary>
+    private static async Task<bool> VerifySecondFactorAsync(
+        AppUser user, string code, AppDbContext db, TotpService totp, CancellationToken ct)
+    {
+        var secret = totp.TryDecrypt(user.TotpSecretEncrypted);
+        if (secret is not null && totp.VerifyCode(secret, code))
+            return true;
+
+        var hash = TotpService.HashRecoveryCode(code);
+        var recovery = await db.RecoveryCodes
+            .FirstOrDefaultAsync(r => r.UserId == user.Id && r.CodeHash == hash && r.UsedAt == null, ct);
+        if (recovery is null) return false;
+
+        recovery.UsedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    private static async Task<AuthResponse> IssueAsync(
         AppUser user, UserManager<AppUser> users, AppDbContext db, JwtTokenService tokens, HttpContext http)
     {
         var ua = http.Request.Headers.UserAgent.ToString();
@@ -81,7 +110,7 @@ public static class AuthEndpoints
 
         var roles = await users.GetRolesAsync(user);
         var (token, expiresAt) = tokens.CreateToken(user, session.Id, roles);
-        return Results.Ok(new AuthResponse(token, expiresAt, user.ToDto(roles)));
+        return new AuthResponse(token, expiresAt, user.ToDto(roles));
     }
 
     private static async Task<IResult> Logout(System.Security.Claims.ClaimsPrincipal principal, AppDbContext db)
