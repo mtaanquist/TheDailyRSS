@@ -322,4 +322,48 @@ public sealed class ApiTests(AppFixture fx)
         var gen = await client.PostAsync("/api/ai/summary/daily/2026-05-10", null);
         Assert.Equal(HttpStatusCode.BadRequest, gen.StatusCode);
     }
+
+    [Fact]
+    public async Task Change_email_updates_login_identifier()
+    {
+        var oldEmail = U();
+        var newEmail = U();
+        var (client, _) = await fx.RegisterAsync(oldEmail);
+
+        var resp = await client.PostAsJsonAsync("/api/auth/email",
+            new ChangeEmailRequest { NewEmail = newEmail, CurrentPassword = "password123" });
+        resp.EnsureSuccessStatusCode();
+        var updated = (await resp.Content.ReadFromJsonAsync<UserDto>())!;
+        Assert.Equal(newEmail, updated.Email);
+
+        // The new address logs in; the old one no longer does (email is the username too).
+        var anon = fx.Factory.CreateClient();
+        var withNew = await anon.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest { Email = newEmail, Password = "password123" });
+        Assert.True(withNew.IsSuccessStatusCode);
+        var withOld = await anon.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest { Email = oldEmail, Password = "password123" });
+        Assert.Equal(HttpStatusCode.Unauthorized, withOld.StatusCode);
+    }
+
+    [Fact]
+    public async Task Change_email_rejects_wrong_password()
+    {
+        var (client, _) = await fx.RegisterAsync(U());
+        var resp = await client.PostAsJsonAsync("/api/auth/email",
+            new ChangeEmailRequest { NewEmail = U(), CurrentPassword = "wrong-password" });
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Change_email_rejects_an_address_already_in_use()
+    {
+        var taken = U();
+        await fx.RegisterAsync(taken);
+        var (client, _) = await fx.RegisterAsync(U());
+
+        var resp = await client.PostAsJsonAsync("/api/auth/email",
+            new ChangeEmailRequest { NewEmail = taken, CurrentPassword = "password123" });
+        Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
+    }
 }

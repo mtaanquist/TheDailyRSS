@@ -32,6 +32,15 @@ public sealed class ChangePasswordRequest
     public string NewPassword { get; set; } = "";
 }
 
+public sealed class ChangeEmailRequest
+{
+    [Required]
+    public string CurrentPassword { get; set; } = "";
+
+    [Required, EmailAddress]
+    public string NewEmail { get; set; } = "";
+}
+
 /// <summary>Returned on register/login. The token is a bearer JWT.</summary>
 public sealed record AuthResponse(string Token, DateTimeOffset ExpiresAt, UserDto User);
 

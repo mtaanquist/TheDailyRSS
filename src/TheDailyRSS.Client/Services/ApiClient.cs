@@ -24,6 +24,7 @@ public sealed class ApiClient(HttpClient http)
     public Task<UserDto> UpdateProfileAsync(UpdateProfileRequest req) => PutAsync<UserDto>("api/auth/profile", req);
     public Task<UserDto> UpdatePreferencesAsync(PreferencesDto req) => PutAsync<UserDto>("api/auth/preferences", req);
     public Task ChangePasswordAsync(ChangePasswordRequest req) => SendAsync(HttpMethod.Post, "api/auth/password", req);
+    public Task<UserDto> ChangeEmailAsync(ChangeEmailRequest req) => PostAsync<UserDto>("api/auth/email", req);
     public Task<List<SessionDto>> GetSessionsAsync() => GetAsync<List<SessionDto>>("api/auth/sessions");
     public Task RevokeSessionAsync(Guid id) => SendAsync(HttpMethod.Delete, $"api/auth/sessions/{id}");
     public Task RevokeOtherSessionsAsync() => SendAsync(HttpMethod.Post, "api/auth/sessions/revoke-others");
