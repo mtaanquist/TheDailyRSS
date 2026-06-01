@@ -51,6 +51,9 @@ public sealed record PreferencesDto
     public ReadingDensity Density { get; set; } = ReadingDensity.Balanced;
     public bool ShowUnread { get; set; } = true;
 
+    /// <summary>"No pictures" mode — hide all images for this reader (issue #41).</summary>
+    public bool HideImages { get; set; }
+
     /// <summary>Read-only mirror of the AI opt-in, so the client can gate AI affordances without an
     /// extra request. Managed via the AI settings endpoint, not the preferences endpoint.</summary>
     public bool AiEnabled { get; set; }

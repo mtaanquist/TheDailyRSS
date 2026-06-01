@@ -14,6 +14,10 @@ public sealed class AppUser : IdentityUser<Guid>
     public ReadingDensity Density { get; set; } = ReadingDensity.Balanced;
     public bool ShowUnread { get; set; } = true;
 
+    /// <summary>"No pictures" mode: don't render any images for this reader. Images are still fetched and
+    /// stored, so re-enabling brings them straight back (issue #41).</summary>
+    public bool HideImages { get; set; }
+
     // ── Bring-your-own-key AI summaries (opt-in, per-user) ──────────────
     /// <summary>Master opt-in. When false, no AI affordances appear and no summaries are generated.</summary>
     public bool AiEnabled { get; set; }
