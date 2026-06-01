@@ -1,0 +1,33 @@
+@* Themed confirmation prompt — a drop-in replacement for window.confirm() for irreversible actions.
+   Bind Visible and handle OnConfirm; Cancel/Escape/backdrop all dismiss without firing OnConfirm. *@
+
+<ModalShell Visible="Visible" Title="@Title" ModalClass="tdr-confirm-modal" OnClose="Cancel">
+    @if (!string.IsNullOrWhiteSpace(Message))
+    {
+        <p class="tdr-confirm-body">@Message</p>
+    }
+    <div class="tdr-modal-actions">
+        <button class="tdr-link muted" @onclick="Cancel">@CancelLabel</button>
+        <button class="tdr-btn" @onclick="Confirm">@ConfirmLabel</button>
+    </div>
+</ModalShell>
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback<bool> VisibleChanged { get; set; }
+    [Parameter] public string Title { get; set; } = "Are you sure?";
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public string ConfirmLabel { get; set; } = "Confirm";
+    [Parameter] public string CancelLabel { get; set; } = "cancel";
+    [Parameter] public EventCallback OnConfirm { get; set; }
+
+    private async Task Confirm()
+    {
+        await Hide();
+        await OnConfirm.InvokeAsync();
+    }
+
+    private Task Cancel() => Hide();
+
+    private Task Hide() => VisibleChanged.InvokeAsync(false);
+}

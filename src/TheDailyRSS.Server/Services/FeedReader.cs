@@ -72,7 +72,7 @@ public sealed partial class FeedReader
         return new ParsedItem(
             ExternalId: externalId.Trim(),
             Title: string.IsNullOrWhiteSpace(item.Title?.Text) ? "(untitled)" : item.Title!.Text.Trim(),
-            Url: url,
+            Url: CleanUrl(url),
             Author: author,
             Summary: BestSummary(summaryHtml, contentHtml),
             ContentHtml: contentHtml,
@@ -176,6 +176,48 @@ public sealed partial class FeedReader
         // "search.yahoo.com" → "yahoo" is friendlier than the whole host; take the second-level label.
         var parts = host.Split('.');
         return parts.Length >= 2 ? parts[^2] : host;
+    }
+
+    // Query-string keys that are pure analytics/tracking noise. Prefixes catch families
+    // (utm_*, at_* on BBC, ns_* on Guardian/CNN, mc_* on Mailchimp, pk_*/piwik on Matomo);
+    // the set catches the well-known one-offs. Unknown params are kept so we never break a
+    // link that genuinely needs them for routing.
+    private static readonly string[] TrackingPrefixes =
+        ["utm_", "at_", "ns_", "mc_", "pk_", "piwik_", "_hs", "hsa_", "wt_", "wt."];
+
+    private static readonly HashSet<string> TrackingKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "fbclid", "gclid", "gclsrc", "dclid", "msclkid", "yclid", "ttclid", "twclid",
+        "igshid", "mc_cid", "mc_eid", "ref", "ref_src", "referrer", "cmpid", "cmp",
+        "icid", "ncid", "ito", "spm", "vero_id", "vero_conv", "s_kwcid", "guccounter",
+        "__twitter_impression", "scrolla", "guce_referrer", "guce_referrer_sig",
+    };
+
+    private static bool IsTrackingParam(string key) =>
+        TrackingKeys.Contains(key)
+        || TrackingPrefixes.Any(p => key.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Strips known tracking query parameters (e.g. <c>?at_medium=RSS&amp;at_campaign=rss</c>)
+    /// from an article link before it's stored, so "read at source" points at a clean URL. Leaves the
+    /// path, fragment and any non-tracking params untouched; returns the input unchanged if it isn't an
+    /// absolute URL or has no query.</summary>
+    public static string CleanUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Query.Length <= 1)
+            return url;
+
+        var kept = uri.Query.TrimStart('?')
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Where(pair =>
+            {
+                var eq = pair.IndexOf('=');
+                var key = Uri.UnescapeDataString(eq >= 0 ? pair[..eq] : pair);
+                return !IsTrackingParam(key);
+            })
+            .ToList();
+
+        var query = kept.Count > 0 ? "?" + string.Join('&', kept) : "";
+        return uri.GetLeftPart(UriPartial.Path) + query + uri.Fragment;
     }
 
     /// <summary>The teaser text. Prefers the description, but some feeds stuff a bare image URL

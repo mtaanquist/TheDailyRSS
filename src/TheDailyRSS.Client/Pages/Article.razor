@@ -103,54 +103,46 @@ else
             <button class="tdr-link muted" @onclick="ToggleRead">@(a.IsRead ? "mark unread" : "mark read")</button>
         </div>
 
-        @if (_showFilter)
-        {
-            <div class="tdr-overlay" @onclick="() => _showFilter = false">
-                <div class="tdr-modal tdr-filter-modal" @onclick:stopPropagation="true">
-                    <div class="tdr-modal-head">
-                        <h2>Mute by field</h2>
-                        <button class="x" @onclick="() => _showFilter = false" aria-label="Close">✕</button>
-                    </div>
-                    <p class="tdr-filter-intro">
-                        Pick a value the feed itself attached to this story. Future stories with the same
-                        field and value will be kept out of your editions. Per-feed rules only apply to
-                        <b>@a.FeedTitle</b>.
-                    </p>
+        <ModalShell Visible="_showFilter" Title="Mute by field" ModalClass="tdr-filter-modal"
+                    OnClose="() => _showFilter = false">
+            <p class="tdr-filter-intro">
+                Pick a value the feed itself attached to this story. Future stories with the same
+                field and value will be kept out of your editions. Per-feed rules only apply to
+                <b>@a.FeedTitle</b>.
+            </p>
 
-                    @if (_filterError is not null)
+            @if (_filterError is not null)
+            {
+                <div class="tdr-error" style="margin-bottom:10px">@_filterError</div>
+            }
+
+            <div class="tdr-filter-list">
+                @foreach (var entry in a.Fields)
+                {
+                    foreach (var value in entry.Value)
                     {
-                        <div class="tdr-error" style="margin-bottom:10px">@_filterError</div>
+                        var key = entry.Key;
+                        var val = value;
+                        <div class="tdr-filter-row">
+                            <span class="k">@key</span>
+                            <span class="v">@val</span>
+                            <div class="actions">
+                                <button class="tdr-chip" disabled="@_filterBusy"
+                                        title="Mute on every feed"
+                                        @onclick="() => Mute(key, val, scoped: false)">
+                                    Everywhere
+                                </button>
+                                <button class="tdr-chip" disabled="@_filterBusy"
+                                        title="Mute only on @a.FeedTitle"
+                                        @onclick="() => Mute(key, val, scoped: true)">
+                                    Just this feed
+                                </button>
+                            </div>
+                        </div>
                     }
-
-                    <div class="tdr-filter-list">
-                        @foreach (var entry in a.Fields)
-                        {
-                            foreach (var value in entry.Value)
-                            {
-                                var key = entry.Key;
-                                var val = value;
-                                <div class="tdr-filter-row">
-                                    <span class="k">@key</span>
-                                    <span class="v">@val</span>
-                                    <div class="actions">
-                                        <button class="tdr-chip" disabled="@_filterBusy"
-                                                title="Mute on every feed"
-                                                @onclick="() => Mute(key, val, scoped: false)">
-                                            Everywhere
-                                        </button>
-                                        <button class="tdr-chip" disabled="@_filterBusy"
-                                                title="Mute only on @a.FeedTitle"
-                                                @onclick="() => Mute(key, val, scoped: true)">
-                                            Just this feed
-                                        </button>
-                                    </div>
-                                </div>
-                            }
-                        }
-                    </div>
-                </div>
+                }
             </div>
-        }
+        </ModalShell>
 
         @if (_neighbors is { } nb && (nb.Prev is not null || nb.Next is not null))
         {

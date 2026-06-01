@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Security.Claims;
 using TheDailyRSS.Server.Auth;
 using TheDailyRSS.Server.Data;
+using TheDailyRSS.Server.Services;
 using TheDailyRSS.Shared;
 
 namespace TheDailyRSS.Server.Endpoints;
@@ -18,16 +20,20 @@ public static class CategoryEndpoints
         group.MapGet("", List);
     }
 
-    private static async Task<IResult> List(ClaimsPrincipal principal, AppDbContext db)
+    private static async Task<IResult> List(ClaimsPrincipal principal, AppDbContext db, IOptions<FeedOptions> opts)
     {
         var uid = principal.GetUserId();
+        // Sidebar unread counts are scoped to today's edition, matching the masthead. Counting across
+        // all of time made a return-from-hiatus feel overwhelming and never reflected "mark all read".
+        var today = EditionClock.Today(opts.Value);
         var cats = await db.Categories
             .OrderBy(c => c.SortOrder).ThenBy(c => c.Name)
             .Select(c => new CategoryDto(
                 c.Id, c.Name, c.Slug, c.Color, c.SortOrder,
                 c.Subscriptions.Count(s => s.UserId == uid),
                 db.Articles.Count(a =>
-                    a.Source!.Subscriptions.Any(s => s.UserId == uid && s.CategoryId == c.Id)
+                    a.EditionDate == today
+                    && a.Source!.Subscriptions.Any(s => s.UserId == uid && s.CategoryId == c.Id)
                     && !a.States.Any(st => st.UserId == uid && st.IsRead))))
             .ToListAsync();
         return Results.Ok(cats);

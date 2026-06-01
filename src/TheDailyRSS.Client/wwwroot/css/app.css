@@ -115,22 +115,11 @@ html[data-density="airy"] { --story-gap: 26px; }
     border-left: 1px solid var(--rule);
     border-right: 1px solid var(--rule);
 }
-/* "Fill window" mode drops the centred cap so the gutters disappear. */
-.tdr-app.tdr-expanded { max-width: none; border-left: none; border-right: none; }
-/* position:relative anchors the floating expand button to the content area's corner. */
-.tdr-body { position: relative; display: flex; flex: 1; min-height: 0; }
+.tdr-body { display: flex; flex: 1; min-height: 0; }
 /* The newspaper area is the only scroll region. */
 .tdr-main { flex: 1; min-width: 0; overflow-y: auto; padding: 16px 24px 40px; transition: opacity 0.15s ease; }
 /* While the next edition loads, keep the current one visible but gently dimmed. */
 .tdr-main.loading { opacity: 0.45; }
-.tdr-expand-btn {
-    position: absolute; top: 10px; right: 14px; z-index: 5;
-    width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
-    background: var(--paper); border: 1px solid var(--rule); color: var(--ink-2); cursor: pointer;
-}
-.tdr-expand-btn:hover { color: var(--ink); border-color: var(--ink-2); }
-/* Desktop only — on mobile the app is already full-width (no gutters). */
-@media (max-width: 800px) { .tdr-expand-btn { display: none; } }
 .tdr-masthead-title.clickable { cursor: pointer; }
 
 /* ---------- masthead ---------- */
@@ -583,6 +572,7 @@ html { scroll-behavior: smooth; }
 .tdr-overlay {
     position: fixed; inset: 0; background: rgba(20, 15, 10, 0.45);
     display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+    outline: none; /* the overlay is focused (for Escape) but shouldn't show a focus ring */
 }
 .tdr-modal {
     width: 460px; max-width: 100%; max-height: 90vh; overflow: auto; background: var(--paper);
@@ -593,6 +583,8 @@ html { scroll-behavior: smooth; }
 .tdr-modal-head .x { font-family: var(--typer); cursor: pointer; background: none; border: none; font-size: 14px; color: var(--ink); }
 .tdr-modal hr { border: none; border-top: 1px solid var(--ink); margin: 12px 0; }
 .tdr-modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 18px; }
+.tdr-confirm-modal { width: 420px; }
+.tdr-confirm-body { font-size: 14px; line-height: 1.5; color: var(--ink); margin: 4px 0 0; }
 
 /* "Mute by field" — sits in the article byline next to save/hide. */
 .tdr-filter { background: none; border: none; cursor: pointer; padding: 0; line-height: 0; color: var(--ink-3); opacity: .7; }
@@ -750,7 +742,7 @@ html { scroll-behavior: smooth; }
 
 .tdr-toggle { width: 30px; height: 17px; background: var(--paper); border: 1.5px solid var(--ink-2); position: relative; cursor: pointer; flex-shrink: 0; }
 .tdr-toggle.on { background: var(--accent); }
-.tdr-toggle .knob { position: absolute; top: 1px; left: 1px; width: 13px; height: 13px; background: var(--paper); border: 1px solid var(--ink-2); transition: left .1s; }
+.tdr-toggle .knob { position: absolute; top: 50%; transform: translateY(-50%); left: 1px; width: 13px; height: 13px; background: var(--paper); border: 1px solid var(--ink-2); transition: left .1s; }
 .tdr-toggle.on .knob { left: 14px; }
 .tdr-toggle-row { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: var(--ink); }
 

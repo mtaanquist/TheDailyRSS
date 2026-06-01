@@ -119,7 +119,13 @@ public static class EditionEndpoints
         var isFrontPage = categoryId is null && sourceId is null && !saved && !hidden;
         var sections = await BuildSectionsAsync(db, date, isFrontPage, rest, summaries, ct);
 
-        var unreadTotal = await NotHidden(muted, uid)
+        // The masthead unread count reflects the edition being viewed, not all of time — otherwise
+        // unread from older days makes "today" feel overwhelming and "mark all read" never zeroes it.
+        // Saved/Hidden are cross-date pseudo-sections, so they keep counting across every day.
+        var unreadBase = NotHidden(muted, uid);
+        if (!saved && !hidden)
+            unreadBase = unreadBase.Where(a => a.EditionDate == date);
+        var unreadTotal = await unreadBase
             .CountAsync(a => !a.States.Any(s => s.UserId == uid && s.IsRead), ct);
 
         DateOnly? prev = null, next = null;
@@ -240,12 +246,13 @@ public static class EditionEndpoints
 
         // Prefer the reader-mode extraction when the source has it on and we have a usable body
         // ("" means we tried and got nothing); otherwise serve the feed's own content. Sanitized either way.
-        var body = row.FetchFull && !string.IsNullOrEmpty(row.FullContentHtml)
-            ? row.FullContentHtml
-            : row.ContentHtml;
+        var useFullContent = row.FetchFull && !string.IsNullOrEmpty(row.FullContentHtml);
+        var body = useFullContent ? row.FullContentHtml : row.ContentHtml;
 
+        // Reader-mode bodies duplicate the hero image we already render from ImageUrl, so strip images
+        // out of the full-text body. The feed's own (short) content keeps its inline images.
         return Results.Ok(new ArticleDto(
-            row.Id, row.Title, row.Summary, sanitizer.Sanitize(body), row.Author,
+            row.Id, row.Title, row.Summary, sanitizer.Sanitize(body, stripImages: useFullContent), row.Author,
             row.FeedTitle, row.IconText,
             row.CategoryId, row.CategoryName, row.CategoryColor,
             row.ImageUrl, row.PublishedAt,
