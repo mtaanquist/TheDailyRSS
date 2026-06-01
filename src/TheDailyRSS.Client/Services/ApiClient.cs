@@ -122,6 +122,21 @@ public sealed class ApiClient(HttpClient http)
     /// <summary>The caller's in-flight AI generation (queued/running kinds) + their most recent error.</summary>
     public Task<AiActivityDto> GetAiActivityAsync() => GetAsync<AiActivityDto>("api/ai/activity");
 
+    // ── Weather (issue #33) ───────────────────────────────────────
+    /// <summary>The stored forecast for the reader's location on a date, or null when no location is set
+    /// or nothing's on file yet (the server answers 204).</summary>
+    public async Task<WeatherDto?> GetWeatherAsync(DateOnly date)
+    {
+        var resp = await http.GetAsync($"api/weather/{D(date)}");
+        if (resp.StatusCode == HttpStatusCode.NoContent) return null;
+        if (!resp.IsSuccessStatusCode) await ThrowAsync(resp);
+        return await resp.Content.ReadFromJsonAsync<WeatherDto>();
+    }
+
+    /// <summary>Geocodes and saves the reader's weather location (empty clears it); returns the updated user.</summary>
+    public Task<UserDto> SetWeatherLocationAsync(string query) =>
+        PutAsync<UserDto>("api/weather/location", new SetWeatherLocationRequest { Query = query });
+
     private static string Query(Guid? categoryId, Guid? sourceId, bool? saved, bool unreadOnly, bool hidden = false)
     {
         var parts = new List<string>();

@@ -66,6 +66,13 @@ public sealed record PreferencesDto
     /// <summary>Read-only mirror of the AI opt-in, so the client can gate AI affordances without an
     /// extra request. Managed via the AI settings endpoint, not the preferences endpoint.</summary>
     public bool AiEnabled { get; set; }
+
+    /// <summary>Show the at-a-glance weather in the masthead (issue #33). Saved via the preferences endpoint.</summary>
+    public bool ShowWeather { get; set; }
+
+    /// <summary>Read-only mirror of the reader's geocoded weather location label, or null if unset.
+    /// Managed via the weather location endpoint, not the preferences endpoint.</summary>
+    public string? WeatherLocation { get; set; }
 }
 
 public sealed class UpdateProfileRequest

@@ -119,6 +119,7 @@ public static class AuthEndpoints
         user.Density = req.Density;
         user.ShowUnread = req.ShowUnread;
         user.HideImages = req.HideImages;
+        user.ShowWeather = req.ShowWeather;
         await users.UpdateAsync(user);
         return Results.Ok(user.ToDto(await users.GetRolesAsync(user)));
     }

@@ -157,6 +157,8 @@ builder.Services.AddSingleton<ArticleContentExtractor>();
 // Stateless GET-JSON helper for fixed third-party APIs — singleton so the (singleton) data-polling
 // background workers can inject it without a captive-dependency on a scoped service.
 builder.Services.AddSingleton<ExternalApiClient>();
+// Stateless HTTP + mapping over ExternalApiClient; the weather worker (singleton) injects it.
+builder.Services.AddSingleton<WeatherService>();
 builder.Services.AddSingleton<AiJobTracker>();
 builder.Services.AddSingleton<AiGenerationQueue>();
 builder.Services.AddScoped<FeedDiscoveryService>();
@@ -169,6 +171,7 @@ builder.Services.AddHostedService<FullContentBackfillService>();
 builder.Services.AddHostedService<AiSummaryBackgroundService>();
 builder.Services.AddHostedService<ArticleSummaryBackgroundService>();
 builder.Services.AddHostedService<AiGenerationWorker>();
+builder.Services.AddHostedService<WeatherBackgroundService>();
 
 var app = builder.Build();
 
@@ -231,6 +234,7 @@ app.MapKeywordEndpoints();
 app.MapFieldFilterEndpoints();
 app.MapAdminEndpoints();
 app.MapAiEndpoints();
+app.MapWeatherEndpoints();
 
 app.MapFallbackToFile("index.html");
 

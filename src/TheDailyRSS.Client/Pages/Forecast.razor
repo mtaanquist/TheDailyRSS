@@ -1,0 +1,95 @@
+@page "/forecast/{Date}"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject NavigationManager Nav
+
+<PageTitle>Forecast · The Daily RSS</PageTitle>
+
+<header class="tdr-masthead">
+    <h1 class="tdr-masthead-title">The Forecast</h1>
+    <div class="tdr-masthead-rule">
+        <span>— @(_weather?.Location is { Length: > 0 } loc ? loc : "weather") —</span>
+    </div>
+</header>
+
+<div class="tdr-edition-body">
+    <div class="tdr-toolbar">
+        <button class="tdr-link" @onclick="GoBack">← back to the edition</button>
+        <span class="spacer"></span>
+        @if (_weather is { } wh)
+        {
+            <span class="title">@wh.Date.ToString("dddd, MMMM d, yyyy")</span>
+        }
+    </div>
+
+    @if (_loading)
+    {
+        <p style="font-style:italic; color:var(--ink-3)">Reading the skies…</p>
+    }
+    else if (_weather is null)
+    {
+        <div class="tdr-empty">
+            <div class="tdr-empty-mark">☁</div>
+            <h1 class="tdr-empty-title">No forecast on file</h1>
+            <p class="tdr-empty-sub">Set a location under Account &amp; preferences to see the weather here.</p>
+            <button class="tdr-btn" @onclick="@(() => Nav.NavigateTo("/settings/profile"))">open settings</button>
+        </div>
+    }
+    else
+    {
+        var w = _weather;
+        <section style="display:flex; align-items:center; gap:18px; padding:8px 0 18px; border-bottom:1px solid var(--rule)">
+            <Icon Name="@WeatherCodes.Icon(w.CurrentCode)" Size="56" />
+            <div>
+                <div style="font-size:44px; font-weight:800; line-height:1">@Temp(w.CurrentTempC)</div>
+                <div style="color:var(--ink-2)">@WeatherCodes.Label(w.CurrentCode)</div>
+            </div>
+            <div style="margin-left:auto; text-align:right; color:var(--ink-2); font-size:14px">
+                <div>High @Temp(w.HighTempC)</div>
+                <div>Low @Temp(w.LowTempC)</div>
+            </div>
+        </section>
+
+        <h2 style="font-weight:800; font-size:14px; margin:16px 0 8px">Hour by hour</h2>
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(72px, 1fr)); gap:8px">
+            @foreach (var h in w.Hourly)
+            {
+                <div style="display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 4px; border:1px solid var(--rule); border-radius:4px">
+                    <span style="font-size:12px; color:var(--ink-3)">@Hour(h.Time)</span>
+                    <Icon Name="@WeatherCodes.Icon(h.Code)" Size="20" />
+                    <span style="font-weight:700; font-size:13px">@Temp(h.TempC)</span>
+                </div>
+            }
+        </div>
+
+        <div class="tdr-hint" style="margin-top:14px">Updated @w.FetchedAt.ToLocalTime().ToString("MMM d, HH:mm"). Weather by Open-Meteo.</div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Date { get; set; }
+
+    private WeatherDto? _weather;
+    private bool _loading = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _weather = null;
+        if (DateOnly.TryParse(Date, out var d))
+        {
+            try { _weather = await Api.GetWeatherAsync(d); }
+            catch { _weather = null; }
+        }
+        _loading = false;
+    }
+
+    private void GoBack() => Nav.NavigateTo("/");
+
+    private static string Temp(double c) => $"{Math.Round(c)}°";
+
+    /// <summary>"2026-06-01T14:00" → "14:00"; falls back to the raw value if it won't parse.</summary>
+    private static string Hour(string iso) =>
+        DateTime.TryParse(iso, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var dt) ? dt.ToString("HH:mm") : iso;
+}

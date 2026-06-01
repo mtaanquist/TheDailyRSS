@@ -43,6 +43,18 @@ public sealed class AppUser : IdentityUser<Guid>
     /// <summary>Pre-generate a per-article TL;DR in the background for articles from full-text feeds.</summary>
     public bool AiAutoArticle { get; set; }
 
+    // ── Local weather (opt-in, per-user; issue #33) ─────────────────────
+    /// <summary>Show the at-a-glance weather in the masthead.</summary>
+    public bool ShowWeather { get; set; }
+
+    /// <summary>Human-readable geocoded label, e.g. "Copenhagen, Denmark". Null when unset.</summary>
+    public string? WeatherLocationName { get; set; }
+
+    /// <summary>Geocoded coordinates for the saved location; both null when unset. The forecast is keyed by
+    /// these (rounded) so readers in the same place share one stored snapshot.</summary>
+    public double? WeatherLatitude { get; set; }
+    public double? WeatherLongitude { get; set; }
+
     public List<Subscription> Subscriptions { get; set; } = new();
     public List<UserArticleState> ArticleStates { get; set; } = new();
     public List<KeywordFilter> KeywordFilters { get; set; } = new();
@@ -69,6 +81,41 @@ public sealed class AiSummary
     public string Model { get; set; } = "";
     public int ArticleCount { get; set; }
     public DateTimeOffset GeneratedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>A day's stored weather for one (rounded) location, keyed by edition date. Shared across all
+/// readers in that location — like a <see cref="FeedSource"/>, not a per-user overlay — so a place is
+/// fetched once per day regardless of how many readers watch it. Once the edition day passes the snapshot
+/// is frozen, so paging back to an older edition shows the forecast that was on file for that day.</summary>
+public sealed class WeatherSnapshot
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    /// <summary>Rounded "lat,lon" dedup key (see <c>WeatherService.LocationKey</c>).</summary>
+    public string LocationKey { get; set; } = "";
+
+    /// <summary>Calendar day this snapshot is for, in the configured edition timezone.</summary>
+    public DateOnly EditionDate { get; set; }
+
+    public double Latitude { get; set; }
+    public double Longitude { get; set; }
+
+    /// <summary>The location-local IANA timezone the API reported, used to render hour labels.</summary>
+    public string TimeZone { get; set; } = "";
+
+    /// <summary>Conditions at the most recent fetch (meaningful for "today"; the last reading of the day
+    /// for frozen past snapshots).</summary>
+    public double CurrentTempC { get; set; }
+    public int CurrentCode { get; set; }
+
+    /// <summary>The day's high/low across the hourly series.</summary>
+    public double HighTempC { get; set; }
+    public double LowTempC { get; set; }
+
+    /// <summary>The hourly series as a serialized <c>List&lt;HourlyWeatherDto&gt;</c> (Time/TempC/Code).</summary>
+    public string HourlyJson { get; set; } = "";
+
+    public DateTimeOffset FetchedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
 /// <summary>A recorded AI generation failure, for the admin error log. Denormalised (no FK to the user)

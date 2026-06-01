@@ -29,6 +29,15 @@ else
             {
                 <span>Unread · @ed.UnreadTotal</span>
             }
+            @if (_weather is { } w)
+            {
+                <a href="@($"/forecast/{w.Date:yyyy-MM-dd}")" title="@WeatherCodes.Label(w.CurrentCode) — see the forecast"
+                   style="display:inline-flex; align-items:center; gap:4px; text-decoration:none; color:inherit">
+                    <Icon Name="@WeatherCodes.Icon(w.CurrentCode)" Size="15" />
+                    <span>@FormatTemp(w.CurrentTempC)</span>
+                    <span style="opacity:.7">@w.Location</span>
+                </a>
+            }
         </div>
         <h1 class="tdr-masthead-title clickable" @onclick="Refresh" role="button" title="Refresh stories">The Daily RSS</h1>
         <div class="tdr-masthead-rule">
@@ -161,6 +170,7 @@ else
     [SupplyParameterFromQuery(Name = "unread")] public bool Unread { get; set; }
 
     private EditionDto? _edition;
+    private WeatherDto? _weather;
     private string? _error;
     private bool _showAdd;
     private bool _confirmMarkAll;
@@ -241,10 +251,24 @@ else
             _edition = result;
             // Surface the date in the sticky mobile header (compact, e.g. "Mon · May 25").
             State.SetHeaderDate(!Saved && !Hidden && result is { } e ? e.Date.ToString("ddd · MMM d, yyyy") : null);
+            await LoadWeatherAsync();
         }
         catch (ApiException ex) { _error = ex.Message; }
         finally { _loading = false; }
     }
+
+    /// <summary>Loads the masthead weather glance for the current edition day. Best-effort: weather is a
+    /// non-essential extra, so a failure here must never block or break the edition.</summary>
+    private async Task LoadWeatherAsync()
+    {
+        _weather = null;
+        if (Saved || Hidden || _edition is null) return;
+        if (Auth.CurrentUser?.Preferences is not { ShowWeather: true, WeatherLocation.Length: > 0 }) return;
+        try { _weather = await Api.GetWeatherAsync(_edition.Date); }
+        catch { _weather = null; }
+    }
+
+    private static string FormatTemp(double c) => $"{Math.Round(c)}°";
 
     public void Dispose()
     {
