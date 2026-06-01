@@ -46,6 +46,8 @@ public static class Mappers
             price, prev, change, pct, ut.Promoted, ut.SortOrder, t?.UpdatedAt);
     }
 
+    public static PasskeyDto ToDto(this UserCredential c) => new(c.Id, c.Nickname, c.CreatedAt, c.LastUsedAt);
+
     public static WeatherDto ToWeatherDto(this WeatherSnapshot s, string location)
     {
         var hourly = string.IsNullOrEmpty(s.HourlyJson)

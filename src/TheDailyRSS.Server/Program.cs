@@ -32,6 +32,8 @@ var dataDir = builder.Configuration["DataDir"]
 // of letting a null/short field reach the handler and throw a 500.
 builder.Services.AddValidation();
 builder.Services.AddProblemDetails();
+// Short-lived store for in-flight WebAuthn challenges (passkey register/login ceremonies).
+builder.Services.AddMemoryCache();
 
 // ── Options ─────────────────────────────────────────────────────────
 builder.Services.Configure<FeedOptions>(builder.Configuration.GetSection(FeedOptions.SectionName));
@@ -231,6 +233,7 @@ app.UseAuthorization();
 
 app.MapAuthEndpoints();
 app.MapTotpEndpoints();
+app.MapPasskeyEndpoints();
 app.MapCategoryEndpoints();
 app.MapFeedEndpoints();
 app.MapEditionEndpoints();

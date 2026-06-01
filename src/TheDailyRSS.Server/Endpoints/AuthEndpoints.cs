@@ -94,7 +94,9 @@ public static class AuthEndpoints
         return true;
     }
 
-    private static async Task<AuthResponse> IssueAsync(
+    /// <summary>Creates a device session + signs a JWT for a verified user. Shared by password login and
+    /// the passwordless passkey login.</summary>
+    internal static async Task<AuthResponse> IssueAsync(
         AppUser user, UserManager<AppUser> users, AppDbContext db, JwtTokenService tokens, HttpContext http)
     {
         var ua = http.Request.Headers.UserAgent.ToString();

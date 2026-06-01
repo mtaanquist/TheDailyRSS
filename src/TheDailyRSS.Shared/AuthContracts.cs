@@ -83,6 +83,29 @@ public sealed class TotpDisableRequest
     public string Password { get; set; } = "";
 }
 
+// ── Passkeys (WebAuthn/FIDO2; #38) ──────────────────────────────────────
+/// <summary>A registered passkey, for the management list.</summary>
+public sealed record PasskeyDto(Guid Id, string Nickname, DateTimeOffset CreatedAt, DateTimeOffset? LastUsedAt);
+
+/// <summary>Completes registration: the authenticator's attestation (raw WebAuthn JSON, passed straight to
+/// the FIDO2 library) plus a label for the new passkey.</summary>
+public sealed class PasskeyRegisterCompleteRequest
+{
+    [Required]
+    public string ResponseJson { get; set; } = "";
+    public string? Nickname { get; set; }
+}
+
+/// <summary>Completes a passwordless login: the assertion (raw WebAuthn JSON) and the handle that ties it
+/// back to the challenge issued by login-begin.</summary>
+public sealed class PasskeyLoginCompleteRequest
+{
+    [Required]
+    public string Handle { get; set; } = "";
+    [Required]
+    public string ResponseJson { get; set; } = "";
+}
+
 public sealed record PreferencesDto
 {
     public ThemePreference Theme { get; set; } = ThemePreference.Newsprint;

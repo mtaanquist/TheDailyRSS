@@ -3,6 +3,7 @@
 @inherits OperationComponent
 @inject ApiClient Api
 @inject AuthService Auth
+@inject IJSRuntime JS
 
 <PageTitle>Account &amp; preferences · The Daily RSS</PageTitle>
 
@@ -202,6 +203,29 @@
                     <div class="tdr-hint" style="margin-top:0; color:var(--ink-2)">Add a second step at sign-in with an authenticator app (TOTP), like Google Authenticator or 1Password.</div>
                     <button class="tdr-btn" style="margin-top:8px" @onclick="EnableTotp" disabled="@Busy">Set up two-factor</button>
                 }
+
+                <h3 style="font-weight:800; font-size:13px; margin:20px 0 6px">Passkeys</h3>
+                <div class="tdr-hint" style="margin-top:0; color:var(--ink-2)">A passkey (Face ID, Touch ID, Windows Hello, or a security key) lets you sign in without a password — and it skips two-factor.</div>
+
+                @if (_passkeys is { Count: > 0 })
+                {
+                    <div style="margin-top:8px; border-top:1px solid var(--rule); max-width:480px">
+                        @foreach (var k in _passkeys)
+                        {
+                            <div style="display:flex; align-items:center; gap:10px; padding:8px 2px; border-bottom:1px solid var(--rule)">
+                                <div style="flex:1"><strong>@k.Nickname</strong>
+                                    <span class="tdr-hint" style="margin:0">added @k.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")@(k.LastUsedAt is { } lu ? $" · last used {lu.ToLocalTime():MMM d}" : "")</span>
+                                </div>
+                                <button class="tdr-link" @onclick="() => RemovePasskey(k.Id)" disabled="@Busy">remove</button>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div style="display:flex; gap:8px; align-items:center; margin-top:10px; max-width:480px">
+                    <input class="tdr-input" style="flex:1; max-width:240px" placeholder="Name this passkey (e.g. MacBook)" @bind="_passkeyName" />
+                    <button class="tdr-btn" @onclick="AddPasskey" disabled="@Busy">Add a passkey</button>
+                </div>
             </div>
 
             @if (_saved)
@@ -235,6 +259,10 @@
     private bool _showDisable;
     private string _disablePw = "";
 
+    // Passkeys.
+    private List<PasskeyDto>? _passkeys;
+    private string _passkeyName = "";
+
     /// <summary>The location box differs from what's saved (so "save" is worth offering).</summary>
     private bool WeatherChanged =>
         _weatherQuery.Trim().Length > 0 &&
@@ -250,6 +278,12 @@
         _user = Auth.CurrentUser;
         _name = _user?.DisplayName ?? "";
         _weatherQuery = _user?.Preferences.WeatherLocation ?? "";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _passkeys = await Api.GetPasskeysAsync(); }
+        catch { _passkeys = new(); }
     }
 
     private async Task SaveName()
@@ -366,6 +400,28 @@
     }
 
     private void CancelDisable() { _showDisable = false; _disablePw = ""; }
+
+    // ── Passkeys ────────────────────────────────────────────────────────
+    private async Task AddPasskey()
+    {
+        await RunAsync(async () =>
+        {
+            var optionsJson = await Api.PasskeyRegisterBeginAsync();
+            var responseJson = await JS.InvokeAsync<string>("tdrPasskey.register", optionsJson);
+            await Api.PasskeyRegisterCompleteAsync(responseJson, string.IsNullOrWhiteSpace(_passkeyName) ? null : _passkeyName.Trim());
+            _passkeyName = "";
+            _passkeys = await Api.GetPasskeysAsync();
+        });
+    }
+
+    private async Task RemovePasskey(Guid id)
+    {
+        await RunAsync(async () =>
+        {
+            await Api.RemovePasskeyAsync(id);
+            _passkeys = await Api.GetPasskeysAsync();
+        });
+    }
 
     private static string FontStack(HeadlineFont f) => f switch
     {

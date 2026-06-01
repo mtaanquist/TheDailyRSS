@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Microsoft.JSInterop;
 using TheDailyRSS.Shared;
 
 namespace TheDailyRSS.Client.Services;
@@ -45,6 +47,20 @@ public sealed class AuthService(ApiClient api, TokenStore store, LocalStorage st
     {
         var resp = await api.RegisterAsync(new RegisterRequest { Email = email, DisplayName = displayName, Password = password });
         await SetAuthAsync(resp);
+    }
+
+    /// <summary>Passwordless sign-in with a passkey: fetch a challenge, run the browser WebAuthn ceremony,
+    /// then complete the assertion server-side. A passkey is a full credential, so this bypasses TOTP.</summary>
+    public async Task LoginWithPasskeyAsync(IJSRuntime js)
+    {
+        var envelope = await api.PasskeyLoginBeginAsync();
+        using var doc = JsonDocument.Parse(envelope);
+        var handle = doc.RootElement.GetProperty("handle").GetString()!;
+        var optionsJson = doc.RootElement.GetProperty("options").GetRawText();
+
+        var responseJson = await js.InvokeAsync<string>("tdrPasskey.authenticate", optionsJson);
+        var resp = await api.PasskeyLoginCompleteAsync(handle, responseJson);
+        await SetAuthAsync(resp.Auth!);
     }
 
     public async Task LogoutAsync()
