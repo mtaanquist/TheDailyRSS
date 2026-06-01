@@ -23,6 +23,7 @@ public static class AuthEndpoints
         secure.MapPut("/profile", UpdateProfile);
         secure.MapPut("/preferences", UpdatePreferences);
         secure.MapPost("/password", ChangePassword);
+        secure.MapPost("/email", ChangeEmail);
         secure.MapGet("/sessions", ListSessions);
         secure.MapDelete("/sessions/{id:guid}", RevokeSession);
         secure.MapPost("/sessions/revoke-others", RevokeOthers);
@@ -139,6 +140,35 @@ public static class AuthEndpoints
             .Where(s => s.UserId == user.Id && s.Id != current && s.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.RevokedAt, DateTimeOffset.UtcNow));
         return Results.NoContent();
+    }
+
+    private static async Task<IResult> ChangeEmail(
+        ChangeEmailRequest req, System.Security.Claims.ClaimsPrincipal principal, UserManager<AppUser> users)
+    {
+        var user = await users.FindByIdAsync(principal.GetUserId().ToString());
+        if (user is null) return Results.Unauthorized();
+
+        var newEmail = req.NewEmail.Trim();
+        // Changing the login identifier is sensitive — re-verify the password first.
+        if (!await users.CheckPasswordAsync(user, req.CurrentPassword))
+            return ApiResults.Fail("That password is incorrect.");
+
+        if (string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
+            return ApiResults.Fail("That's already your email address.");
+
+        var existing = await users.FindByEmailAsync(newEmail);
+        if (existing is not null && existing.Id != user.Id)
+            return ApiResults.Conflict("An account with that email already exists.");
+
+        // Email doubles as the username/login, so keep the two in lockstep.
+        var setEmail = await users.SetEmailAsync(user, newEmail);
+        if (!setEmail.Succeeded)
+            return ApiResults.Fail(string.Join(" ", setEmail.Errors.Select(e => e.Description)));
+        var setName = await users.SetUserNameAsync(user, newEmail);
+        if (!setName.Succeeded)
+            return ApiResults.Fail(string.Join(" ", setName.Errors.Select(e => e.Description)));
+
+        return Results.Ok(user.ToDto(await users.GetRolesAsync(user)));
     }
 
     private static async Task<IResult> ListSessions(

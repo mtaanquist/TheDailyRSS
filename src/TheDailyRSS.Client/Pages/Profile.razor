@@ -23,7 +23,10 @@
                         <button class="tdr-link" @onclick="SaveName" disabled="@(_name.Trim() == user.DisplayName || Busy)">save</button>
                     </div>
                     <div class="tdr-sidebar-label" style="margin:0">Email</div>
-                    <div>@user.Email</div>
+                    <div>
+                        @user.Email
+                        <button class="tdr-link" style="margin-left:8px" @onclick="() => _changingEmail = !_changingEmail">change</button>
+                    </div>
                     <div class="tdr-sidebar-label" style="margin:0">Password</div>
                     <div>
                         ••••••••••
@@ -31,6 +34,22 @@
                     </div>
                 </div>
             </div>
+
+            @if (_changingEmail)
+            {
+                <div class="tdr-folder" style="padding:14px; margin-top:14px; max-width:420px">
+                    <div class="tdr-field">
+                        <label>New email</label>
+                        <input class="tdr-input" type="email" @bind="_newEmail" />
+                    </div>
+                    <div class="tdr-field">
+                        <label>Current password</label>
+                        <input class="tdr-input" type="password" @bind="_emailPw" />
+                    </div>
+                    <button class="tdr-btn" @onclick="ChangeEmail" disabled="@Busy">update email</button>
+                    <div class="tdr-hint">You'll sign in with the new address from next time.</div>
+                </div>
+            }
 
             @if (_changingPw)
             {
@@ -114,6 +133,9 @@
     private bool _changingPw;
     private string _currentPw = "";
     private string _newPw = "";
+    private bool _changingEmail;
+    private string _newEmail = "";
+    private string _emailPw = "";
     private bool _saved;
 
     private static readonly (HeadlineFont, string)[] Fonts =
@@ -133,6 +155,19 @@
         {
             _user = await Api.UpdateProfileAsync(new UpdateProfileRequest { DisplayName = _name.Trim() });
             Auth.UpdateUser(_user!);
+        }))
+        {
+            Flash();
+        }
+    }
+
+    private async Task ChangeEmail()
+    {
+        if (await RunAsync(async () =>
+        {
+            _user = await Api.ChangeEmailAsync(new ChangeEmailRequest { NewEmail = _newEmail.Trim(), CurrentPassword = _emailPw });
+            Auth.UpdateUser(_user!);
+            _changingEmail = false; _newEmail = ""; _emailPw = "";
         }))
         {
             Flash();
