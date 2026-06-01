@@ -17,7 +17,11 @@ public sealed class FeedFetchService(
 {
     private readonly FeedOptions _options = options.Value;
 
-    public async Task<int> RefreshAsync(FeedSource source, CancellationToken ct)
+    /// <summary>Refreshes a source. <paramref name="inlineFullContent"/> controls whether reader-mode
+    /// extraction runs inline for the newest few new items: the scheduled background refresh leaves it on,
+    /// but request-path callers (add/refresh a feed) pass <c>false</c> so the request returns promptly and
+    /// the <see cref="FullContentBackfillService"/> fills bodies in shortly after.</summary>
+    public async Task<int> RefreshAsync(FeedSource source, CancellationToken ct, bool inlineFullContent = true)
     {
         var http = httpFactory.CreateClient("feeds");
         try
@@ -47,7 +51,7 @@ public sealed class FeedFetchService(
             buffered.Position = 0;
 
             var parsed = reader.Parse(buffered, source.FeedUrl);
-            var added = await UpsertAsync(source, parsed, ct);
+            var added = await UpsertAsync(source, parsed, inlineFullContent, ct);
 
             if (source.SiteUrl is null && parsed.SiteUrl is not null)
                 source.SiteUrl = parsed.SiteUrl;
@@ -80,7 +84,7 @@ public sealed class FeedFetchService(
         }
     }
 
-    private async Task<int> UpsertAsync(FeedSource source, ParsedFeed parsed, CancellationToken ct)
+    private async Task<int> UpsertAsync(FeedSource source, ParsedFeed parsed, bool inlineFullContent, CancellationToken ct)
     {
         var existing = await db.Articles
             .Where(a => a.SourceId == source.Id)
@@ -92,7 +96,7 @@ public sealed class FeedFetchService(
         // For full-content sources, extract reader-mode bodies inline only for the newest few new
         // items (so a synchronous Add stays fast); the backfill worker fills in the remainder.
         var newItems = parsed.Items.Where(i => existing.Add(i.ExternalId)).ToList();
-        var inlineExtractUntil = source.FetchFullContent
+        var inlineExtractUntil = source.FetchFullContent && inlineFullContent
             ? newItems
                 .OrderByDescending(i => i.PublishedAt)
                 .Take(Math.Max(0, _options.FullContentInlineLimit))

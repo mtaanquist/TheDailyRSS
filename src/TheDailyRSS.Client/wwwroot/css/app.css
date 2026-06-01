@@ -262,6 +262,8 @@ button.tdr-subfeed:hover { background: var(--card); color: var(--ink); }
 .tdr-edition-body.loading { opacity: 0.45; }
 .tdr-lead { border-bottom: 1px solid var(--rule); padding-bottom: 16px; margin-bottom: 16px; }
 .tdr-lead-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-top: 10px; }
+/* "No pictures" mode: no image column, so the standfirst spans the full width. */
+.tdr-lead-grid.no-photo { grid-template-columns: 1fr; }
 .tdr-lead h1 {
     font-family: var(--headline); font-weight: 800; font-size: 34px; line-height: 1.05;
     margin: 4px 0; color: var(--ink); cursor: pointer;

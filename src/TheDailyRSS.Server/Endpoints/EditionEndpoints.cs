@@ -249,10 +249,11 @@ public static class EditionEndpoints
         var useFullContent = row.FetchFull && !string.IsNullOrEmpty(row.FullContentHtml);
         var body = useFullContent ? row.FullContentHtml : row.ContentHtml;
 
-        // Reader-mode bodies duplicate the hero image we already render from ImageUrl, so strip images
-        // out of the full-text body. The feed's own (short) content keeps its inline images.
+        // Strip body images when: the reader-mode body duplicates the hero we render from ImageUrl, or the
+        // reader has turned on "no pictures" mode (#41). Either way the source HTML keeps its images stored.
+        var hideImages = await db.Users.Where(u => u.Id == uid).Select(u => u.HideImages).FirstOrDefaultAsync(ct);
         return Results.Ok(new ArticleDto(
-            row.Id, row.Title, row.Summary, sanitizer.Sanitize(body, stripImages: useFullContent), row.Author,
+            row.Id, row.Title, row.Summary, sanitizer.Sanitize(body, stripImages: useFullContent || hideImages), row.Author,
             row.FeedTitle, row.IconText,
             row.CategoryId, row.CategoryName, row.CategoryColor,
             row.ImageUrl, row.PublishedAt,

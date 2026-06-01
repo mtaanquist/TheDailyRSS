@@ -95,8 +95,11 @@ else
                         </span>
                     </div>
                     <h1 @onclick="@(() => Open(lead.Id))">@lead.Title</h1>
-                    <div class="tdr-lead-grid">
-                        <NewsImage Src="@lead.ImageUrl" Height="200" Label="lead photo" />
+                    <div class="tdr-lead-grid @(HideImages ? "no-photo" : "")">
+                        @if (!HideImages)
+                        {
+                            <NewsImage Src="@lead.ImageUrl" Height="200" Label="lead photo" />
+                        }
                         <div>
                             @if (!string.IsNullOrWhiteSpace(lead.Summary))
                             {
@@ -121,7 +124,7 @@ else
                             @foreach (var a in sec.Articles)
                             {
                                 <div class="tdr-grid-item">
-                                    <ArticleCard Article="a" OnSaveToggled="OnSave" OnHideToggled="OnHide" />
+                                    <ArticleCard Article="a" ShowImage="!HideImages" OnSaveToggled="OnSave" OnHideToggled="OnHide" />
                                 </div>
                             }
                         </div>
@@ -134,7 +137,7 @@ else
                     @foreach (var a in ed.Articles)
                     {
                         <div class="tdr-grid-item">
-                            <ArticleCard Article="a" OnSaveToggled="OnSave" OnHideToggled="OnHide" />
+                            <ArticleCard Article="a" ShowImage="!HideImages" OnSaveToggled="OnSave" OnHideToggled="OnHide" />
                         </div>
                     }
                 </div>
@@ -165,6 +168,7 @@ else
     private Guid? _categoryId;
 
     private bool ShowUnread => Auth.CurrentUser?.Preferences.ShowUnread ?? true;
+    private bool HideImages => Auth.CurrentUser?.Preferences.HideImages ?? false;
     /// <summary>The unread filter only applies when the reader has unread display turned on.</summary>
     private bool EffectiveUnread => Unread && ShowUnread;
 

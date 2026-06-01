@@ -86,6 +86,13 @@
                         <span>Show unread counts &amp; filter</span>
                     </label>
                     <div class="tdr-hint">Turn off for a cleaner read. Stories you've opened are still tracked and dimmed.</div>
+
+                    <div class="tdr-sidebar-label" style="margin:14px 0 4px">Pictures</div>
+                    <label class="tdr-toggle-row" @onclick="() => SetHideImages(!Pref.HideImages)">
+                        <span class="tdr-toggle @(Pref.HideImages ? "on" : "")"><span class="knob"></span></span>
+                        <span>No pictures mode</span>
+                    </label>
+                    <div class="tdr-hint">Hide every image for a text-only read. Pictures are still fetched, so turning this back off brings them straight back.</div>
                 </div>
             </div>
 
@@ -148,6 +155,7 @@
     private Task SetFont(HeadlineFont f) => SavePref(p => p.HeadlineFont = f);
     private Task SetDensity(ReadingDensity d) => SavePref(p => p.Density = d);
     private Task SetShowUnread(bool v) => SavePref(p => p.ShowUnread = v);
+    private Task SetHideImages(bool v) => SavePref(p => p.HideImages = v);
 
     private async Task SavePref(Action<PreferencesDto> mutate)
     {

@@ -96,7 +96,9 @@ public static class FeedEndpoints
         await db.SaveChangesAsync(ct);
 
         // Only fetch when the source is brand new; an existing source already has articles.
-        if (created) await fetcher.RefreshAsync(source, ct);
+        // Skip inline full-content extraction so Add returns promptly — the backfill worker pulls the
+        // reader-mode bodies in the background (issue #34).
+        if (created) await fetcher.RefreshAsync(source, ct, inlineFullContent: false);
 
         return Results.Ok(new FeedDto(
             sub.Id, source.Id, sub.CategoryId, customTitle ?? source.Title,
@@ -150,7 +152,8 @@ public static class FeedEndpoints
         var sub = await db.Subscriptions.Include(s => s.Source)
             .FirstOrDefaultAsync(s => s.Id == id && s.UserId == uid, ct);
         if (sub?.Source is null) return Results.NotFound();
-        var added = await fetcher.RefreshAsync(sub.Source, ct);
+        // Request path: defer full-content extraction to the backfill worker so the click returns fast.
+        var added = await fetcher.RefreshAsync(sub.Source, ct, inlineFullContent: false);
         return Results.Ok(new { added });
     }
 
@@ -165,7 +168,7 @@ public static class FeedEndpoints
             .ToListAsync(ct);
         var added = 0;
         foreach (var source in sources)
-            added += await fetcher.RefreshAsync(source, ct);
+            added += await fetcher.RefreshAsync(source, ct, inlineFullContent: false);
         return Results.Ok(new { added });
     }
 
