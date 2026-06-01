@@ -228,7 +228,7 @@
     }
 
     /// <summary>Navigate to a section by slug (null = today's front page), keeping the current date.
-    /// Re-clicking "Today's stories" re-pulls the feeds, mirroring a masthead-title click.</summary>
+    /// Re-clicking "Today's stories" reloads the edition from the database, mirroring a masthead-title click.</summary>
     private async Task GoSection(string? slug, bool saved)
     {
         var isToday = !saved && string.IsNullOrEmpty(slug);
