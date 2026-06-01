@@ -1,14 +1,6 @@
 @inject ApiClient Api
 
-@if (Visible)
-{
-    <div class="tdr-overlay" @onclick="Close">
-        <div class="tdr-modal" @onclick:stopPropagation="true">
-            <div class="tdr-modal-head">
-                <h2>Add a feed</h2>
-                <button class="x" @onclick="Close">✕ CLOSE</button>
-            </div>
-            <hr />
+<ModalShell Visible="Visible" Title="Add a feed" OnClose="Close">
 
             <div class="tdr-field">
                 <label>URL or site</label>
@@ -85,9 +77,8 @@
                     @(_subscribing ? "subscribing…" : "subscribe")
                 </button>
             </div>
-        </div>
-    </div>
-}
+</ModalShell>
+
 
 @code {
     [Parameter] public bool Visible { get; set; }

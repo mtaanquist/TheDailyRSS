@@ -63,7 +63,7 @@ else
                 </label>
                 @if (!Saved && (ed.Lead is not null || ed.Articles.Count > 0))
                 {
-                    <button class="tdr-link muted" @onclick="MarkAllRead">mark all read</button>
+                    <button class="tdr-link muted" @onclick="() => _confirmMarkAll = true">mark all read</button>
                 }
             }
         </div>
@@ -143,6 +143,11 @@ else
     </div>
 
     <AddFeedDialog @bind-Visible="_showAdd" Categories="State.Categories" OnAdded="ReloadAll" />
+    <ConfirmDialog @bind-Visible="_confirmMarkAll"
+                   Title="Mark all as read?"
+                   Message="This marks every story in this edition as read. It can't be undone."
+                   ConfirmLabel="mark all read"
+                   OnConfirm="MarkAllRead" />
 }
 
 @code {
@@ -154,6 +159,7 @@ else
     private EditionDto? _edition;
     private string? _error;
     private bool _showAdd;
+    private bool _confirmMarkAll;
     private bool _loading;
     private string _loadedKey = "";
     private Guid? _categoryId;

@@ -1,18 +1,10 @@
 @inject ApiClient Api
 
-@if (Visible && Feed is not null)
-{
-    <div class="tdr-overlay" @onclick="Close">
-        <div class="tdr-modal" @onclick:stopPropagation="true">
-            <div class="tdr-modal-head">
-                <h2>Edit feed</h2>
-                <button class="x" @onclick="Close">✕ CLOSE</button>
-            </div>
-            <hr />
+<ModalShell Visible="@(Visible && Feed is not null)" Title="Edit feed" OnClose="Close">
 
             <div class="tdr-preview">
                 <div class="row">
-                    <div class="glyph">@Feed.IconText</div>
+                    <div class="glyph">@Feed!.IconText</div>
                     <div style="flex:1">
                         <div style="font-weight:700">@Feed.Title</div>
                         <div style="font-family:var(--typer); font-size:10px; color:var(--ink-3)">@Feed.FeedUrl</div>
@@ -57,9 +49,8 @@
                     @(_saving ? "saving…" : "save")
                 </button>
             </div>
-        </div>
-    </div>
-}
+</ModalShell>
+
 
 @code {
     [Parameter] public bool Visible { get; set; }

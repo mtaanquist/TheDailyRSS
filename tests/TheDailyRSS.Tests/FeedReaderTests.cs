@@ -244,6 +244,40 @@ public class FeedReaderTests
         Assert.Null(FeedReader.ToPlainText("   "));
     }
 
+    // ── Tracking-param cleaning (issue #31) ──────────────────────────────
+
+    [Theory]
+    // BBC's RSS tacks on at_medium / at_campaign tracking.
+    [InlineData("https://www.bbc.com/news/articles/crlpy8n7pr6o?at_medium=RSS&at_campaign=rss",
+                "https://www.bbc.com/news/articles/crlpy8n7pr6o")]
+    // utm_* family is dropped, a real query param is kept.
+    [InlineData("https://ex.test/a?utm_source=x&utm_medium=y&id=42", "https://ex.test/a?id=42")]
+    // Mixed: keep the meaningful one, drop the trackers, preserve the fragment.
+    [InlineData("https://ex.test/p?fbclid=abc&page=2#section", "https://ex.test/p?page=2#section")]
+    // Nothing to clean — returned unchanged.
+    [InlineData("https://ex.test/a?id=42", "https://ex.test/a?id=42")]
+    [InlineData("https://ex.test/plain", "https://ex.test/plain")]
+    public void CleanUrl_strips_tracking_params(string input, string expected) =>
+        Assert.Equal(expected, FeedReader.CleanUrl(input));
+
+    [Fact]
+    public void CleanUrl_leaves_non_absolute_input_untouched()
+    {
+        const string id = "tag:example.test,2026:1";
+        Assert.Equal(id, FeedReader.CleanUrl(id));
+    }
+
+    [Fact]
+    public void Parsed_link_has_tracking_params_removed()
+    {
+        var item = ParseItem("""
+            <title>BBC story</title>
+            <link>https://www.bbc.com/news/articles/crlpy8n7pr6o?at_medium=RSS&amp;at_campaign=rss</link>
+            <guid>bbc-1</guid>
+            """);
+        Assert.Equal("https://www.bbc.com/news/articles/crlpy8n7pr6o", item.Url);
+    }
+
     [Theory]
     [InlineData("The New York Times", "TN")]
     [InlineData("BBC", "B")]

@@ -1,0 +1,50 @@
+@* Reusable modal frame: dimmed overlay + centred card, with Escape-to-close and backdrop-click-to-close.
+   The overlay grabs focus when it opens so the keydown handler fires even before the user clicks inside.
+   Pass a Title to get the standard masthead-style head, or leave it null and supply your own. *@
+
+@if (Visible)
+{
+    <div class="tdr-overlay" @onclick="RequestClose" @onkeydown="OnKeyDown" @ref="_overlay" tabindex="-1">
+        <div class="tdr-modal @ModalClass" @onclick:stopPropagation="true">
+            @if (Title is not null)
+            {
+                <div class="tdr-modal-head">
+                    <h2>@Title</h2>
+                    <button class="x" @onclick="RequestClose" aria-label="Close">✕ CLOSE</button>
+                </div>
+                <hr />
+            }
+            @ChildContent
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? ModalClass { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private ElementReference _overlay;
+    private bool _focused;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Focus the overlay the first render it's visible so Escape works immediately; reset when it closes.
+        if (Visible && !_focused)
+        {
+            _focused = true;
+            try { await _overlay.FocusAsync(); } catch { /* element already gone — harmless */ }
+        }
+        else if (!Visible)
+        {
+            _focused = false;
+        }
+    }
+
+    private Task OnKeyDown(KeyboardEventArgs e) =>
+        e.Key == "Escape" ? RequestClose() : Task.CompletedTask;
+
+    private Task RequestClose() => OnClose.InvokeAsync();
+}

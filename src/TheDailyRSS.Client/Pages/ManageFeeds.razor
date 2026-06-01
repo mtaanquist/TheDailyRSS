@@ -97,6 +97,11 @@
 
 <AddFeedDialog @bind-Visible="_showAdd" Categories="_categories" OnAdded="ReloadAll" />
 <EditFeedDialog @bind-Visible="_showEdit" Feed="_editFeed" Categories="_categories" OnSaved="ReloadAll" />
+<ConfirmDialog @bind-Visible="_confirmDelete"
+               Title="Unsubscribe?"
+               Message="@($"Unsubscribe from “{_pendingDelete?.Title}”? Your saved stories from it stay put.")"
+               ConfirmLabel="unsubscribe"
+               OnConfirm="ConfirmDelete" />
 
 @code {
     private List<CategoryDto> _categories = [];
@@ -104,6 +109,8 @@
     private bool _showAdd;
     private bool _showEdit;
     private FeedDto? _editFeed;
+    private FeedDto? _pendingDelete;
+    private bool _confirmDelete;
     private string? _error;
     private OpmlImportResult? _importResult;
 
@@ -129,10 +136,17 @@
         await State.RefreshAsync();
     }
 
-    private async Task DeleteFeed(FeedDto feed)
+    private void DeleteFeed(FeedDto feed)
     {
-        if (!await Confirm($"Unsubscribe from “{feed.Title}”?")) return;
-        await Api.DeleteFeedAsync(feed.Id);
+        _pendingDelete = feed;
+        _confirmDelete = true;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (_pendingDelete is null) return;
+        await Api.DeleteFeedAsync(_pendingDelete.Id);
+        _pendingDelete = null;
         await ReloadAll();
     }
 
@@ -173,6 +187,4 @@
         var xml = await Api.ExportOpmlAsync();
         await JS.InvokeVoidAsync("tdrDownload", "subscriptions.opml", xml, "text/x-opml");
     }
-
-    private async Task<bool> Confirm(string message) => await JS.InvokeAsync<bool>("confirm", message);
 }

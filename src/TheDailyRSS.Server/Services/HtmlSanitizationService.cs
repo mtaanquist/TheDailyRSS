@@ -16,6 +16,7 @@ namespace TheDailyRSS.Server.Services;
 public sealed class HtmlSanitizationService
 {
     private readonly HtmlSanitizer _sanitizer;
+    private readonly HtmlSanitizer _noImageSanitizer;
 
     public HtmlSanitizationService()
     {
@@ -25,9 +26,20 @@ public sealed class HtmlSanitizationService
         _sanitizer = new HtmlSanitizer();
         _sanitizer.AllowedAttributes.Add("loading");        // lazy images
         _sanitizer.AllowedAttributes.Add("referrerpolicy"); // referrer-safe images
+
+        // A second profile that also drops images and their wrappers. Reader-mode extraction often
+        // pulls the article's hero image into the body, which then renders a second time above the
+        // text we already show it from. Stripping <img>/<picture>/<figure> from full-text bodies
+        // keeps the reading view clean. (See issue #30.)
+        _noImageSanitizer = new HtmlSanitizer();
+        _noImageSanitizer.AllowedAttributes.Add("loading");
+        _noImageSanitizer.AllowedAttributes.Add("referrerpolicy");
+        foreach (var tag in new[] { "img", "picture", "source", "figure", "figcaption" })
+            _noImageSanitizer.AllowedTags.Remove(tag);
     }
 
-    /// <summary>Returns sanitized HTML, or the input unchanged when it is null/empty.</summary>
-    public string? Sanitize(string? html) =>
-        string.IsNullOrEmpty(html) ? html : _sanitizer.Sanitize(html);
+    /// <summary>Returns sanitized HTML, or the input unchanged when it is null/empty.
+    /// When <paramref name="stripImages"/> is set, images and their figure wrappers are removed.</summary>
+    public string? Sanitize(string? html, bool stripImages = false) =>
+        string.IsNullOrEmpty(html) ? html : (stripImages ? _noImageSanitizer : _sanitizer).Sanitize(html);
 }
