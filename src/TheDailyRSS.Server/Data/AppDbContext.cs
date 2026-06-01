@@ -26,6 +26,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<Ticker> Tickers => Set<Ticker>();
     public DbSet<UserTicker> UserTickers => Set<UserTicker>();
     public DbSet<RecoveryCode> RecoveryCodes => Set<RecoveryCode>();
+    public DbSet<UserCredential> UserCredentials => Set<UserCredential>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -271,6 +272,18 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(x => x.CodeHash).HasMaxLength(64);
             e.HasOne(x => x.User)
                 .WithMany(u => u.RecoveryCodes)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<UserCredential>(e =>
+        {
+            // Looked up by credential id at login, so it must be unique across all users.
+            e.HasIndex(x => x.CredentialId).IsUnique();
+            e.HasIndex(x => x.UserId);
+            e.Property(x => x.Nickname).HasMaxLength(100);
+            e.HasOne(x => x.User)
+                .WithMany(u => u.Credentials)
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

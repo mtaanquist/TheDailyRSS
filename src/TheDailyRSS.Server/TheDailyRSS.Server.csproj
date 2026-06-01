@@ -20,6 +20,8 @@
     <!-- Two-factor auth (#38): TOTP verification + QR generation for authenticator enrollment. -->
     <PackageReference Include="Otp.NET" Version="1.4.0" />
     <PackageReference Include="QRCoder" Version="1.6.0" />
+    <!-- Passwordless passkeys (#38): WebAuthn/FIDO2 attestation + assertion verification. -->
+    <PackageReference Include="Fido2" Version="3.0.1" />
     <!-- Pinned to 0.9.0: it targets the same AngleSharp 0.17.1 that HtmlSanitizer 9.x requires;
          newer SmartReader wants AngleSharp 1.x and conflicts. -->
     <PackageReference Include="SmartReader" Version="0.9.0" />

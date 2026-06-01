@@ -2,6 +2,7 @@
 @layout AuthLayout
 @inject AuthService Auth
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Sign in · The Daily RSS</PageTitle>
 
@@ -66,6 +67,17 @@
             </button>
         </EditForm>
 
+        @if (_mode == Mode.SignIn && !_totpRequired)
+        {
+            <div style="display:flex; align-items:center; gap:10px; margin:16px 0 12px; color:var(--ink-3); font-size:11px">
+                <span style="flex:1; border-top:1px solid var(--rule-soft)"></span>or<span style="flex:1; border-top:1px solid var(--rule-soft)"></span>
+            </div>
+            <button class="tdr-btn block" type="button" style="background:transparent; color:var(--ink)"
+                    @onclick="SignInWithPasskey" disabled="@_busy">
+                Sign in with a passkey
+            </button>
+        }
+
         <div style="margin-top:18px; font-style:italic; font-size:11px; color:var(--ink-2); text-align:center; line-height:1.4">
             Self-hosted &amp; yours alone — no card, no tracking.
         </div>
@@ -92,6 +104,21 @@
     }
 
     private void Switch(Mode mode) { _mode = mode; _error = null; _totpRequired = false; _totpCode = ""; }
+
+    private async Task SignInWithPasskey()
+    {
+        _error = null;
+        _busy = true;
+        try
+        {
+            await Auth.LoginWithPasskeyAsync(JS);
+            GoBack();
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        catch (JSException) { _error = "Passkey sign-in was cancelled, or this device has no passkey for this site."; }
+        catch (Exception) { _error = "Passkey sign-in isn't available here."; }
+        finally { _busy = false; }
+    }
 
     private async Task Submit()
     {

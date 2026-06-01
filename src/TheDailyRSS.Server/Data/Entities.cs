@@ -64,6 +64,7 @@ public sealed class AppUser : IdentityUser<Guid>
     public List<ArticleSummary> ArticleSummaries { get; set; } = new();
     public List<UserTicker> UserTickers { get; set; } = new();
     public List<RecoveryCode> RecoveryCodes { get; set; } = new();
+    public List<UserCredential> Credentials { get; set; } = new();
 
     // ── Two-factor authentication (TOTP; opt-in, per-user; #38) ─────────
     /// <summary>When true, login requires a valid authenticator (or recovery) code after the password.</summary>
@@ -72,6 +73,36 @@ public sealed class AppUser : IdentityUser<Guid>
     /// <summary>The TOTP shared secret (base32), encrypted at rest via DataProtection. Set when enrollment
     /// begins; <see cref="IsTotpEnabled"/> only flips once a generated code is confirmed.</summary>
     public string? TotpSecretEncrypted { get; set; }
+}
+
+/// <summary>A registered WebAuthn/FIDO2 passkey for a reader (#38). Passkeys are a passwordless login
+/// alternative — a full credential, not a second factor — so signing in with one skips TOTP. Stores the
+/// public key + signature counter the spec needs to verify each assertion and detect cloned authenticators.</summary>
+public sealed class UserCredential
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid UserId { get; set; }
+    public AppUser? User { get; set; }
+
+    /// <summary>The authenticator's credential id (raw bytes); unique, used to look the credential up at login.</summary>
+    public byte[] CredentialId { get; set; } = Array.Empty<byte>();
+
+    /// <summary>COSE public key bytes, used to verify assertion signatures.</summary>
+    public byte[] PublicKey { get; set; } = Array.Empty<byte>();
+
+    /// <summary>Signature counter; must strictly increase across assertions (cloned-key detection). Stored as
+    /// long because Postgres has no unsigned types; cast to/from the spec's uint at the library boundary.</summary>
+    public long SignCount { get; set; }
+
+    /// <summary>Authenticator model identifier (AAGUID), captured at registration.</summary>
+    public Guid AaGuid { get; set; }
+
+    /// <summary>Reader-supplied label so multiple passkeys are distinguishable.</summary>
+    public string Nickname { get; set; } = "";
+
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? LastUsedAt { get; set; }
 }
 
 /// <summary>A single-use backup code for signing in when an authenticator is unavailable. Stored hashed

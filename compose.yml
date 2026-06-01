@@ -27,6 +27,9 @@ services:
       Feeds__RefreshIntervalMinutes: "${REFRESH_MINUTES:-20}"
       # Optional: pin a JWT signing key. Left blank, one is generated and persisted under /data.
       Jwt__Key: "${JWT_KEY:-}"
+    # The app serves plain HTTP here; put a TLS-terminating reverse proxy in front for HTTPS (required for
+    # passkeys/WebAuthn). The proxy must forward X-Forwarded-Proto and X-Forwarded-Host so the app sees the
+    # public origin it must verify passkey assertions against.
     ports:
       - "${APP_PORT:-8080}:8080"
     volumes:

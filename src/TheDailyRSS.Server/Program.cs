@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -32,6 +33,8 @@ var dataDir = builder.Configuration["DataDir"]
 // of letting a null/short field reach the handler and throw a 500.
 builder.Services.AddValidation();
 builder.Services.AddProblemDetails();
+// Short-lived store for in-flight WebAuthn challenges (passkey register/login ceremonies).
+builder.Services.AddMemoryCache();
 
 // ── Options ─────────────────────────────────────────────────────────
 builder.Services.Configure<FeedOptions>(builder.Configuration.GetSection(FeedOptions.SectionName));
@@ -196,6 +199,20 @@ if (app.Environment.IsDevelopment())
 // Convert unhandled exceptions into RFC7807 ProblemDetails (500) rather than leaking a bare stack.
 app.UseExceptionHandler();
 
+// Honour a reverse proxy's forwarded headers so Request.Scheme/Host reflect the PUBLIC origin. The app
+// serves plain HTTP itself (TLS is terminated by the proxy in the shipped compose), and WebAuthn/passkeys
+// (#38) derive the relying-party id + origin from the request — so without this the server would compute
+// http://internal-host and reject assertions made against https://your-domain. The defaults only trust
+// loopback; clear the proxy/network allow-lists since the app sits behind a single trusted proxy and its
+// own port isn't meant to be publicly reachable.
+var forwarded = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost,
+};
+forwarded.KnownIPNetworks.Clear();
+forwarded.KnownProxies.Clear();
+app.UseForwardedHeaders(forwarded);
+
 // ── Security headers ────────────────────────────────────────────────
 // Defence-in-depth behind the server-side HTML sanitizer: even if some markup slips through,
 // the CSP forbids inline/external script execution and blocks framing/clickjacking.
@@ -231,6 +248,7 @@ app.UseAuthorization();
 
 app.MapAuthEndpoints();
 app.MapTotpEndpoints();
+app.MapPasskeyEndpoints();
 app.MapCategoryEndpoints();
 app.MapFeedEndpoints();
 app.MapEditionEndpoints();

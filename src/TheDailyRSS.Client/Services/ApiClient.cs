@@ -24,6 +24,23 @@ public sealed class ApiClient(HttpClient http)
     public Task<TotpEnrollResponse> TotpEnrollAsync() => PostAsync<TotpEnrollResponse>("api/auth/totp/enroll", new { });
     public Task<TotpConfirmResponse> TotpConfirmAsync(string code) => PostAsync<TotpConfirmResponse>("api/auth/totp/confirm", new TotpConfirmRequest { Code = code });
     public Task<UserDto> TotpDisableAsync(string password) => PostAsync<UserDto>("api/auth/totp/disable", new TotpDisableRequest { Password = password });
+
+    // ── Passkeys (#38) — the begin steps return the FIDO2 options as raw JSON for the browser ceremony ──
+    public Task<List<PasskeyDto>> GetPasskeysAsync() => GetAsync<List<PasskeyDto>>("api/auth/passkeys");
+    public Task RemovePasskeyAsync(Guid id) => SendAsync(HttpMethod.Delete, $"api/auth/passkeys/{id}");
+    public Task<string> PasskeyRegisterBeginAsync() => PostForStringAsync("api/auth/passkeys/register/begin");
+    public Task<PasskeyDto> PasskeyRegisterCompleteAsync(string responseJson, string? nickname) =>
+        PostAsync<PasskeyDto>("api/auth/passkeys/register/complete", new PasskeyRegisterCompleteRequest { ResponseJson = responseJson, Nickname = nickname });
+    public Task<string> PasskeyLoginBeginAsync() => PostForStringAsync("api/auth/passkeys/login/begin");
+    public Task<LoginResponse> PasskeyLoginCompleteAsync(string handle, string responseJson) =>
+        PostAsync<LoginResponse>("api/auth/passkeys/login/complete", new PasskeyLoginCompleteRequest { Handle = handle, ResponseJson = responseJson });
+
+    private async Task<string> PostForStringAsync(string url)
+    {
+        var resp = await http.PostAsync(url, null);
+        if (!resp.IsSuccessStatusCode) await ThrowAsync(resp);
+        return await resp.Content.ReadAsStringAsync();
+    }
     public Task<UserDto> UpdateProfileAsync(UpdateProfileRequest req) => PutAsync<UserDto>("api/auth/profile", req);
     public Task<UserDto> UpdatePreferencesAsync(PreferencesDto req) => PutAsync<UserDto>("api/auth/preferences", req);
     public Task ChangePasswordAsync(ChangePasswordRequest req) => SendAsync(HttpMethod.Post, "api/auth/password", req);
