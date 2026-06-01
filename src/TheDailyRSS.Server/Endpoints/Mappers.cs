@@ -34,6 +34,17 @@ public static class Mappers
     public static SessionDto ToDto(this UserSession s, Guid currentSessionId) => new(
         s.Id, s.DeviceLabel, s.UserAgent, s.IpAddress, s.CreatedAt, s.LastSeenAt, s.Id == currentSessionId);
 
+    public static TickerDto ToDto(this UserTicker ut)
+    {
+        var t = ut.Ticker;
+        var price = t?.Price ?? 0;
+        var prev = t?.PreviousClose ?? 0;
+        var change = price - prev;
+        var pct = prev != 0 ? change / prev * 100 : 0;
+        return new TickerDto(ut.Symbol, t?.Name ?? ut.Symbol, t?.Currency ?? "",
+            price, prev, change, pct, ut.Promoted, ut.SortOrder, t?.UpdatedAt);
+    }
+
     public static WeatherDto ToWeatherDto(this WeatherSnapshot s, string location)
     {
         var hourly = string.IsNullOrEmpty(s.HourlyJson)

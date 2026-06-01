@@ -23,6 +23,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<AiErrorLog> AiErrorLogs => Set<AiErrorLog>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
     public DbSet<WeatherSnapshot> WeatherSnapshots => Set<WeatherSnapshot>();
+    public DbSet<Ticker> Tickers => Set<Ticker>();
+    public DbSet<UserTicker> UserTickers => Set<UserTicker>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -221,6 +223,35 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             e.HasIndex(x => new { x.LocationKey, x.EditionDate }).IsUnique();
             e.Property(x => x.LocationKey).HasMaxLength(32);
             e.Property(x => x.TimeZone).HasMaxLength(64);
+        });
+
+        b.Entity<Ticker>(e =>
+        {
+            e.HasKey(x => x.Symbol);
+            e.Property(x => x.Symbol).HasMaxLength(24);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Currency).HasMaxLength(8);
+            e.Property(x => x.LastError).HasMaxLength(500);
+        });
+
+        b.Entity<UserTicker>(e =>
+        {
+            // One subscription per (reader, symbol); the promoted bar reads by this composite order.
+            e.HasIndex(x => new { x.UserId, x.Symbol }).IsUnique();
+            e.HasIndex(x => new { x.UserId, x.Promoted, x.SortOrder });
+            e.Property(x => x.Symbol).HasMaxLength(24);
+
+            e.HasOne(x => x.User)
+                .WithMany(u => u.UserTickers)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // The ticker row is shared, so removing a reader's subscription must not delete it. We only
+            // ever add ticker rows (orphans are harmless and cheap); never cascade from here.
+            e.HasOne(x => x.Ticker)
+                .WithMany(t => t.Watchers)
+                .HasForeignKey(x => x.Symbol)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         b.Entity<AppUser>(e =>

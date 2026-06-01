@@ -49,4 +49,7 @@ public sealed class FeedOptions
 
     /// <summary>How often the background worker refreshes today's weather for each watched location (#33).</summary>
     public int WeatherRefreshIntervalMinutes { get; set; } = 60;
+
+    /// <summary>How often the background worker refreshes the quote for each tracked stock ticker (#32).</summary>
+    public int TickerRefreshIntervalMinutes { get; set; } = 5;
 }

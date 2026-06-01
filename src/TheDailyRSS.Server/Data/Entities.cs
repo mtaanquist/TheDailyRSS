@@ -62,6 +62,7 @@ public sealed class AppUser : IdentityUser<Guid>
     public List<UserSession> Sessions { get; set; } = new();
     public List<AiSummary> AiSummaries { get; set; } = new();
     public List<ArticleSummary> ArticleSummaries { get; set; } = new();
+    public List<UserTicker> UserTickers { get; set; } = new();
 }
 
 /// <summary>A cached AI-generated digest for one user over a date range. Daily summaries set
@@ -116,6 +117,50 @@ public sealed class WeatherSnapshot
     public string HourlyJson { get; set; } = "";
 
     public DateTimeOffset FetchedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>A globally-shared stock/index quote, keyed by symbol and refreshed by a background worker
+/// independent of any reader — like a <see cref="FeedSource"/>. Readers opt in via <see cref="UserTicker"/>;
+/// the server fetches each watched symbol once per sweep regardless of how many readers track it (#32).</summary>
+public sealed class Ticker
+{
+    /// <summary>Upper-cased symbol, e.g. "AAPL" or "^GSPC". Primary key.</summary>
+    public string Symbol { get; set; } = "";
+
+    public string Name { get; set; } = "";
+    public string Currency { get; set; } = "";
+
+    public double Price { get; set; }
+    public double PreviousClose { get; set; }
+
+    /// <summary>Exchange timestamp of the quote, when the source reports one.</summary>
+    public DateTimeOffset? MarketTime { get; set; }
+
+    /// <summary>When the worker last refreshed this row; null until the first successful fetch.</summary>
+    public DateTimeOffset? UpdatedAt { get; set; }
+
+    /// <summary>The most recent fetch error, surfaced for diagnostics; null when healthy.</summary>
+    public string? LastError { get; set; }
+
+    public List<UserTicker> Watchers { get; set; } = new();
+}
+
+/// <summary>A reader's subscription to a shared <see cref="Ticker"/> — which symbols they track, and which
+/// they've promoted to the front-page bar. Mirrors how <see cref="Subscription"/> overlays a feed source.</summary>
+public sealed class UserTicker
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid UserId { get; set; }
+    public AppUser? User { get; set; }
+
+    public string Symbol { get; set; } = "";
+    public Ticker? Ticker { get; set; }
+
+    /// <summary>Show this ticker in the front-page promoted bar.</summary>
+    public bool Promoted { get; set; }
+
+    public int SortOrder { get; set; }
 }
 
 /// <summary>A recorded AI generation failure, for the admin error log. Denormalised (no FK to the user)

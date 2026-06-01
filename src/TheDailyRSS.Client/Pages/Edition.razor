@@ -21,6 +21,7 @@
 else
 {
     var ed = _edition;
+    <TickerBar Tickers="_promotedTickers" />
     <header class="tdr-masthead">
         <div class="tdr-masthead-meta">
             <span>@ed.VolumeLabel · @ed.IssueLabel</span>
@@ -171,6 +172,7 @@ else
 
     private EditionDto? _edition;
     private WeatherDto? _weather;
+    private List<TickerDto> _promotedTickers = new();
     private string? _error;
     private bool _showAdd;
     private bool _confirmMarkAll;
@@ -252,9 +254,19 @@ else
             // Surface the date in the sticky mobile header (compact, e.g. "Mon · May 25").
             State.SetHeaderDate(!Saved && !Hidden && result is { } e ? e.Date.ToString("ddd · MMM d, yyyy") : null);
             await LoadWeatherAsync();
+            await LoadTickersAsync();
         }
         catch (ApiException ex) { _error = ex.Message; }
         finally { _loading = false; }
+    }
+
+    /// <summary>Loads the reader's promoted tickers for the front-page bar. Front page only, and best-effort
+    /// so a quote-service hiccup never blocks the edition. The bar hides itself when nothing is promoted.</summary>
+    private async Task LoadTickersAsync()
+    {
+        if (!IsFrontPage) { _promotedTickers = new(); return; }
+        try { _promotedTickers = (await Api.GetTickersAsync()).Where(t => t.Promoted).ToList(); }
+        catch { _promotedTickers = new(); }
     }
 
     /// <summary>Loads the masthead weather glance for the current edition day. Best-effort: weather is a
