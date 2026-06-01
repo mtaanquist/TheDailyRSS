@@ -5,6 +5,7 @@
 @inject AppState State
 @inject NavigationManager Nav
 @inject AuthService Auth
+@inject IJSRuntime JS
 
 <PageTitle>@(_article?.Title ?? "Article") · The Daily RSS</PageTitle>
 
@@ -204,6 +205,19 @@ else
             _neighbors = await Api.GetArticleNeighborsAsync(Id);
         }
         catch (ApiException ex) { _error = ex.Message; }
+    }
+
+    private Guid _scrolledFor;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // A freshly opened article should start at the top: its route has no saved offset, so
+        // restore() resets the shared .tdr-main column to 0 rather than inheriting the edition's scroll.
+        if (_article is not null && _scrolledFor != Id)
+        {
+            _scrolledFor = Id;
+            await JS.InvokeVoidAsync("tdrScroll.restore");
+        }
     }
 
     private void GoBack() => Nav.NavigateTo("/");
