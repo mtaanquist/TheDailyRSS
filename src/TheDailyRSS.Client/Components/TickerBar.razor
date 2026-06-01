@@ -1,0 +1,27 @@
+@inject NavigationManager Nav
+
+@if (Tickers.Count > 0)
+{
+    <div class="tdr-ticker-bar" role="button" title="View all tickers" @onclick="@(() => Nav.NavigateTo("/tickers"))"
+         style="display:flex; flex-wrap:wrap; gap:18px; align-items:center; padding:6px 2px; margin-bottom:4px;
+                border-top:1px solid var(--rule); border-bottom:1px solid var(--rule);
+                font-size:13px; cursor:pointer; overflow-x:auto">
+        @foreach (var t in Tickers)
+        {
+            <span style="display:inline-flex; align-items:baseline; gap:6px; white-space:nowrap">
+                <strong>@t.Symbol</strong>
+                <span>@Price(t)</span>
+                <span style="color:@Color(t); font-weight:700">@Arrow(t) @Pct(t)</span>
+            </span>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public List<TickerDto> Tickers { get; set; } = new();
+
+    private static string Price(TickerDto t) => t.Price.ToString("0.##");
+    private static string Pct(TickerDto t) => $"{(t.ChangePercent >= 0 ? "+" : "")}{t.ChangePercent.ToString("0.00")}%";
+    private static string Arrow(TickerDto t) => t.Change >= 0 ? "▲" : "▼";
+    private static string Color(TickerDto t) => t.Change >= 0 ? "#1a7f37" : "#b3261e";
+}

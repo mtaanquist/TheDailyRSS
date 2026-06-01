@@ -137,6 +137,15 @@ public sealed class ApiClient(HttpClient http)
     public Task<UserDto> SetWeatherLocationAsync(string query) =>
         PutAsync<UserDto>("api/weather/location", new SetWeatherLocationRequest { Query = query });
 
+    // ── Tickers (issue #32) ───────────────────────────────────────
+    public Task<List<TickerDto>> GetTickersAsync() => GetAsync<List<TickerDto>>("api/tickers");
+    public Task<List<TickerSearchResultDto>> SearchTickersAsync(string q) =>
+        GetAsync<List<TickerSearchResultDto>>($"api/tickers/search?q={Uri.EscapeDataString(q)}");
+    public Task<TickerDto> AddTickerAsync(string symbol) => PostAsync<TickerDto>("api/tickers", new AddTickerRequest { Symbol = symbol });
+    public Task<TickerDto> SetTickerPromotedAsync(string symbol, bool promoted) =>
+        PutAsync<TickerDto>($"api/tickers/{Uri.EscapeDataString(symbol)}", new UpdateTickerRequest { Promoted = promoted });
+    public Task RemoveTickerAsync(string symbol) => SendAsync(HttpMethod.Delete, $"api/tickers/{Uri.EscapeDataString(symbol)}");
+
     private static string Query(Guid? categoryId, Guid? sourceId, bool? saved, bool unreadOnly, bool hidden = false)
     {
         var parts = new List<string>();

@@ -1,0 +1,156 @@
+@page "/tickers"
+@attribute [Authorize]
+@inject ApiClient Api
+
+<PageTitle>Markets · The Daily RSS</PageTitle>
+
+<header class="tdr-masthead">
+    <h1 class="tdr-masthead-title">The Markets</h1>
+    <div class="tdr-masthead-rule"><span>— your tickers —</span></div>
+</header>
+
+<div class="tdr-edition-body">
+    <div class="tdr-folder" style="padding:14px; max-width:520px; position:relative">
+        <div class="tdr-field" style="margin:0">
+            <label>Track a ticker</label>
+            <div style="display:flex; gap:8px; align-items:center">
+                <input class="tdr-input" placeholder="e.g. AAPL, MSFT, ^GSPC" style="flex:1"
+                       @bind="_symbol" @bind:event="oninput" @onkeydown="OnKeyDown" />
+                <button class="tdr-btn" @onclick="() => Add(_symbol)" disabled="@(Busy || _symbol.Trim().Length == 0)">add</button>
+            </div>
+        </div>
+        @if (_suggestions.Count > 0)
+        {
+            <div class="tdr-folder" style="position:absolute; left:14px; right:14px; z-index:10; margin-top:4px; padding:4px; background:var(--paper, #fff)">
+                @foreach (var s in _suggestions)
+                {
+                    <button class="tdr-feed-item" style="width:100%; text-align:left" @onclick="() => Add(s.Symbol)">
+                        <strong style="min-width:64px">@s.Symbol</strong>
+                        <span class="name">@s.Name</span>
+                        <span class="count">@s.Exchange</span>
+                    </button>
+                }
+            </div>
+        }
+        <div class="tdr-hint">Quotes refresh every few minutes. Promote a ticker (★) to pin it to the front-page bar.</div>
+    </div>
+
+    @if (Error is not null)
+    {
+        <div class="tdr-error" style="margin-top:12px">@Error</div>
+    }
+
+    @if (_tickers is null)
+    {
+        <p style="font-style:italic; color:var(--ink-3); margin-top:16px">Reading the tape…</p>
+    }
+    else if (_tickers.Count == 0)
+    {
+        <div class="tdr-empty">
+            <div class="tdr-empty-mark">$</div>
+            <h1 class="tdr-empty-title">No tickers yet</h1>
+            <p class="tdr-empty-sub">Add a symbol above to start tracking how the markets are doing today.</p>
+        </div>
+    }
+    else
+    {
+        <div style="margin-top:18px; border-top:1px solid var(--rule)">
+            @foreach (var t in _tickers)
+            {
+                <div style="display:flex; align-items:center; gap:12px; padding:10px 2px; border-bottom:1px solid var(--rule)">
+                    <button class="tdr-iconbtn" title="@(t.Promoted ? "Pinned to front page" : "Pin to front page")"
+                            @onclick="() => TogglePromote(t)"
+                            style="color:@(t.Promoted ? "var(--accent, #a83020)" : "var(--ink-3)"); background:none; border:none; cursor:pointer; padding:2px">
+                        <Icon Name="star" Size="18" />
+                    </button>
+                    <div style="min-width:80px; font-weight:800">@t.Symbol</div>
+                    <div style="flex:1; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap">@t.Name</div>
+                    <div style="text-align:right; min-width:90px; font-weight:700">@Price(t) <span style="font-weight:400; color:var(--ink-3); font-size:11px">@t.Currency</span></div>
+                    <div style="text-align:right; min-width:110px; color:@Color(t); font-weight:700">@Arrow(t) @Change(t) (@Pct(t))</div>
+                    <button class="tdr-iconbtn" title="Remove" @onclick="() => Remove(t)"
+                            style="color:var(--ink-3); background:none; border:none; cursor:pointer; padding:2px">
+                        <Icon Name="x" Size="16" />
+                    </button>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<TickerDto>? _tickers;
+    private List<TickerSearchResultDto> _suggestions = new();
+    private string _symbol = "";
+    private bool Busy { get; set; }
+    private string? Error { get; set; }
+
+    protected override async Task OnInitializedAsync() => await Reload();
+
+    private async Task Reload()
+    {
+        try { _tickers = await Api.GetTickersAsync(); }
+        catch (ApiException ex) { Error = ex.Message; _tickers = new(); }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await Add(_symbol);
+            return;
+        }
+        // Fire-and-forget autocomplete on the current text (gold-plating). Best-effort: never blocks typing.
+        var q = _symbol.Trim();
+        _suggestions = q.Length >= 2 ? await SafeSearch(q) : new();
+    }
+
+    private async Task<List<TickerSearchResultDto>> SafeSearch(string q)
+    {
+        try { return await Api.SearchTickersAsync(q); }
+        catch { return new(); }
+    }
+
+    private async Task Add(string symbol)
+    {
+        symbol = symbol.Trim();
+        if (symbol.Length == 0 || Busy) return;
+        Busy = true; Error = null;
+        try
+        {
+            await Api.AddTickerAsync(symbol);
+            _symbol = ""; _suggestions = new();
+            await Reload();
+        }
+        catch (ApiException ex) { Error = ex.Message; }
+        finally { Busy = false; }
+    }
+
+    private async Task TogglePromote(TickerDto t)
+    {
+        Error = null;
+        try
+        {
+            var updated = await Api.SetTickerPromotedAsync(t.Symbol, !t.Promoted);
+            var i = _tickers!.FindIndex(x => x.Symbol == t.Symbol);
+            if (i >= 0) _tickers[i] = updated;
+        }
+        catch (ApiException ex) { Error = ex.Message; }
+    }
+
+    private async Task Remove(TickerDto t)
+    {
+        Error = null;
+        try
+        {
+            await Api.RemoveTickerAsync(t.Symbol);
+            _tickers!.RemoveAll(x => x.Symbol == t.Symbol);
+        }
+        catch (ApiException ex) { Error = ex.Message; }
+    }
+
+    private static string Price(TickerDto t) => t.Price.ToString("0.##");
+    private static string Change(TickerDto t) => $"{(t.Change >= 0 ? "+" : "")}{t.Change.ToString("0.##")}";
+    private static string Pct(TickerDto t) => $"{(t.ChangePercent >= 0 ? "+" : "")}{t.ChangePercent.ToString("0.00")}%";
+    private static string Arrow(TickerDto t) => t.Change >= 0 ? "▲" : "▼";
+    private static string Color(TickerDto t) => t.Change >= 0 ? "#1a7f37" : "#b3261e";
+}

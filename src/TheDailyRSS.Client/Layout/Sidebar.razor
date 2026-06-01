@@ -44,6 +44,10 @@
         <Icon Name="eye-off" Size="14" />
         <span class="name">Hidden</span>
     </button>
+    <button class="tdr-feed-item special @(_activeTickers ? "active" : "")" @onclick="@(() => Go("/tickers"))">
+        <Icon Name="trending-up" Size="14" />
+        <span class="name">Markets</span>
+    </button>
 
     @if (AiOn)
     {
@@ -131,6 +135,7 @@
     private bool _activeHidden;
     private bool _activeBriefing;
     private bool _activeWeekly;
+    private bool _activeTickers;
     private readonly HashSet<Guid> _expanded = new();
     private readonly Dictionary<Guid, List<FeedDto>> _feedsByCat = new();
 
@@ -177,6 +182,7 @@
         _activeHidden = first == "hidden";
         _activeBriefing = first == "briefing";
         _activeWeekly = first == "weekly";
+        _activeTickers = first == "tickers";
         _activeCat = EditionRoutes.CategoryIdForSlug(State.Categories, first);
         _activeSrc = Guid.TryParse(EditionRoutes.QueryValue(uri.Query, "src"), out var s) ? s : null;
     }
@@ -212,7 +218,7 @@
     }
 
     private bool IsActive(Guid? cat, bool saved) =>
-        !_activeHidden && !_activeBriefing && !_activeWeekly && _activeSaved == saved && _activeCat == cat;
+        !_activeHidden && !_activeBriefing && !_activeWeekly && !_activeTickers && _activeSaved == saved && _activeCat == cat;
 
     private async Task GoHidden()
     {
