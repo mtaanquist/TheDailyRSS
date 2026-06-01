@@ -184,13 +184,13 @@ else
 
     protected override void OnInitialized() => State.ReloadRequested += Refresh;
 
-    /// <summary>Re-pull every feed server-side, then reload the edition in place.</summary>
+    /// <summary>Reload the edition from the database in place. A reload (masthead click, "Today's
+    /// stories", or the refresh hotkey) shouldn't sit waiting on a network re-fetch of every feed —
+    /// the background fetcher keeps feeds fresh, and Manage feeds has explicit on-demand pulls (#47).</summary>
     private async Task Refresh()
     {
         _loading = true;
         StateHasChanged();
-        try { await Api.RefreshAllFeedsAsync(); }
-        catch (ApiException) { /* still re-fetch what we have */ }
         await State.RefreshAsync();
         await Load();
         StateHasChanged();
