@@ -1,8 +1,11 @@
 @if (!string.IsNullOrEmpty(Src))
 {
     <div class="tdr-img has-photo" style="height:@(Height)px">
-        <img src="@Src" alt="" loading="lazy" referrerpolicy="no-referrer"
-             onerror="this.parentElement.classList.remove('has-photo'); this.remove();" />
+        @* Eager on WebKit (its native lazy-loading doesn't fire inside .tdr-main); lazy elsewhere.
+           A failed load is degraded to the placeholder by the global handler in app.js — an inline
+           onerror= would be silently blocked by the strict CSP (no 'unsafe-inline'). *@
+        <img src="@Src" alt="" loading="@(BrowserEnv.IsWebKit ? "eager" : "lazy")"
+             decoding="async" referrerpolicy="no-referrer" />
     </div>
 }
 else
