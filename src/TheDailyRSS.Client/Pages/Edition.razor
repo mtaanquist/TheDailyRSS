@@ -65,8 +65,8 @@ else
             @if (ShowUnread && !Hidden)
             {
                 <label class="toggle">
-                    <span class="tdr-toggle @(Unread ? "on" : "")"><span class="knob"></span></span>
-                    <input type="checkbox" checked="@Unread" @onchange="ToggleUnread" hidden />
+                    <span class="tdr-toggle @(UnreadOnly ? "on" : "")"><span class="knob"></span></span>
+                    <input type="checkbox" checked="@UnreadOnly" @onchange="ToggleUnread" hidden />
                     Unread only
                 </label>
                 @if (!Saved && (ed.Lead is not null || ed.Articles.Count > 0))
@@ -165,7 +165,6 @@ else
     [Parameter] public string? Slug { get; set; }
     [Parameter] public string? Date { get; set; }
     [SupplyParameterFromQuery(Name = "src")] public Guid? Src { get; set; }
-    [SupplyParameterFromQuery(Name = "unread")] public bool Unread { get; set; }
 
     private EditionDto? _edition;
     private WeatherDto? _weather;
@@ -179,8 +178,10 @@ else
 
     private bool ShowUnread => Auth.CurrentUser?.Preferences.ShowUnread ?? true;
     private bool HideImages => Auth.CurrentUser?.Preferences.HideImages ?? false;
+    /// <summary>The reader's sticky "unread only" preference (synced, persists across navigation).</summary>
+    private bool UnreadOnly => Auth.CurrentUser?.Preferences.UnreadOnly ?? false;
     /// <summary>The unread filter only applies when the reader has unread display turned on.</summary>
-    private bool EffectiveUnread => Unread && ShowUnread;
+    private bool EffectiveUnread => UnreadOnly && ShowUnread;
 
     /// <summary>"saved" is a reserved slug for the cross-date saved view.</summary>
     private bool Saved => string.Equals(Slug, "saved", StringComparison.OrdinalIgnoreCase);
@@ -221,7 +222,7 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        var key = $"{Slug}|{Date}|{Src}|{Unread}";
+        var key = $"{Slug}|{Date}|{Src}";
         if (key == _loadedKey && _edition is not null) return;
         _loadedKey = key;
         await Load();
@@ -308,14 +309,22 @@ else
     {
         var q = new List<string>();
         if (Src is { } s) q.Add($"src={s}");
-        if (Unread) q.Add("unread=true");
         return path + (q.Count > 0 ? "?" + string.Join("&", q) : "");
     }
 
-    private void ToggleUnread()
+    /// <summary>Flip the sticky "unread only" preference, persist it, then re-fetch this edition. Being a
+    /// saved preference (not a URL flag) means it now survives sidebar navigation, opening an article, and
+    /// reloads — and syncs across devices.</summary>
+    private async Task ToggleUnread()
     {
-        Unread = !Unread;
-        Nav.NavigateTo(WithQuery(EditionRoutes.Path(CurrentSlug, CurrentDate)));
+        if (Auth.CurrentUser is not { } user) return;
+        var pref = user.Preferences with { UnreadOnly = !UnreadOnly };
+        try
+        {
+            Auth.UpdateUser(await Api.UpdatePreferencesAsync(pref));
+            await Load();
+        }
+        catch (ApiException ex) { _error = ex.Message; }
     }
 
     private async Task OnSave((Guid Id, bool Saved) e)
@@ -383,12 +392,12 @@ else
     private string EmptyTitle() => Saved ? "Nothing to read later"
         : Hidden ? "Nothing hidden"
         : State.Categories.Count == 0 || State.Categories.All(c => c.FeedCount == 0) ? "Your press is idle"
-        : Unread ? "You're all caught up" : "No stories in this edition";
+        : EffectiveUnread ? "You're all caught up" : "No stories in this edition";
 
     private string EmptySub() => Saved ? "Tap the bookmark on an article and it'll wait for you here."
         : Hidden ? "Hide a story you're not interested in and it'll be listed here."
         : State.Categories.Count == 0 || State.Categories.All(c => c.FeedCount == 0) ? "Subscribe to a feed and the news will start printing."
-        : Unread ? "Every story in this edition has been read." : "Try an earlier edition, or check back after the next refresh.";
+        : EffectiveUnread ? "Every story in this edition has been read." : "Try an earlier edition, or check back after the next refresh.";
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max].TrimEnd() + "…";
 }

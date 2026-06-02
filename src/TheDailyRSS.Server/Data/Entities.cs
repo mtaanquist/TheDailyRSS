@@ -14,6 +14,10 @@ public sealed class AppUser : IdentityUser<Guid>
     public ReadingDensity Density { get; set; } = ReadingDensity.Balanced;
     public bool ShowUnread { get; set; } = true;
 
+    /// <summary>The reader's sticky "unread only" filter for the front page / editions. Persisted (not a
+    /// per-navigation flag) so it survives moving between sections, opening an article, and reloads (#  reading).</summary>
+    public bool UnreadOnly { get; set; }
+
     /// <summary>"No pictures" mode: don't render any images for this reader. Images are still fetched and
     /// stored, so re-enabling brings them straight back (issue #41).</summary>
     public bool HideImages { get; set; }
