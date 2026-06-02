@@ -54,7 +54,7 @@ public static class FeedEndpoints
 
         // Unread per source over the same visible set the edition uses (muted + hidden excluded), with
         // duplicate source URLs collapsed — so the sidebar count matches what "mark all read" clears.
-        var visible = await ArticleQueries.VisibleAsync(db, uid, ct);
+        var visible = ArticleQueries.WithContent(await ArticleQueries.VisibleAsync(db, uid, ct));
         var unreadPairs = await visible
             .Where(a => a.EditionDate == today && !a.States.Any(st => st.UserId == uid && st.IsRead))
             .Select(a => new { a.SourceId, a.Url })

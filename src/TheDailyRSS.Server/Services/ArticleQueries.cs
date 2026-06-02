@@ -53,6 +53,15 @@ public static class ArticleQueries
     public static IQueryable<Article> NotHidden(IQueryable<Article> q, Guid uid) =>
         q.Where(a => !a.States.Any(s => s.UserId == uid && s.IsHidden));
 
+    /// <summary>Keeps only articles that carry some readable text — a summary or a body. A feed item that's
+    /// purely a video embed or a live-thread placeholder (no summary, no content) is dropped from editions
+    /// and their counts. <see cref="Article.FullContentHtml"/> is the reader-mode extraction, where "" means
+    /// "tried and got nothing", so an empty string doesn't count as content.</summary>
+    public static IQueryable<Article> WithContent(IQueryable<Article> q) =>
+        q.Where(a => (a.Summary != null && a.Summary != "")
+                  || (a.ContentHtml != null && a.ContentHtml != "")
+                  || (a.FullContentHtml != null && a.FullContentHtml != ""));
+
     /// <summary>Drops articles matching any of the user's mute terms. Bare terms match whole words;
     /// a <c>*</c> wildcard matches partials (see <see cref="KeywordMatching"/>). Postgres runs the
     /// regex server-side via the case-insensitive <c>~*</c> operator. A filter with
