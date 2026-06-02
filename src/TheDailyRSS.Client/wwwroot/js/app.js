@@ -1,4 +1,28 @@
 // Extracted from index.html so the page can ship a strict script-src CSP (no 'unsafe-inline').
+
+// Engine facts read once by the .NET host at startup (Program.cs -> BrowserEnv).
+window.tdrEnv = {
+    // Safari/WebKit, which includes every iOS browser (all WebKit under the hood). Chromium and
+    // Gecko UAs also carry "AppleWebKit", so the Chromium family (incl. Android) is excluded.
+    isWebKit: () => {
+        const ua = navigator.userAgent;
+        return /AppleWebKit/.test(ua) && !/Chrome|Chromium|Android|Edg\//.test(ua);
+    }
+};
+
+// Feed images load straight from arbitrary external hosts and some fail (404, hotlink block, etc.).
+// Degrade a failed photo to the striped placeholder by dropping .has-photo and removing the <img>.
+// Resource 'error' events don't bubble, so listen in the capture phase; an inline onerror= would be
+// blocked by the strict CSP (script-src 'self', no 'unsafe-inline').
+document.addEventListener('error', (e) => {
+    const img = e.target;
+    if (!(img instanceof HTMLImageElement)) return;
+    const box = img.closest('.tdr-img.has-photo');
+    if (!box) return;
+    box.classList.remove('has-photo');
+    img.remove();
+}, true);
+
 window.tdrDownload = (filename, text, mime) => {
     const blob = new Blob([text], { type: mime || 'text/plain' });
     const url = URL.createObjectURL(blob);
