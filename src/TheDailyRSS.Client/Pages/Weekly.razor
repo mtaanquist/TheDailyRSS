@@ -152,18 +152,21 @@
 
     private async Task Generate()
     {
+        // Remember the copy we're replacing: a regenerate must wait for a *newer* result, not return the
+        // stale cached row the first poll would otherwise see (else regenerate looks instant + unchanged).
+        var previousAt = _summary?.GeneratedAt;
         _error = null; _summary = null;
         _loading = true;
         StateHasChanged();
         var since = DateTimeOffset.UtcNow;
         try { await Api.GenerateWeeklyEditionAsync(_isLatest ? null : _sunday); } // enqueue; runs in the background
         catch (ApiException ex) { _error = ex.Message; _loading = false; return; }
-        await PollAsync(since);
+        await PollAsync(since, previousAt);
     }
 
-    /// <summary>Polls the cached GET (and /activity) until The Weekly lands or the job ends without one.
-    /// Generation runs server-side, so this survives navigation away and back.</summary>
-    private async Task PollAsync(DateTimeOffset since)
+    /// <summary>Polls the cached GET (and /activity) until a Weekly newer than <paramref name="previousAt"/>
+    /// lands or the job ends without one. Generation runs server-side, so this survives navigation away and back.</summary>
+    private async Task PollAsync(DateTimeOffset since, DateTimeOffset? previousAt)
     {
         CancelPoll();
         _pollCts = new CancellationTokenSource();
@@ -175,7 +178,8 @@
             {
                 await Task.Delay(3500, ct);
                 var dto = await Api.GetWeeklyEditionAsync(_isLatest ? null : _sunday);
-                if (dto is not null) { _summary = dto; _loading = false; await InvokeAsync(StateHasChanged); return; }
+                if (dto is not null && (previousAt is null || dto.GeneratedAt > previousAt))
+                { _summary = dto; _loading = false; await InvokeAsync(StateHasChanged); return; }
                 var activity = await Api.GetAiActivityAsync();
                 if (!activity.Running.Contains("Weekly"))
                 {
