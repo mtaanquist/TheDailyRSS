@@ -48,6 +48,10 @@ public sealed record ArticleDto(
 /// <summary>One day that has at least one article — used by the archive picker.</summary>
 public sealed record EditionDateDto(DateOnly Date, int ArticleCount, int UnreadCount);
 
+/// <summary>The public share link generated for an article. <see cref="Url"/> is the absolute,
+/// anonymized page a reader can hand to a friend; <see cref="Token"/> is its opaque identifier.</summary>
+public sealed record ShareLinkDto(Guid Token, string Url);
+
 /// <summary>A minimal article reference (id + headline) for navigation links.</summary>
 public sealed record ArticleLinkDto(Guid Id, string Title);
 

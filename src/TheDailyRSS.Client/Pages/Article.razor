@@ -101,6 +101,7 @@ else
 
         <div class="actions">
             <a class="tdr-btn" href="@SafeLink(a.Url)" target="_blank" rel="noopener noreferrer">read at source ↗</a>
+            <button class="tdr-link muted" @onclick="Share" disabled="@_sharing">@(_shareMsg ?? "share")</button>
             <button class="tdr-link muted" @onclick="ToggleRead">@(a.IsRead ? "mark unread" : "mark read")</button>
         </div>
 
@@ -185,6 +186,8 @@ else
     private bool _summarizing;
     private string? _summaryError;
     private bool _summaryOpen = true;
+    private bool _sharing;
+    private string? _shareMsg;
 
     private bool AiEnabled => Auth.CurrentUser?.Preferences.AiEnabled == true;
     private bool HideImages => Auth.CurrentUser?.Preferences.HideImages == true;
@@ -194,6 +197,7 @@ else
         _article = null;
         _neighbors = null;
         _error = null;
+        _shareMsg = null;
         try
         {
             _article = await Api.GetArticleAsync(Id);
@@ -240,6 +244,23 @@ else
         }
         catch (ApiException ex) { _summaryError = ex.Message; }
         finally { _summarizing = false; }
+    }
+
+    /// <summary>Generates the article's anonymized public share link, then hands it to the native share
+    /// sheet (mobile) or the clipboard (desktop) via JS. The link is created opt-in: the article isn't
+    /// publicly viewable until this runs.</summary>
+    private async Task Share()
+    {
+        if (_article is null) return;
+        _sharing = true;
+        try
+        {
+            var link = await Api.CreateShareAsync(Id);
+            var result = await JS.InvokeAsync<string>("tdrShare", link.Url, _article.Title);
+            _shareMsg = result == "copied" ? "link copied" : result == "shared" ? "shared" : "share";
+        }
+        catch (ApiException ex) { _shareMsg = ex.Message; }
+        finally { _sharing = false; }
     }
 
     private async Task ToggleSave(bool saved)

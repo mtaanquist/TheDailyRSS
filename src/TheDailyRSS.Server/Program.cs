@@ -259,6 +259,10 @@ app.MapAiEndpoints();
 app.MapWeatherEndpoints();
 app.MapTickerEndpoints();
 
+// Anonymous server-rendered share pages. Mapped before the WASM fallback so /share/{token} is served
+// as real HTML (with Open Graph tags for link unfurlers) rather than the SPA shell.
+app.MapShareEndpoints();
+
 app.MapFallbackToFile("index.html");
 
 app.Run();

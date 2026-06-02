@@ -115,6 +115,7 @@ public sealed class ApiClient(HttpClient http)
     public Task<ArticleNeighborsDto> GetArticleNeighborsAsync(Guid id, Guid? categoryId = null) =>
         GetAsync<ArticleNeighborsDto>($"api/articles/{id}/neighbors" + (categoryId is { } c ? $"?categoryId={c}" : ""));
     public Task<ArticleAiSummaryDto> SummarizeArticleAsync(Guid id) => PostAsync<ArticleAiSummaryDto>($"api/articles/{id}/summary", new { });
+    public Task<ShareLinkDto> CreateShareAsync(Guid id) => PostAsync<ShareLinkDto>($"api/articles/{id}/share", new { });
     public Task SetReadAsync(Guid id, bool value) => SendAsync(HttpMethod.Post, $"api/articles/{id}/read", new SetBool(value));
     public Task SetSavedAsync(Guid id, bool value) => SendAsync(HttpMethod.Post, $"api/articles/{id}/save", new SetBool(value));
     public Task SetHiddenAsync(Guid id, bool value) => SendAsync(HttpMethod.Post, $"api/articles/{id}/hide", new SetBool(value));
