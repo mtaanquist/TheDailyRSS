@@ -8,7 +8,9 @@ namespace TheDailyRSS.Server.Services;
 /// <summary>Pre-generates daily/weekly digests for users who opted in, so they're ready to read
 /// without a manual click. Runs once a day at 23:55 edition-local time: the daily briefing for the day
 /// just ending, and — on Saturdays — The Weekly for the week ending that day (ready to read Sunday).
-/// Resilient: one user's LLM failure never aborts the run.</summary>
+/// Each run is the period's final word, so it <b>overwrites</b> any digest generated earlier in that
+/// period (a mid-day or mid-week manual one only saw part of it). Resilient: one user's LLM failure
+/// never aborts the run.</summary>
 public sealed class AiSummaryBackgroundService(
     IServiceScopeFactory scopeFactory,
     IOptions<FeedOptions> options,
@@ -59,31 +61,33 @@ public sealed class AiSummaryBackgroundService(
         {
             ct.ThrowIfCancellationRequested();
             if (user.AiAutoDaily)
-                await EnsureDailyAsync(ai, user, today, ct);
+                await RefreshDailyAsync(ai, user, today, ct);
             if (isSaturday && user.AiAutoWeekly)
-                await EnsureWeeklyAsync(ai, user, weekStart, weekEnd, ct);
+                await RefreshWeeklyAsync(ai, user, weekStart, weekEnd, ct);
         }
     }
 
-    private async Task EnsureDailyAsync(AiSummaryService ai, AppUser user, DateOnly day, CancellationToken ct)
+    /// <summary>Generates the day's daily briefing at end of day, overwriting any copy made earlier that day —
+    /// the nightly run is the day's final word, finalising a mid-day briefing that only saw part of the day.</summary>
+    private async Task RefreshDailyAsync(AiSummaryService ai, AppUser user, DateOnly day, CancellationToken ct)
     {
         try
         {
-            if (await ai.GetCachedAsync(user.Id, AiSummaryKind.Daily, day, day, ct) is not null) return;
             await ai.GenerateAsync(user, AiSummaryKind.Daily, day, day, ct, AiJobTrigger.Scheduled);
-            Log.LogInformation("Pre-generated daily summary for user {UserId}", user.Id);
+            Log.LogInformation("Generated end-of-day daily summary for user {UserId}", user.Id);
         }
         catch (AiException ex) { Log.LogInformation("Skipped daily summary for user {UserId}: {Reason}", user.Id, ex.Message); }
-        catch (Exception ex) when (ex is not OperationCanceledException) { Log.LogWarning(ex, "Failed to pre-generate daily summary for user {UserId}", user.Id); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { Log.LogWarning(ex, "Failed to generate daily summary for user {UserId}", user.Id); }
     }
 
-    private async Task EnsureWeeklyAsync(AiSummaryService ai, AppUser user, DateOnly start, DateOnly end, CancellationToken ct)
+    /// <summary>Writes The Weekly on Saturday night, overwriting any copy made earlier in the week — the
+    /// Saturday run is the week's final word, finalising a mid-week manual one that only saw part of it.</summary>
+    private async Task RefreshWeeklyAsync(AiSummaryService ai, AppUser user, DateOnly start, DateOnly end, CancellationToken ct)
     {
         try
         {
-            if (await ai.GetCachedAsync(user.Id, AiSummaryKind.Weekly, start, end, ct) is not null) return;
             await ai.GenerateAsync(user, AiSummaryKind.Weekly, start, end, ct, AiJobTrigger.Scheduled);
-            Log.LogInformation("Generated The Weekly for user {UserId}", user.Id);
+            Log.LogInformation("Generated end-of-week Weekly for user {UserId}", user.Id);
         }
         catch (AiException ex) { Log.LogInformation("Skipped The Weekly for user {UserId}: {Reason}", user.Id, ex.Message); }
         catch (Exception ex) when (ex is not OperationCanceledException) { Log.LogWarning(ex, "Failed to generate The Weekly for user {UserId}", user.Id); }
