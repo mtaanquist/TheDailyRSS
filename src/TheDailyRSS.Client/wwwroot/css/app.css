@@ -377,6 +377,12 @@ button.tdr-subfeed:hover { background: var(--card); color: var(--ink); }
 .tdr-article .content p { margin: 0 0 1.1em; }
 .tdr-article .content img { max-width: 100%; height: auto; }
 .tdr-article .content a { color: var(--red); }
+/* Lists from the source article. Source feeds often wrap each <li>'s text in a <p>; without resetting
+   that <p>'s margin the items render with big paragraph gaps and the marker detached from the text. */
+.tdr-article .content ul, .tdr-article .content ol { margin: 0 0 1.1em; padding-left: 1.6em; }
+.tdr-article .content li { margin: 0 0 0.4em; }
+.tdr-article .content li > p { margin: 0; }
+.tdr-article .content li > p + p { margin-top: 0.4em; }
 .tdr-article .content > p:first-of-type::first-letter {
     font-family: var(--headline); font-weight: 900; font-size: 3.4em; line-height: 0.8;
     float: left; margin: 4px 8px 0 0; color: var(--ink);
