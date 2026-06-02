@@ -53,7 +53,7 @@ public static class EditionEndpoints
     private static async Task<IResult> ListDates(ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
     {
         var uid = principal.GetUserId();
-        var visible = await VisibleAsync(db, uid, ct);
+        var visible = WithContent(await VisibleAsync(db, uid, ct));
 
         var grouped = await (
             from a in visible
@@ -106,7 +106,7 @@ public static class EditionEndpoints
         // Hidden articles are dropped from every view except the Hidden list itself.
         var query = hidden ? muted.Where(a => a.States.Any(s => s.UserId == uid && s.IsHidden))
             : saved ? NotHidden(muted, uid).Where(a => a.States.Any(s => s.UserId == uid && s.IsSaved))
-            : NotHidden(muted, uid).Where(a => a.EditionDate == date);
+            : WithContent(NotHidden(muted, uid)).Where(a => a.EditionDate == date);
         query = Narrow(query, uid, categoryId, sourceId);
         if (unreadOnly)
             query = query.Where(a => !a.States.Any(s => s.UserId == uid && s.IsRead));
@@ -133,7 +133,7 @@ public static class EditionEndpoints
         // Counts distinct source URLs so duplicates collapse to one, matching the de-duped listing above.
         var unreadBase = NotHidden(muted, uid).Where(a => !a.States.Any(s => s.UserId == uid && s.IsRead));
         if (!saved && !hidden)
-            unreadBase = unreadBase.Where(a => a.EditionDate == date);
+            unreadBase = WithContent(unreadBase).Where(a => a.EditionDate == date);
         var unreadTotal = await unreadBase.Select(a => a.Url).Distinct().CountAsync(ct);
 
         DateOnly? prev = null, next = null;
@@ -368,7 +368,7 @@ public static class EditionEndpoints
             return ApiResults.Fail("Invalid date.");
 
         var uid = principal.GetUserId();
-        var visible = await VisibleAsync(db, uid, ct);
+        var visible = WithContent(await VisibleAsync(db, uid, ct));
         var query = visible
             .Where(a => a.EditionDate == d && !a.States.Any(s => s.UserId == uid && s.IsRead));
         if (categoryId is { } cid)

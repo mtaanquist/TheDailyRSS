@@ -83,6 +83,8 @@ public sealed class AppFixture : IAsyncLifetime
                     Source = source,
                     ExternalId = $"{feedUrl}#{i}",
                     Title = titles[i],
+                    // A summary so the article counts as having content (editions skip body-less items).
+                    Summary = $"Summary for {titles[i]}.",
                     Url = $"{feedUrl}/{i}",
                     PublishedAt = new DateTimeOffset(editionDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero).AddMinutes(i),
                     EditionDate = editionDate,

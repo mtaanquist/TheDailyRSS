@@ -30,7 +30,7 @@ public static class CategoryEndpoints
         // Count over the *same* set the edition shows — muted and hidden articles excluded — and collapse
         // duplicate source URLs, so a muted/duplicate story can't keep a category's count above zero after
         // "mark all read". (Previously this counted raw db.Articles, ignoring both, so counts never cleared.)
-        var visible = await ArticleQueries.VisibleAsync(db, uid, ct);
+        var visible = ArticleQueries.WithContent(await ArticleQueries.VisibleAsync(db, uid, ct));
         var unreadToday = visible.Where(a =>
             a.EditionDate == today && !a.States.Any(s => s.UserId == uid && s.IsRead));
         var pairs = await unreadToday
