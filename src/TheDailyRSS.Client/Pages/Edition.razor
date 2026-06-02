@@ -113,7 +113,7 @@ else
                             {
                                 <div class="tdr-standfirst">@Truncate(lead.Summary, 360)</div>
                             }
-                            <a class="tdr-link" href="/article/@lead.Id">read the full story →</a>
+                            <a class="tdr-link" href="@($"/article/{lead.Id}{ArticleContext}")">read the full story →</a>
                         </div>
                     </div>
                 </article>
@@ -132,7 +132,7 @@ else
                             @foreach (var a in sec.Articles)
                             {
                                 <div class="tdr-grid-item">
-                                    <ArticleCard Article="a" ShowImage="!HideImages" OnSaveToggled="OnSave" OnHideToggled="OnHide" />
+                                    <ArticleCard Article="a" ShowImage="!HideImages" Context="@ArticleContext" OnSaveToggled="OnSave" OnHideToggled="OnHide" />
                                 </div>
                             }
                         </div>
@@ -145,7 +145,7 @@ else
                     @foreach (var a in ed.Articles)
                     {
                         <div class="tdr-grid-item">
-                            <ArticleCard Article="a" ShowImage="!HideImages" OnSaveToggled="OnSave" OnHideToggled="OnHide" />
+                            <ArticleCard Article="a" ShowImage="!HideImages" Context="@ArticleContext" OnSaveToggled="OnSave" OnHideToggled="OnHide" />
                         </div>
                     }
                 </div>
@@ -289,7 +289,11 @@ else
     /// <summary>Maps the URL slug to a category id; null for the front page / saved / unknown.</summary>
     private Guid? ResolveCategoryId() => EditionRoutes.CategoryIdForSlug(State.Categories, Slug);
 
-    private void Open(Guid id) => Nav.NavigateTo($"/article/{id}");
+    /// <summary>When reading inside a category, carry it to the article so prev/next stay in that section.
+    /// On the front page (no category) it's empty, so neighbours span the whole day.</summary>
+    private string ArticleContext => _categoryId is { } c ? $"?cat={c}" : "";
+
+    private void Open(Guid id) => Nav.NavigateTo($"/article/{id}{ArticleContext}");
 
     private void Navigate(DateOnly? date)
     {

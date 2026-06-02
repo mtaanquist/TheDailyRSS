@@ -150,7 +150,7 @@ else
             <nav class="tdr-article-nav">
                 @if (nb.Prev is { } prev)
                 {
-                    <a class="prev" href="/article/@prev.Id">
+                    <a class="prev" href="@NeighborHref(prev.Id)">
                         <span class="dir"><Icon Name="arrow-left" Size="13" /> Previous</span>
                         <span class="hd">@prev.Title</span>
                     </a>
@@ -161,7 +161,7 @@ else
                 }
                 @if (nb.Next is { } next)
                 {
-                    <a class="next" href="/article/@next.Id">
+                    <a class="next" href="@NeighborHref(next.Id)">
                         <span class="dir">Next <Icon Name="arrow-right" Size="13" /></span>
                         <span class="hd">@next.Title</span>
                     </a>
@@ -173,6 +173,8 @@ else
 
 @code {
     [Parameter] public Guid Id { get; set; }
+    /// <summary>The category the reader opened this story from, so prev/next stay within that section.</summary>
+    [SupplyParameterFromQuery(Name = "cat")] public Guid? Cat { get; set; }
 
     private ArticleDto? _article;
     private ArticleNeighborsDto? _neighbors;
@@ -202,7 +204,8 @@ else
                 await State.RefreshAsync();
             }
             // Neighbours aren't needed for the first paint — load them after the story shows.
-            _neighbors = await Api.GetArticleNeighborsAsync(Id);
+            // Scoped to the category the reader came from (if any), so prev/next stay in that section.
+            _neighbors = await Api.GetArticleNeighborsAsync(Id, Cat);
         }
         catch (ApiException ex) { _error = ex.Message; }
     }
@@ -221,6 +224,9 @@ else
     }
 
     private void GoBack() => Nav.NavigateTo("/");
+
+    /// <summary>Preserve the category context across prev/next so the whole chain stays in-section.</summary>
+    private string NeighborHref(Guid id) => $"/article/{id}" + (Cat is { } c ? $"?cat={c}" : "");
 
     private async Task Summarize()
     {

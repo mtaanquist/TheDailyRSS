@@ -288,7 +288,7 @@ public static class EditionEndpoints
 
     /// <summary>The previous/next stories in the same edition (day), in the same order the edition grid
     /// uses (newest first). Keyword filters apply so neighbours match what the reader actually browses.</summary>
-    private static async Task<IResult> GetNeighbors(Guid id, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
+    private static async Task<IResult> GetNeighbors(Guid id, ClaimsPrincipal principal, AppDbContext db, Guid? categoryId, CancellationToken ct)
     {
         var uid = principal.GetUserId();
         var editionDate = await Subscribed(db, uid)
@@ -297,16 +297,21 @@ public static class EditionEndpoints
             .FirstOrDefaultAsync(ct);
         if (editionDate is not { } day) return Results.NotFound();
 
-        var visible = await VisibleAsync(db, uid, ct);
-        var ordered = await visible
+        // Match the edition the reader is browsing: skip body-less items, collapse duplicate URLs, and —
+        // when they opened the story from a category — keep prev/next within that category.
+        var visible = Narrow(WithContent(await VisibleAsync(db, uid, ct)), uid, categoryId, sourceId: null);
+        var ordered = (await visible
             .Where(a => a.EditionDate == day)
             .OrderByDescending(a => a.PublishedAt).ThenBy(a => a.Id)
-            .Select(a => new ArticleLinkDto(a.Id, a.Title))
-            .ToListAsync(ct);
+            .Select(a => new { a.Id, a.Title, a.Url })
+            .ToListAsync(ct))
+            .GroupBy(a => string.IsNullOrEmpty(a.Url) ? a.Id.ToString() : a.Url)
+            .Select(g => g.First())
+            .ToList();
 
         var i = ordered.FindIndex(a => a.Id == id);
-        var prev = i > 0 ? ordered[i - 1] : null;
-        var next = i >= 0 && i < ordered.Count - 1 ? ordered[i + 1] : null;
+        var prev = i > 0 ? new ArticleLinkDto(ordered[i - 1].Id, ordered[i - 1].Title) : null;
+        var next = i >= 0 && i < ordered.Count - 1 ? new ArticleLinkDto(ordered[i + 1].Id, ordered[i + 1].Title) : null;
         return Results.Ok(new ArticleNeighborsDto(prev, next));
     }
 
