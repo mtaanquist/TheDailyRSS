@@ -60,9 +60,15 @@ public sealed class FullContentBackfillService(
             {
                 // "" sentinel = attempted, nothing usable → don't retry next sweep; fall back to feed
                 // content. Also stamped on URL-less rows so they don't keep the source forever pending.
-                var extracted = string.IsNullOrWhiteSpace(a.Url) ? "" : await extractor.ExtractAsync(a.Url, ct) ?? "";
+                var result = string.IsNullOrWhiteSpace(a.Url) ? null : await extractor.ExtractAsync(a.Url, ct);
+                var content = result?.Content ?? "";
+                // Prefer the article page's lead image over the feed thumbnail; keep the existing one when
+                // the page offered none (COALESCE-style, so a null extraction never wipes a good thumbnail).
+                var image = result?.ImageUrl?.Truncate(2000);
                 await db.Articles.Where(x => x.Id == a.Id)
-                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.FullContentHtml, extracted), ct);
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(x => x.FullContentHtml, content)
+                        .SetProperty(x => x.ImageUrl, x => image ?? x.ImageUrl), ct);
 
                 if (!string.IsNullOrWhiteSpace(a.Url))
                     await Task.Delay(delay, ct);
