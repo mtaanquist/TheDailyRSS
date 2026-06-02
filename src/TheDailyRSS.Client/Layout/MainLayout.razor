@@ -17,6 +17,7 @@
     </div>
 
     <div class="tdr-body">
+        <div class="tdr-ptr" aria-hidden="true"><span class="tdr-ptr-spin"></span></div>
         <Sidebar Open="_navOpen" OnNavigate="@(() => _navOpen = false)" />
         @if (_navOpen)
         {
@@ -41,14 +42,19 @@
         _ref = DotNetObjectReference.Create(this);
         await JS.InvokeVoidAsync("tdrHotkeys.register", _ref);
         await JS.InvokeVoidAsync("tdrScroll.init");
+        await JS.InvokeVoidAsync("tdrPullRefresh.register", _ref);
     }
 
     [JSInvokable] public Task OnRefreshHotkey() => State.RequestReloadAsync();
+
+    // Pull-to-refresh (touch) reuses the same in-place reload as the F5/"r" hotkey.
+    [JSInvokable] public Task OnPullRefresh() => State.RequestReloadAsync();
 
     public void Dispose()
     {
         State.Changed -= OnStateChanged;
         _ = JS.InvokeVoidAsync("tdrHotkeys.unregister");
+        _ = JS.InvokeVoidAsync("tdrPullRefresh.unregister");
         _ref?.Dispose();
     }
 }
