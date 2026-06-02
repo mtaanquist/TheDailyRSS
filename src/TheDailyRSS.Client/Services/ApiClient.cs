@@ -112,7 +112,8 @@ public sealed class ApiClient(HttpClient http)
         GetAsync<EditionDto>($"api/editions/{D(date)}?{Query(categoryId, sourceId, saved, unreadOnly, hidden)}");
 
     public Task<ArticleDto> GetArticleAsync(Guid id) => GetAsync<ArticleDto>($"api/articles/{id}");
-    public Task<ArticleNeighborsDto> GetArticleNeighborsAsync(Guid id) => GetAsync<ArticleNeighborsDto>($"api/articles/{id}/neighbors");
+    public Task<ArticleNeighborsDto> GetArticleNeighborsAsync(Guid id, Guid? categoryId = null) =>
+        GetAsync<ArticleNeighborsDto>($"api/articles/{id}/neighbors" + (categoryId is { } c ? $"?categoryId={c}" : ""));
     public Task<ArticleAiSummaryDto> SummarizeArticleAsync(Guid id) => PostAsync<ArticleAiSummaryDto>($"api/articles/{id}/summary", new { });
     public Task SetReadAsync(Guid id, bool value) => SendAsync(HttpMethod.Post, $"api/articles/{id}/read", new SetBool(value));
     public Task SetSavedAsync(Guid id, bool value) => SendAsync(HttpMethod.Post, $"api/articles/{id}/save", new SetBool(value));

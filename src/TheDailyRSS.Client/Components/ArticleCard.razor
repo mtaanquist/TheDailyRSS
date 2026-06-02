@@ -24,8 +24,10 @@
     [Parameter] public bool ShowImage { get; set; } = true;
     [Parameter] public EventCallback<(Guid Id, bool Saved)> OnSaveToggled { get; set; }
     [Parameter] public EventCallback<(Guid Id, bool Hidden)> OnHideToggled { get; set; }
+    /// <summary>Optional URL query suffix (e.g. "?cat=…") carrying the reading context to the article.</summary>
+    [Parameter] public string? Context { get; set; }
 
-    private void Open() => Nav.NavigateTo($"/article/{Article.Id}");
+    private void Open() => Nav.NavigateTo($"/article/{Article.Id}{Context}");
 
     private Task ToggleSave(bool saved) => OnSaveToggled.InvokeAsync((Article.Id, saved));
 
