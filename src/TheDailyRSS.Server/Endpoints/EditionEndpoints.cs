@@ -24,6 +24,10 @@ public static class EditionEndpoints
     /// <summary>Upper bound on articles materialised for a single edition view.</summary>
     private const int MaxEditionArticles = 300;
 
+    /// <summary>De-dup group key: collapses articles that share a source URL, while keeping URL-less
+    /// items distinct (by id) so they're never merged together.</summary>
+    private static string DedupKey(ArticleSummaryDto s) => string.IsNullOrEmpty(s.Url) ? s.Id.ToString() : s.Url;
+
     public static void MapEditionEndpoints(this IEndpointRouteBuilder app)
     {
         var editions = app.MapGroup("/api/editions").RequireAuthorization();
@@ -110,6 +114,10 @@ public static class EditionEndpoints
         var top = query.OrderByDescending(a => a.PublishedAt).Take(MaxEditionArticles);
         var summaries = (await ToSummaries(top, db, uid).ToListAsync(ct))
             .OrderByDescending(s => s.PublishedAt)
+            // Collapse stories that link to the same source article — a feed that lists an item twice, or
+            // the same story carried by two subscribed feeds — keeping the first (most recent) copy.
+            .GroupBy(s => DedupKey(s))
+            .Select(g => g.First())
             .ToList();
 
         // Lead: newest article that has an image, otherwise just the newest.
@@ -122,11 +130,11 @@ public static class EditionEndpoints
         // The masthead unread count reflects the edition being viewed, not all of time — otherwise
         // unread from older days makes "today" feel overwhelming and "mark all read" never zeroes it.
         // Saved/Hidden are cross-date pseudo-sections, so they keep counting across every day.
-        var unreadBase = NotHidden(muted, uid);
+        // Counts distinct source URLs so duplicates collapse to one, matching the de-duped listing above.
+        var unreadBase = NotHidden(muted, uid).Where(a => !a.States.Any(s => s.UserId == uid && s.IsRead));
         if (!saved && !hidden)
             unreadBase = unreadBase.Where(a => a.EditionDate == date);
-        var unreadTotal = await unreadBase
-            .CountAsync(a => !a.States.Any(s => s.UserId == uid && s.IsRead), ct);
+        var unreadTotal = await unreadBase.Select(a => a.Url).Distinct().CountAsync(ct);
 
         DateOnly? prev = null, next = null;
         if (!saved && !hidden)
