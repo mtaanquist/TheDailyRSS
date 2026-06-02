@@ -21,6 +21,8 @@ public static class AdminEndpoints
         var settings = app.MapGroup("/api/admin/settings").RequireAuthorization(Roles.Admin);
         settings.MapGet("/ai-house-style", GetHouseStyle);
         settings.MapPut("/ai-house-style", SetHouseStyle);
+        settings.MapGet("/sharing", GetSharing);
+        settings.MapPut("/sharing", SetSharing);
 
         app.MapGet("/api/admin/ai-jobs", GetAiJobs).RequireAuthorization(Roles.Admin);
         app.MapGet("/api/admin/ai-errors", GetAiErrors).RequireAuthorization(Roles.Admin);
@@ -93,6 +95,33 @@ public static class AdminEndpoints
             row.Value = value;
         await db.SaveChangesAsync(ct);
         return Results.Ok(HouseStyleDto(value, false));
+    }
+
+    private static async Task<IResult> GetSharing(AppDbContext db, CancellationToken ct)
+    {
+        var disabled = await SiteSettings.IsSharingDisabledAsync(db, ct);
+        return Results.Ok(new SharingSettingsDto(!disabled));
+    }
+
+    private static async Task<IResult> SetSharing(UpdateSharingSettingsRequest req, AppDbContext db, CancellationToken ct)
+    {
+        var row = await db.AppSettings.FirstOrDefaultAsync(s => s.Key == SiteSettingKeys.SharingDisabled, ct);
+
+        // Enabled is the default, so it's stored as the absence of the flag; only "disabled" persists a row.
+        if (req.Enabled)
+        {
+            if (row is not null) db.AppSettings.Remove(row);
+        }
+        else if (row is null)
+        {
+            db.AppSettings.Add(new AppSetting { Key = SiteSettingKeys.SharingDisabled, Value = "true" });
+        }
+        else
+        {
+            row.Value = "true";
+        }
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new SharingSettingsDto(req.Enabled));
     }
 
     private static AiHouseStyleDto HouseStyleDto(string value, bool isDefault) => new(

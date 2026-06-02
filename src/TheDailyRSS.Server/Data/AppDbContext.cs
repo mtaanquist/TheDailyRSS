@@ -16,6 +16,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<UserArticleState> UserArticleStates => Set<UserArticleState>();
     public DbSet<ArticleSummary> ArticleSummaries => Set<ArticleSummary>();
+    public DbSet<SharedArticle> SharedArticles => Set<SharedArticle>();
     public DbSet<KeywordFilter> KeywordFilters => Set<KeywordFilter>();
     public DbSet<FieldFilter> FieldFilters => Set<FieldFilter>();
     public DbSet<UserSession> Sessions => Set<UserSession>();
@@ -142,6 +143,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
                 .OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Article)
                 .WithMany(a => a.Summaries)
+                .HasForeignKey(x => x.ArticleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<SharedArticle>(e =>
+        {
+            // One share row per (reader, article): re-sharing the same story reuses the existing link.
+            e.HasIndex(x => new { x.CreatedByUserId, x.ArticleId }).IsUnique();
+            e.HasIndex(x => x.ArticleId);
+            e.HasOne(x => x.Article)
+                .WithMany()
                 .HasForeignKey(x => x.ArticleId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

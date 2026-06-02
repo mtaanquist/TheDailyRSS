@@ -122,6 +122,20 @@ html[data-density="airy"] { --story-gap: 26px; }
 .tdr-main.loading { opacity: 0.45; }
 .tdr-masthead-title.clickable { cursor: pointer; }
 
+/* ---------- shared (public) article page ---------- */
+/* The /share/{token} page is server-rendered standalone HTML (no app shell): a single
+   centred paper column holding just the masthead + article, with no sidebar. */
+.tdr-share {
+    max-width: var(--maxw);
+    margin: 0 auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    background: var(--paper);
+    border-left: 1px solid var(--rule);
+    border-right: 1px solid var(--rule);
+}
+.tdr-share .tdr-article { padding: 24px 24px 48px; }
+
 /* ---------- masthead ---------- */
 .tdr-masthead {
     padding: 14px 24px 10px;

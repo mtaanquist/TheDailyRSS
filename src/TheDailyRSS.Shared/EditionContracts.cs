@@ -48,6 +48,31 @@ public sealed record ArticleDto(
 /// <summary>One day that has at least one article — used by the archive picker.</summary>
 public sealed record EditionDateDto(DateOnly Date, int ArticleCount, int UnreadCount);
 
+/// <summary>The public share link generated for an article. <see cref="Url"/> is the absolute,
+/// anonymized page a reader can hand to a friend; <see cref="Token"/> is its opaque identifier.</summary>
+public sealed record ShareLinkDto(Guid Token, string Url);
+
+/// <summary>One of the reader's active shares, listed on the "Shared articles" management screen.</summary>
+public sealed record SharedArticleDto(
+    Guid Token,
+    Guid ArticleId,
+    string ArticleTitle,
+    string FeedTitle,
+    DateTimeOffset SharedAt,
+    string Url);
+
+/// <summary>Instance-wide flags the client needs at boot to gate features. Loaded once into AppState.</summary>
+public sealed record InstanceConfigDto(bool SharingEnabled);
+
+/// <summary>The admin "sharing" setting — whether readers may create public share links.</summary>
+public sealed record SharingSettingsDto(bool SharingEnabled);
+
+/// <summary>Toggles instance-wide article sharing (admin only).</summary>
+public sealed class UpdateSharingSettingsRequest
+{
+    public bool Enabled { get; set; }
+}
+
 /// <summary>A minimal article reference (id + headline) for navigation links.</summary>
 public sealed record ArticleLinkDto(Guid Id, string Title);
 

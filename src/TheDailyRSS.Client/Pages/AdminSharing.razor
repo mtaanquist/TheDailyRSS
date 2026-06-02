@@ -1,0 +1,51 @@
+@page "/settings/sharing"
+@attribute [Authorize]
+@inherits OperationComponent
+@inject ApiClient Api
+@inject AppState State
+
+<PageTitle>Sharing · The Daily RSS</PageTitle>
+
+<SettingsShell Current="sharing" Crumb="Sharing (admin)">
+        <h1>Article sharing</h1>
+        <div class="tdr-settings-intro">
+            When enabled, readers can create public, anonymized share links from any story. Turning it off
+            blocks new links <b>and</b> stops every existing link from resolving (visitors get a not-found
+            page) until you switch it back on. Readers can still revoke their own links at any time.
+        </div>
+
+        @if (_loaded)
+        {
+            <div class="tdr-sidebar-label" style="margin:0 0 4px">Sharing</div>
+            <label class="tdr-toggle-row" @onclick="Toggle">
+                <span class="tdr-toggle @(_enabled ? "on" : "")"><span class="knob"></span></span>
+                <span>Allow readers to share articles</span>
+            </label>
+            <div class="tdr-hint">
+                @(_enabled ? "Sharing is on." : "Sharing is off — links won't be created or resolve.")
+            </div>
+
+            @if (Error is not null) { <div class="tdr-error" style="margin-top:10px">@Error</div> }
+        }
+</SettingsShell>
+
+@code {
+    private bool _enabled = true;
+    private bool _loaded;
+
+    protected override Task OnInitializedAsync() =>
+        RunAsync(async () =>
+        {
+            _enabled = (await Api.GetSharingSettingsAsync()).SharingEnabled;
+            _loaded = true;
+        });
+
+    private Task Toggle() =>
+        RunAsync(async () =>
+        {
+            var next = !_enabled;
+            _enabled = (await Api.UpdateSharingSettingsAsync(next)).SharingEnabled;
+            // Refresh cached instance config so the share affordance reflects the change immediately.
+            await State.RefreshAsync();
+        });
+}

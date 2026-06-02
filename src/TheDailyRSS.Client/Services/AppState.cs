@@ -9,6 +9,10 @@ public sealed class AppState(ApiClient api)
     public IReadOnlyList<EditionDateDto> EditionDates { get; private set; } = [];
     public bool Loaded { get; private set; }
 
+    /// <summary>Instance-wide flag mirrored from the server so the UI can hide the share affordance when
+    /// an admin has turned sharing off. Defaults to true so the button isn't briefly hidden before load.</summary>
+    public bool SharingEnabled { get; private set; } = true;
+
     public event Action? Changed;
 
     /// <summary>Raised when something outside the edition view (e.g. an F5/"r" hotkey)
@@ -41,6 +45,7 @@ public sealed class AppState(ApiClient api)
     {
         Categories = await api.GetCategoriesAsync();
         EditionDates = await api.GetEditionDatesAsync();
+        SharingEnabled = (await api.GetInstanceConfigAsync()).SharingEnabled;
         Loaded = true;
         Changed?.Invoke();
     }

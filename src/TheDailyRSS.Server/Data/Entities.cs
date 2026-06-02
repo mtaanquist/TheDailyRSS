@@ -257,6 +257,10 @@ public static class SiteSettingKeys
 {
     /// <summary>The admin-editable AI "house style" preamble shared by the daily briefing and The Weekly.</summary>
     public const string AiHouseStyle = "ai.house_style";
+
+    /// <summary>Instance-wide kill switch for article sharing. <c>"true"</c> blocks new share links and
+    /// stops existing <c>/share/{token}</c> pages from resolving; absent/blank means sharing is enabled.</summary>
+    public const string SharingDisabled = "sharing.disabled";
 }
 
 /// <summary>
@@ -367,6 +371,27 @@ public sealed class Article
 
     public List<UserArticleState> States { get; set; } = new();
     public List<ArticleSummary> Summaries { get; set; } = new();
+}
+
+/// <summary>An opt-in public share of an <see cref="Article"/>. A row exists only once a reader has
+/// explicitly shared the article — its <see cref="Id"/> is the unguessable token in the public
+/// <c>/share/{token}</c> URL. The public page is anonymous: it never exposes who shared it, so
+/// <see cref="CreatedByUserId"/> is kept server-side only (for one-row-per-reader reuse and a future
+/// revoke action). Articles are private until a row is created here.</summary>
+public sealed class SharedArticle
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid ArticleId { get; set; }
+    public Article? Article { get; set; }
+
+    /// <summary>The reader who created the share. Never shown publicly.</summary>
+    public Guid CreatedByUserId { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>Set when the share has been revoked; a non-null value means the public link 404s.</summary>
+    public DateTimeOffset? RevokedAt { get; set; }
 }
 
 /// <summary>A per-user AI TL;DR of a shared <see cref="Article"/>, generated with that user's own

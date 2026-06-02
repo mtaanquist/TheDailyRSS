@@ -8,6 +8,18 @@ window.tdrDownload = (filename, text, mime) => {
     document.body.removeChild(a); URL.revokeObjectURL(url);
 };
 
+// Share a link via the native share sheet (mobile) or the clipboard (desktop). Returns
+// 'shared' | 'copied' | 'cancelled' so the caller can show the right confirmation.
+window.tdrShare = async (url, title) => {
+    try {
+        if (navigator.share) { await navigator.share({ title, url }); return 'shared'; }
+        await navigator.clipboard.writeText(url);
+        return 'copied';
+    } catch (_) {
+        return 'cancelled';
+    }
+};
+
 // Forward wheel scrolls over the empty side gutters into the centre column,
 // so a scroll started outside the 1100px shell still moves the news. The left
 // menu does the same — unless it's tall enough to have its own scrollbar, in

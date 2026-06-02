@@ -1,0 +1,89 @@
+@page "/settings/shares"
+@attribute [Authorize]
+@inherits OperationComponent
+@inject ApiClient Api
+@inject IJSRuntime JS
+
+<PageTitle>Shared articles · The Daily RSS</PageTitle>
+
+<SettingsShell Current="shares" Crumb="Shared">
+        <h1>Shared articles</h1>
+        <div class="tdr-settings-intro">
+            Links you've created with the <b>share</b> button. Each one is a public, anonymized page —
+            just the masthead and the article, with none of your details. Revoke a link to stop it
+            resolving: anyone who still has it will get a "not found" page.
+        </div>
+
+        @if (Error is not null)
+        {
+            <div class="tdr-error">@Error</div>
+        }
+
+        @if (_items.Count == 0)
+        {
+            <div class="tdr-note" style="margin-top:16px">
+                You haven't shared anything yet. Open a story and click <b>share</b> to create a link.
+            </div>
+        }
+        else
+        {
+            <div class="tdr-folder" style="margin-top:16px; max-width:640px">
+                @foreach (var s in _items)
+                {
+                    <div class="tdr-feedrow">
+                        <div class="ttl">
+                            <div><a href="@($"/article/{s.ArticleId}")">@s.ArticleTitle</a></div>
+                            <div class="err" style="color:var(--ink-3); font-style:italic">
+                                @s.FeedTitle · shared @s.SharedAt.ToLocalTime().ToString("MMM d, yyyy")
+                            </div>
+                        </div>
+                        <span class="spacer"></span>
+                        <button class="tdr-link" @onclick="() => Copy(s)">@(_copiedToken == s.Token ? "copied" : "copy link")</button>
+                        <button class="tdr-link danger" title="Revoke this link" @onclick="() => Ask(s)">✕</button>
+                    </div>
+                }
+            </div>
+        }
+</SettingsShell>
+
+<ConfirmDialog @bind-Visible="_confirm"
+               Title="Revoke share?"
+               Message="@($"Stop sharing “{_pending?.ArticleTitle}”? Anyone with the link will get a not-found page.")"
+               ConfirmLabel="revoke"
+               OnConfirm="Revoke" />
+
+@code {
+    private List<SharedArticleDto> _items = [];
+    private SharedArticleDto? _pending;
+    private bool _confirm;
+    private Guid? _copiedToken;
+
+    protected override Task OnInitializedAsync() => RunAsync(LoadAsync);
+
+    private async Task LoadAsync() => _items = await Api.GetSharedArticlesAsync();
+
+    private async Task Copy(SharedArticleDto s)
+    {
+        var result = await JS.InvokeAsync<string>("tdrShare", s.Url, s.ArticleTitle);
+        if (result is "copied" or "shared") _copiedToken = s.Token;
+    }
+
+    private void Ask(SharedArticleDto s)
+    {
+        _pending = s;
+        _confirm = true;
+    }
+
+    private Task Revoke()
+    {
+        if (_pending is null) return Task.CompletedTask;
+        var token = _pending.Token;
+        _pending = null;
+        return RunAsync(async () =>
+        {
+            await Api.RevokeShareAsync(token);
+            if (_copiedToken == token) _copiedToken = null;
+            await LoadAsync();
+        });
+    }
+}
