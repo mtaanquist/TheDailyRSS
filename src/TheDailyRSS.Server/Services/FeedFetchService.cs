@@ -129,7 +129,10 @@ public sealed class FeedFetchService(
                 // which clears the ChangeTracker and discards every pending insert in this sweep.
                 try
                 {
-                    article.FullContentHtml = await extractor.ExtractAsync(item.Url, ct) ?? "";
+                    var extracted = await extractor.ExtractAsync(item.Url, ct);
+                    article.FullContentHtml = extracted?.Content ?? "";
+                    // Prefer the article page's lead image over the (often low-res) feed thumbnail.
+                    if (extracted?.ImageUrl is { } img) article.ImageUrl = img.Truncate(2000);
                 }
                 catch (Exception ex)
                 {
