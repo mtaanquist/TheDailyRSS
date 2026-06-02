@@ -28,7 +28,7 @@ public static class Mappers
         new PreferencesDto
         {
             Theme = u.Theme, HeadlineFont = u.HeadlineFont, Density = u.Density, ShowUnread = u.ShowUnread,
-            HideImages = u.HideImages, AiEnabled = u.AiEnabled,
+            UnreadOnly = u.UnreadOnly, HideImages = u.HideImages, AiEnabled = u.AiEnabled,
             ShowWeather = u.ShowWeather, WeatherLocation = u.WeatherLocationName,
         });
 

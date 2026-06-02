@@ -149,6 +149,7 @@ public static class AuthEndpoints
         user.HeadlineFont = req.HeadlineFont;
         user.Density = req.Density;
         user.ShowUnread = req.ShowUnread;
+        user.UnreadOnly = req.UnreadOnly;
         user.HideImages = req.HideImages;
         user.ShowWeather = req.ShowWeather;
         await users.UpdateAsync(user);

@@ -113,6 +113,9 @@ public sealed record PreferencesDto
     public ReadingDensity Density { get; set; } = ReadingDensity.Balanced;
     public bool ShowUnread { get; set; } = true;
 
+    /// <summary>Sticky "unread only" filter for editions — persisted so it survives navigation and reloads.</summary>
+    public bool UnreadOnly { get; set; }
+
     /// <summary>"No pictures" mode — hide all images for this reader (issue #41).</summary>
     public bool HideImages { get; set; }
 
