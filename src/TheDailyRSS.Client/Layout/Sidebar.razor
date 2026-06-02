@@ -164,7 +164,25 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+    private async void OnStateChanged()
+    {
+        // State refreshed (mark-all-read, reading a story, save/hide): the per-source counts cached for any
+        // open folder are now stale — category counts already refresh from State, so reload the sub-counts
+        // too, keeping the folder and its sources in agreement.
+        await RefreshExpandedFeedsAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Reloads the cached per-source feed list for every currently-expanded folder (bounded —
+    /// usually one). Keeps the stale list on failure rather than blanking the folder.</summary>
+    private async Task RefreshExpandedFeedsAsync()
+    {
+        foreach (var id in _expanded.ToList())
+        {
+            try { _feedsByCat[id] = await Api.GetFeedsAsync(id); }
+            catch { /* keep the previous counts */ }
+        }
+    }
 
     private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
