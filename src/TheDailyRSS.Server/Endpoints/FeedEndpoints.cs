@@ -31,7 +31,7 @@ public static class FeedEndpoints
         opml.MapPost("", ImportOpml);
     }
 
-    private static async Task<IResult> List(ClaimsPrincipal principal, AppDbContext db, IOptions<FeedOptions> opts, Guid? categoryId)
+    private static async Task<IResult> List(ClaimsPrincipal principal, AppDbContext db, IOptions<FeedOptions> opts, Guid? categoryId, CancellationToken ct)
     {
         var uid = principal.GetUserId();
         // Per-source unread is scoped to today's edition, matching the sidebar's category counts and the
@@ -40,15 +40,32 @@ public static class FeedEndpoints
         var query = db.Subscriptions.Where(s => s.UserId == uid);
         if (categoryId is { } cid) query = query.Where(s => s.CategoryId == cid);
 
-        var feeds = await query
+        var rows = await query
             .OrderBy(s => s.SortOrder).ThenBy(s => s.CustomTitle ?? s.Source!.Title)
-            .Select(s => new FeedDto(
+            .Select(s => new
+            {
                 s.Id, s.SourceId, s.CategoryId,
-                s.CustomTitle ?? s.Source!.Title, s.Source!.FeedUrl, s.Source.SiteUrl, s.Source.IconText, s.SortOrder,
-                db.Articles.Count(a => a.SourceId == s.SourceId && a.EditionDate == today && !a.States.Any(st => st.UserId == uid && st.IsRead)),
-                db.Articles.Count(a => a.SourceId == s.SourceId),
-                s.Source.LastFetchedAt, s.Source.LastFetchError, s.Source.FetchFullContent))
-            .ToListAsync();
+                Title = s.CustomTitle ?? s.Source!.Title,
+                s.Source!.FeedUrl, s.Source.SiteUrl, s.Source.IconText, s.SortOrder,
+                Total = db.Articles.Count(a => a.SourceId == s.SourceId),
+                s.Source.LastFetchedAt, s.Source.LastFetchError, s.Source.FetchFullContent,
+            })
+            .ToListAsync(ct);
+
+        // Unread per source over the same visible set the edition uses (muted + hidden excluded), with
+        // duplicate source URLs collapsed — so the sidebar count matches what "mark all read" clears.
+        var visible = await ArticleQueries.VisibleAsync(db, uid, ct);
+        var unreadPairs = await visible
+            .Where(a => a.EditionDate == today && !a.States.Any(st => st.UserId == uid && st.IsRead))
+            .Select(a => new { a.SourceId, a.Url })
+            .Distinct()
+            .ToListAsync(ct);
+        var unreadBySource = unreadPairs.GroupBy(p => p.SourceId).ToDictionary(g => g.Key, g => g.Count());
+
+        var feeds = rows.Select(r => new FeedDto(
+            r.Id, r.SourceId, r.CategoryId, r.Title, r.FeedUrl, r.SiteUrl, r.IconText, r.SortOrder,
+            unreadBySource.GetValueOrDefault(r.SourceId), r.Total,
+            r.LastFetchedAt, r.LastFetchError, r.FetchFullContent)).ToList();
         return Results.Ok(feeds);
     }
 
