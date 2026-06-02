@@ -13,4 +13,8 @@ public static class ApiResults
     /// <summary>A 409 Conflict carrying <paramref name="detail"/> as the ProblemDetails detail.</summary>
     public static IResult Conflict(string detail) =>
         TypedResults.Problem(detail: detail, statusCode: StatusCodes.Status409Conflict);
+
+    /// <summary>A 403 Forbidden carrying <paramref name="detail"/> as the ProblemDetails detail.</summary>
+    public static IResult Forbidden(string detail) =>
+        TypedResults.Problem(detail: detail, statusCode: StatusCodes.Status403Forbidden);
 }

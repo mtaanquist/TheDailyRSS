@@ -44,7 +44,11 @@ public static class EditionEndpoints
         articles.MapPost("/{id:guid}/hide", SetHidden);
         articles.MapPost("/{id:guid}/position", SetPosition);
         articles.MapPost("/{id:guid}/summary", SummarizeArticle);
+        // Share management. "/shared" is matched ahead of the "/{id:guid}" routes (the guid constraint
+        // rejects the literal "shared"), so there's no collision.
+        articles.MapGet("/shared", ListShares);
         articles.MapPost("/{id:guid}/share", CreateShare);
+        articles.MapDelete("/shared/{token:guid}", RevokeShare);
     }
 
     // ── Visibility, keyword & projection helpers live in ArticleQueries (shared with AI summaries) ──
@@ -296,6 +300,9 @@ public static class EditionEndpoints
     {
         var uid = principal.GetUserId();
 
+        if (await SiteSettings.IsSharingDisabledAsync(db, ct))
+            return ApiResults.Forbidden("Article sharing has been turned off by the administrator.");
+
         // Only let a reader share a story from a feed they subscribe to (same guard as SummarizeArticle).
         var owns = await db.Articles
             .AnyAsync(a => a.Id == id && a.Source!.Subscriptions.Any(s => s.UserId == uid), ct);
@@ -312,6 +319,46 @@ public static class EditionEndpoints
 
         var url = $"{http.Request.Scheme}://{http.Request.Host}/share/{share.Id}";
         return Results.Ok(new ShareLinkDto(share.Id, url));
+    }
+
+    /// <summary>Lists the reader's own active shares (most recent first) for the "Shared articles" screen.</summary>
+    private static async Task<IResult> ListShares(
+        ClaimsPrincipal principal, AppDbContext db, HttpContext http, CancellationToken ct)
+    {
+        var uid = principal.GetUserId();
+        var origin = $"{http.Request.Scheme}://{http.Request.Host}";
+        var rows = await db.SharedArticles
+            .Where(s => s.CreatedByUserId == uid && s.RevokedAt == null)
+            .OrderByDescending(s => s.CreatedAt)
+            .Select(s => new
+            {
+                s.Id,
+                s.ArticleId,
+                ArticleTitle = s.Article!.Title,
+                FeedTitle = s.Article.Source!.Title,
+                s.CreatedAt,
+            })
+            .ToListAsync(ct);
+
+        var dtos = rows
+            .Select(r => new SharedArticleDto(r.Id, r.ArticleId, r.ArticleTitle, r.FeedTitle, r.CreatedAt, $"{origin}/share/{r.Id}"))
+            .ToList();
+        return Results.Ok(dtos);
+    }
+
+    /// <summary>Revokes one of the reader's shares: the row is removed so its public link stops resolving.
+    /// Scoped to the owner, so a reader can only revoke their own shares.</summary>
+    private static async Task<IResult> RevokeShare(
+        Guid token, ClaimsPrincipal principal, AppDbContext db, CancellationToken ct)
+    {
+        var uid = principal.GetUserId();
+        var share = await db.SharedArticles
+            .FirstOrDefaultAsync(s => s.Id == token && s.CreatedByUserId == uid, ct);
+        if (share is null) return Results.NotFound();
+
+        db.SharedArticles.Remove(share);
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
     }
 
     /// <summary>The previous/next stories in the same edition (day), in the same order the edition grid

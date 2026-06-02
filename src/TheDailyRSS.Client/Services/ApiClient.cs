@@ -68,6 +68,13 @@ public sealed class ApiClient(HttpClient http)
     public Task<List<AiJobDto>> GetAiJobsAsync() => GetAsync<List<AiJobDto>>("api/admin/ai-jobs");
     public Task<List<AiErrorDto>> GetAiErrorsAsync() => GetAsync<List<AiErrorDto>>("api/admin/ai-errors");
 
+    public Task<SharingSettingsDto> GetSharingSettingsAsync() => GetAsync<SharingSettingsDto>("api/admin/settings/sharing");
+    public Task<SharingSettingsDto> UpdateSharingSettingsAsync(bool enabled) =>
+        PutAsync<SharingSettingsDto>("api/admin/settings/sharing", new UpdateSharingSettingsRequest { Enabled = enabled });
+
+    // ── Instance config (loaded once at boot) ─────────────────────
+    public Task<InstanceConfigDto> GetInstanceConfigAsync() => GetAsync<InstanceConfigDto>("api/instance");
+
     // ── Keyword filters (mute words) ──────────────────────────────
     public Task<List<KeywordFilterDto>> GetKeywordsAsync() => GetAsync<List<KeywordFilterDto>>("api/keywords");
     public Task<KeywordFilterDto> AddKeywordAsync(CreateKeywordRequest req) => PostAsync<KeywordFilterDto>("api/keywords", req);
@@ -116,6 +123,8 @@ public sealed class ApiClient(HttpClient http)
         GetAsync<ArticleNeighborsDto>($"api/articles/{id}/neighbors" + (categoryId is { } c ? $"?categoryId={c}" : ""));
     public Task<ArticleAiSummaryDto> SummarizeArticleAsync(Guid id) => PostAsync<ArticleAiSummaryDto>($"api/articles/{id}/summary", new { });
     public Task<ShareLinkDto> CreateShareAsync(Guid id) => PostAsync<ShareLinkDto>($"api/articles/{id}/share", new { });
+    public Task<List<SharedArticleDto>> GetSharedArticlesAsync() => GetAsync<List<SharedArticleDto>>("api/articles/shared");
+    public Task RevokeShareAsync(Guid token) => SendAsync(HttpMethod.Delete, $"api/articles/shared/{token}");
     public Task SetReadAsync(Guid id, bool value) => SendAsync(HttpMethod.Post, $"api/articles/{id}/read", new SetBool(value));
     public Task SetSavedAsync(Guid id, bool value) => SendAsync(HttpMethod.Post, $"api/articles/{id}/save", new SetBool(value));
     public Task SetHiddenAsync(Guid id, bool value) => SendAsync(HttpMethod.Post, $"api/articles/{id}/hide", new SetBool(value));

@@ -101,7 +101,10 @@ else
 
         <div class="actions">
             <a class="tdr-btn" href="@SafeLink(a.Url)" target="_blank" rel="noopener noreferrer">read at source ↗</a>
-            <button class="tdr-link muted" @onclick="Share" disabled="@_sharing">@(_shareMsg ?? "share")</button>
+            @if (State.SharingEnabled)
+            {
+                <button class="tdr-link muted" @onclick="Share" disabled="@_sharing">@(_shareMsg ?? "share")</button>
+            }
             <button class="tdr-link muted" @onclick="ToggleRead">@(a.IsRead ? "mark unread" : "mark read")</button>
         </div>
 

@@ -257,6 +257,10 @@ public static class SiteSettingKeys
 {
     /// <summary>The admin-editable AI "house style" preamble shared by the daily briefing and The Weekly.</summary>
     public const string AiHouseStyle = "ai.house_style";
+
+    /// <summary>Instance-wide kill switch for article sharing. <c>"true"</c> blocks new share links and
+    /// stops existing <c>/share/{token}</c> pages from resolving; absent/blank means sharing is enabled.</summary>
+    public const string SharingDisabled = "sharing.disabled";
 }
 
 /// <summary>

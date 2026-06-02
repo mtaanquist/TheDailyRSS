@@ -27,6 +27,9 @@ public static class ShareEndpoints
     private static async Task<IResult> GetSharePage(
         Guid token, HttpContext http, AppDbContext db, HtmlSanitizationService sanitizer, CancellationToken ct)
     {
+        // Instance-wide kill switch: when an admin turns sharing off, existing links stop resolving too.
+        if (await SiteSettings.IsSharingDisabledAsync(db, ct)) return Results.NotFound();
+
         // Resolve the token to its article. Select only non-personal columns and use the canonical
         // source title (not a subscription's CustomTitle) — there is no reader context on a public page.
         var row = await db.SharedArticles
