@@ -8,7 +8,14 @@
     <!-- Stable boot-script name so the hosted server serves it without fingerprint
          placeholder resolution. Simpler & reliable for self-hosting (hard-refresh on update). -->
     <WasmFingerprintAssets>false</WasmFingerprintAssets>
+    <!-- PWA: the SDK generates this integrity manifest of all boot/app assets at build,
+         which service-worker.published.js reads (as self.assetsManifest) to pre-cache the shell. -->
+    <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ServiceWorker Include="wwwroot\service-worker.js" PublishedContent="wwwroot\service-worker.published.js" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.7" />
