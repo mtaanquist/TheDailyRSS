@@ -89,3 +89,91 @@ window.tdrScroll = {
         m.scrollTop = v;
     }
 };
+
+// Pull-to-refresh for the .tdr-main news column. The app shell is pinned to the viewport
+// (the document itself never scrolls), so the browser's own pull-to-refresh never fires — we
+// re-create the gesture on the scroll region and reuse the app's in-place reload (the same
+// path as the F5/"r" hotkey, via MainLayout.OnPullRefresh -> AppState.RequestReloadAsync).
+window.tdrPullRefresh = {
+    THRESHOLD: 72,   // px of pull needed to trigger a refresh
+    MAX: 110,        // px cap for the rubber-band travel
+    ref: null, main: null, ind: null,
+    startY: 0, dist: 0, armed: false, pulling: false, busy: false,
+
+    register(dotnetRef) {
+        this.ref = dotnetRef;
+        this.main = document.querySelector('.tdr-main');
+        this.ind = document.querySelector('.tdr-ptr');
+        if (!this.main || !this.ind) return;
+        this._ts = (e) => this._onStart(e);
+        this._tm = (e) => this._onMove(e);
+        this._te = () => this._onEnd();
+        // touchmove must be non-passive so we can suppress native scroll while pulling.
+        this.main.addEventListener('touchstart', this._ts, { passive: true });
+        this.main.addEventListener('touchmove', this._tm, { passive: false });
+        this.main.addEventListener('touchend', this._te, { passive: true });
+        this.main.addEventListener('touchcancel', this._te, { passive: true });
+    },
+
+    unregister() {
+        if (this.main) {
+            this.main.removeEventListener('touchstart', this._ts);
+            this.main.removeEventListener('touchmove', this._tm);
+            this.main.removeEventListener('touchend', this._te);
+            this.main.removeEventListener('touchcancel', this._te);
+        }
+        this.ref = null; this.main = null; this.ind = null;
+    },
+
+    _onStart(e) {
+        if (this.busy || e.touches.length !== 1) { this.armed = false; return; }
+        this.armed = this.main.scrollTop <= 0; // only a pull that begins at the top counts
+        this.startY = e.touches[0].clientY;
+        this.dist = 0; this.pulling = false;
+    },
+
+    _onMove(e) {
+        if (!this.armed || this.busy) return;
+        const dy = e.touches[0].clientY - this.startY;
+        if (dy <= 0) { // moved back up — hand control to normal scrolling
+            if (this.pulling) this._reset();
+            this.armed = this.main.scrollTop <= 0;
+            return;
+        }
+        e.preventDefault(); // we own this gesture now; stop native scroll/overscroll
+        this.pulling = true;
+        this.dist = Math.min(this.MAX, dy * 0.5); // damped for a rubber-band feel
+        this.ind.style.transform = `translateX(-50%) translateY(${this.dist}px)`;
+        this.ind.style.opacity = String(Math.min(1, this.dist / this.THRESHOLD));
+        this.ind.classList.toggle('ready', this.dist >= this.THRESHOLD);
+    },
+
+    async _onEnd() {
+        if (!this.pulling || this.busy) { this.armed = false; return; }
+        const trigger = this.dist >= this.THRESHOLD;
+        this.armed = false;
+        if (!trigger) { this._reset(); return; }
+        // Snap to the resting position and spin while the in-place reload runs.
+        this.busy = true;
+        this.ind.classList.remove('ready');
+        this.ind.classList.add('busy');
+        this.ind.style.transform = `translateX(-50%) translateY(${this.THRESHOLD}px)`;
+        this.ind.style.opacity = '1';
+        try { if (this.ref) await this.ref.invokeMethodAsync('OnPullRefresh'); }
+        catch (_) { /* a failed reload still needs the indicator cleared */ }
+        finally {
+            this.busy = false;
+            this.ind.classList.remove('busy');
+            this._reset();
+        }
+    },
+
+    _reset() {
+        this.pulling = false; this.dist = 0;
+        this.ind.classList.remove('ready');
+        this.ind.classList.add('settling');
+        this.ind.style.transform = 'translateX(-50%) translateY(0)';
+        this.ind.style.opacity = '0';
+        setTimeout(() => { if (this.ind) this.ind.classList.remove('settling'); }, 220);
+    }
+};
