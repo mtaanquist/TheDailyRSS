@@ -266,7 +266,9 @@ public sealed class AiSummaryService(
     private async Task<DailyCorpus> BuildCorpusAsync(
         Guid uid, DateOnly start, DateOnly end, int cap, CancellationToken ct)
     {
-        var visible = (await VisibleAsync(db, uid, ct))
+        // Skip body-less items (video/live shells with no summary) just as editions do — the model can't
+        // ground a sourced [n] claim on a bare headline, so they'd only invite fabrication or noise.
+        var visible = WithContent(await VisibleAsync(db, uid, ct))
             .Where(a => a.EditionDate >= start && a.EditionDate <= end);
 
         var items = await (
