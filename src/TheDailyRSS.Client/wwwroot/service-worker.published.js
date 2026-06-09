@@ -4,7 +4,7 @@
 self.importScripts('./service-worker-assets.js');
 self.addEventListener('install', event => event.waitUntil(onInstall(event)));
 self.addEventListener('activate', event => event.waitUntil(onActivate(event)));
-self.addEventListener('fetch', event => event.respondWith(onFetch(event)));
+self.addEventListener('fetch', onFetchEvent);
 
 const cacheNamePrefix = 'offline-cache-';
 const cacheName = `${cacheNamePrefix}${self.assetsManifest.version}`;
@@ -35,6 +35,19 @@ async function onActivate(event) {
     await Promise.all(cacheKeys
         .filter(key => key.startsWith(cacheNamePrefix) && key !== cacheName)
         .map(key => caches.delete(key)));
+}
+
+function onFetchEvent(event) {
+    // Only the same-origin app shell is served from cache. Cross-origin requests (feed images from
+    // arbitrary hosts) and API calls must reach the network untouched: intercepting them is pointless
+    // (we never cache them) and re-fetching a cross-origin/no-cors request through the worker can fail
+    // the interception in some browsers — Firefox surfaces NS_ERROR_INTERCEPTION_FAILED — which left
+    // feed images broken until a hard refresh bypassed the worker entirely.
+    if (event.request.method !== 'GET') return;
+    const url = new URL(event.request.url);
+    if (url.origin !== self.location.origin) return; // cross-origin feed images, fonts, etc.
+    if (url.pathname.startsWith('/api/')) return;     // API stays network-only
+    event.respondWith(onFetch(event));
 }
 
 async function onFetch(event) {
